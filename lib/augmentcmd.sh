@@ -35,6 +35,12 @@ augment_cmd() {
   local vroot; vroot="$(vault_root)"
   [ -d "$(vault_path)" ] || die "볼트 경로 없음: $(vault_path)"
 
+  # ⚠️ 검증은 서브셸 밖에서 한다.
+  #    $(...) 안에서 die 를 부르면 서브셸만 죽고 부모는 계속 간다.
+  #    에러 메시지가 모듈 이름으로 흘러들어가 "대상 모듈: ❌ 알 수 없는..." 이
+  #    출력되고 종료코드는 0 이었다.
+  _aug_check_modules "$want" || return 1
+
   # 대상 모듈 결정: 인자 > 설정 > 기본(default=false 인 것 제외)
   local modules
   modules=$(_aug_modules "$want")
@@ -88,16 +94,23 @@ _aug_list() {
   done
 }
 
+# 모듈 이름이 실재하는지 확인한다. 여기서만 die 를 부른다.
+_aug_check_modules() {
+  local want="$1" m
+  [ -n "$(printf '%s' "$want" | tr -d ' ')" ] || return 0
+  for m in $want; do
+    jq -e --arg m "$m" '.modules[$m]' "$DT_TREE" >/dev/null 2>&1 \
+      || die "알 수 없는 모듈: $m  (목록: devtrail augment --list)"
+  done
+  return 0
+}
+
 # 설치할 모듈 목록. 인자가 없으면 required + 기본 켬.
+# 이 함수는 조회만 한다 — 서브셸에서 불리므로 여기서 죽어도 소용이 없다.
 _aug_modules() {
-  local want="$1"
+  local want="$1" m
   if [ -n "$(printf '%s' "$want" | tr -d ' ')" ]; then
-    local m
-    for m in $want; do
-      jq -e --arg m "$m" '.modules[$m]' "$DT_TREE" >/dev/null 2>&1 \
-        || die "알 수 없는 모듈: $m  (목록: devtrail augment --list)"
-      printf '%s\n' "$m"
-    done
+    for m in $want; do printf '%s\n' "$m"; done
     return 0
   fi
   jq -r '.modules | to_entries[] | select(.value.default != false) | .key' "$DT_TREE"

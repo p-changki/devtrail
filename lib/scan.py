@@ -144,7 +144,11 @@ def analyse_folders(vault, files_by_dir, now=0):
 
         # 규모와 최근성으로 확신도를 깎는다. 노트 3개짜리 폴더가
         # 105개짜리 폴더를 이기면 안 된다.
-        scale = min(n / 30.0, 1.0)
+        #
+        # ⚠️ 바닥을 둔다. min(n/30,1) 만 쓰면 노트 8개짜리 폴더가 0.27 이 되어
+        #    0.3 임계값에서 잘린다 — 이제 막 쓰기 시작한 사람의 일지 폴더가
+        #    통째로 안 잡힌다. 순위를 가르는 데는 충분하고 바닥은 지킨다.
+        scale = max(min(n / 30.0, 1.0), 0.45)
         recent = 1.0 if (now and last and (now - last) < RECENT_DAYS * 86400) else 0.55
 
         roles = {}
