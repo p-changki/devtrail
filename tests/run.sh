@@ -98,10 +98,14 @@ check_bash32() {
     return 1
   fi
   #
+  # ⚠️ --untracked 가 필요하다. git grep 은 기본적으로 추적된 파일만 본다.
+  #    새로 만든 파일이 검사를 통째로 빠져나간다 — 커밋 전에 잡아야 하는데
+  #    커밋 후에야 보이면 이 검사의 의미가 없다. (실증으로 확인했다)
+  #
   # 검사 대상에서 이 파일과 규약 문서를 뺀다 — 나쁜 예시를 드는 것은 정상이다.
   # scan-secrets.sh 도 같은 이유로 자신을 제외한다.
   local hits
-  hits=$(git grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[가-힣]' \
+  hits=$(git grep --untracked -nE '\$[A-Za-z_][A-Za-z0-9_]*[가-힣]' \
          -- '*.sh' 'bin/devtrail' 'install.sh' 2>/dev/null \
          | grep -v '^tests/run\.sh:' | grep -v '^tests/lib/harness\.sh:' \
          | grep -vE ':[0-9]+:[[:space:]]*#')
@@ -153,7 +157,7 @@ check_version() {
   esac
 
   local hard
-  hard=$(git grep -nE 'VERSION="[0-9]+\.[0-9]+' -- 'bin' 'lib' 'app' 2>/dev/null)
+  hard=$(git grep --untracked -nE 'VERSION="[0-9]+\.[0-9]+' -- 'bin' 'lib' 'app' 2>/dev/null)
   if [ -n "$hard" ]; then
     printf '%s\n' "$hard" | sed 's/^/  ❌ 하드코딩: /'
     return 1
@@ -218,7 +222,22 @@ check_docs() {
   actual=$(find skills -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')
   [ "$claim" = "$actual" ] || { echo "  ❌ 스킬: 문서 ${claim} · 실제 ${actual}"; return 1; }
 
-  echo "  문서 경로 실재 · 개수 일치"
+  # 문서·템플릿이 없는 명령을 안내하면, 그대로 따라한 사람이 거기서 막힌다.
+  local known cmd unknown=""
+  known=$(sed -n '/^case "$cmd" in/,/^esac/p' bin/devtrail \
+          | grep -oE '^  [a-z|_-]+\)' | tr -d ' )' | tr '|' '\n' | sort -u)
+  for cmd in $(git grep --untracked -hoE '(\./bin/)?devtrail [a-z][a-z-]*' -- \
+                 '*.md' '.github' 2>/dev/null \
+               | awk '{print $2}' | sort -u); do
+    printf '%s\n' "$known" | grep -qx "$cmd" || unknown="$unknown$cmd
+"
+  done
+  if [ -n "$unknown" ]; then
+    printf '%s' "$unknown" | sed 's/^/  ❌ 문서가 없는 명령을 안내한다: devtrail /'
+    return 1
+  fi
+
+  echo "  문서 경로 실재 · 개수 일치 · 명령 실재"
 }
 
 # ── 실행 ─────────────────────────────────────────────────────────────────────
@@ -244,7 +263,7 @@ run behav "scan"          ./tests/test-scan.sh
 run behav "undo·마이그레이션" ./tests/test-undo.sh
 
 [ "$GROUP" = all ] && run swift "swift 빌드" \
-  sh -c 'cd app && swift build -c release 2>&1 | tail -1' 
+  sh -c 'cd app && swift build -c release 2>&1 | tail -1'
 
 # ── 결과 ─────────────────────────────────────────────────────────────────────
 echo

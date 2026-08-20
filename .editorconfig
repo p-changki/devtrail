@@ -1,0 +1,29 @@
+# 저장소의 기존 관습을 적은 것이다. 새로 정한 규칙이 아니다.
+#   셸 2칸 · 파이썬 4칸 · 탭 없음 · 파일 끝 개행 — 측정해서 확인했다.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{sh,tmpl}]
+indent_size = 2
+
+[bin/devtrail]
+indent_size = 2
+
+[*.py]
+indent_size = 4
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+# Markdown 은 줄 끝 공백 두 개가 줄바꿈이다. 지우면 문서가 깨진다.
+[*.md]
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab
