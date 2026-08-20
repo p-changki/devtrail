@@ -153,3 +153,17 @@ bash -n lib/*.sh           # 문법 검사
 ## 라이선스
 
 MIT
+
+---
+
+## 기여하기
+
+- [아키텍처](docs/ARCHITECTURE.md) — 계층 · 어디에 무엇을 넣는가 · 지켜야 할 규칙
+- [디자인 토큰](docs/design-tokens.md) — 색 · 타이포의 단일 출처
+- [변경 이력](CHANGELOG.md) — 버전 규칙과 릴리스 절차
+
+```bash
+./tests/run.sh        # 커밋 전에 이걸 돌린다
+```
+
+⚠️ macOS 기본 bash 는 **3.2** 다. `"$n개"` 는 죽는다 — `"${n}개"` 로 쓴다.

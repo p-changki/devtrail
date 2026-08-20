@@ -190,6 +190,37 @@ check_migrations() {
   echo "  스키마 v${want} · 마이그레이션 짝 맞음"
 }
 
+check_docs() {
+  # 아키텍처 문서가 코드와 어긋나면 없느니만 못하다.
+  # 기여자는 문서를 믿고 파일을 찾는다 — 없는 경로를 적어두면 거기서 막힌다.
+  local doc=docs/ARCHITECTURE.md
+  [ -f "$doc" ] || { echo "  ❌ $doc 이 없다"; return 1; }
+
+  # 저장소 안을 가리키는 경로만 검사한다(런타임 파일은 여기 없는 게 맞다).
+  local bad="" f
+  for f in $(grep -oE '`(bin|lib|preset|tests|templates|skills|app)/[a-zA-Z0-9_./*-]+`' "$doc" \
+             | tr -d '`' | sort -u); do
+    ls $f >/dev/null 2>&1 || bad="$bad$f
+"
+  done
+  if [ -n "$bad" ]; then
+    printf '%s' "$bad" | sed 's/^/  ❌ 문서가 없는 경로를 가리킨다: /'
+    return 1
+  fi
+
+  # 숫자로 적힌 것 중 코드에서 셀 수 있는 것을 대조한다.
+  local claim actual
+  claim=$(grep -oE '병합기 [0-9]+종' "$doc" | head -1 | grep -oE '[0-9]+')
+  actual=$(ls lib/merge/*.sh 2>/dev/null | wc -l | tr -d ' ')
+  [ "$claim" = "$actual" ] || { echo "  ❌ 병합기: 문서 ${claim} · 실제 ${actual}"; return 1; }
+
+  claim=$(grep -oE '스킬 [0-9]+종' "$doc" | head -1 | grep -oE '[0-9]+')
+  actual=$(find skills -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')
+  [ "$claim" = "$actual" ] || { echo "  ❌ 스킬: 문서 ${claim} · 실제 ${actual}"; return 1; }
+
+  echo "  문서 경로 실재 · 개수 일치"
+}
+
 # ── 실행 ─────────────────────────────────────────────────────────────────────
 # 정적 — 어느 OS 에서나 같은 답이 나온다
 run lint  "셸 문법"        check_shell
@@ -204,6 +235,7 @@ run guard "버전"          check_version
 run guard "마이그레이션"   check_migrations
 run guard "시크릿"         ./tests/scan-secrets.sh
 run guard "스킬 규약"      ./tests/check-skills.sh
+run guard "문서 정합성"   check_docs
 
 # 동작 — 실제로 실행해 봐야 아는 것
 run behav "path"          ./tests/test-path.sh
