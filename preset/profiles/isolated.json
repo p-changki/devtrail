@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "분리 모드 — 기존 볼트를 건드리지 않고 새 하위 트리에만 설치한다.",
+    "가장 안전하다: 마음에 안 들면 폴더째 지우면 끝난다."
+  ],
+  "id": "isolated",
+  "label": "분리 설치",
+  "description": "기존 볼트는 그대로 두고 새 하위 트리에만 설치합니다. 폴더째 삭제로 되돌립니다.",
+
+  "folders":   { "scope": "all", "under_new_root": true },
+  "automove":  { "trigger": "Automatic", "exclude_foreign_folders": true,
+                 "_why": "우리 트리 안에서만 이동한다" },
+  "hotkeys":   { "assign": true, "avoid_occupied": true },
+  "merge":     { "shellcommands": true, "auto_note_mover": true, "templater": true,
+                 "daily_notes": "confirm", "hotkeys": true, "linter": false,
+                 "app": "safe_keys_only", "smart_env": true, "snippets": true },
+  "app_safe_keys": ["alwaysUpdateLinks"],
+  "align":     { "enabled": false },
+  "post":      { "suggest_plan": true }
+}

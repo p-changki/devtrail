@@ -1,0 +1,78 @@
+{
+  "_comment": [
+    "볼트 폴더 트리 정의. devtrail scaffold/augment 가 이걸 읽어 폴더를 만든다.",
+    "",
+    "key       : devtrail path <key> 로 조회하는 이름. 스킬·템플릿·쿼리가 이걸 쓴다.",
+    "path      : 루트 아래 상대 경로. config.dirs 로 덮어쓸 수 있다.",
+    "module    : 이 폴더가 속한 모듈. augment <module> 로 부분 설치한다.",
+    "tag       : 이 폴더로 라우팅되는 태그. 없으면 라우팅 대상이 아니다.",
+    "hub       : L3 폴더 허브를 만들지 여부.",
+    "",
+    "⚠️ 경로를 코드에 박지 말 것. 항상 devtrail path 로 조회한다."
+  ],
+
+  "version": 1,
+
+  "modules": {
+    "devlog":  { "label": "개발일지 + GitHub 활동", "required": true },
+    "review":  { "label": "주간 · 월간 리뷰" },
+    "project": { "label": "프로젝트 구조 + docs 골격" },
+    "pkm":     { "label": "자료실 · 카드노트 · MOC" },
+    "learn":   { "label": "학습 시스템" },
+    "personal":{ "label": "개인 (일기 · 책 · 스크랩)", "default": false }
+  },
+
+  "folders": [
+    { "key": "devlog",    "path": "개발/개발일지",   "module": "devlog",  "tag": "type/devlog",         "hub": true },
+    { "key": "devnote",   "path": "개발/개발메모",   "module": "devlog",  "tag": "type/dev-note",       "hub": true,
+      "children": [
+        { "key": "devnote.frontend", "path": "Frontend", "tag": "type/dev-note/frontend", "hub": true },
+        { "key": "devnote.backend",  "path": "Backend",  "tag": "type/dev-note/backend",  "hub": true },
+        { "key": "devnote.devops",   "path": "DevOps",   "tag": "type/dev-note/devops",   "hub": true },
+        { "key": "devnote.infra",    "path": "Infra",    "tag": "type/dev-note/infra",    "hub": true },
+        { "key": "devnote.testing",  "path": "Testing",  "tag": "type/dev-note/testing",  "hub": true },
+        { "key": "devnote.general",  "path": "General",  "tag": "type/dev-note/general",  "hub": true }
+      ] },
+    { "key": "trouble",   "path": "개발/트러블슈팅", "module": "devlog",  "tag": "type/trouble",        "hub": true },
+    { "key": "idea",      "path": "개발/아이디어",   "module": "devlog",  "tag": "type/idea",           "hub": true },
+    { "key": "youtube",   "path": "개발/유튜브",     "module": "devlog",  "tag": "type/youtube",        "hub": true },
+    { "key": "repodocs",  "path": "개발/레포docs",   "module": "devlog",  "hub": false,
+      "no_index": true, "_why": "devtrail sync 가 채우는 거울 폴더 — 허브도 RAG도 대상 아님" },
+
+    { "key": "weekly",    "path": "개발/주간리뷰",   "module": "review",  "tag": "type/weekly-review",  "hub": true },
+    { "key": "monthly",   "path": "개발/월간리뷰",   "module": "review",  "tag": "type/monthly-review", "hub": true },
+    { "key": "report",    "path": "개발/회고",       "module": "review",  "tag": "type/report",         "hub": true,
+      "children": [
+        { "key": "report.weekly",    "path": "주간" },
+        { "key": "report.monthly",   "path": "월간" },
+        { "key": "report.quarterly", "path": "분기" },
+        { "key": "report.project",   "path": "프로젝트" }
+      ] },
+
+    { "key": "projects",  "path": "개발/프로젝트",   "module": "project", "tag": "type/project",        "hub": true,
+      "no_automove": true, "_why": "프로젝트 안은 직접 구조를 관리한다 — 자동 이동 대상에서 뺀다" },
+
+    { "key": "library",   "path": "개발/라이브러리", "module": "devlog",  "tag": "type/library",        "hub": true },
+    { "key": "tool",      "path": "개발/도구",       "module": "devlog",  "tag": "type/tool",           "hub": true },
+    { "key": "ai",        "path": "개발/AI",         "module": "devlog",  "tag": "type/ai",             "hub": true },
+
+    { "key": "study",     "path": "개발/학습",       "module": "learn",   "tag": "type/study",          "hub": true,
+      "no_automove": true, "_why": "dayNN 하위 구조를 사용자가 관리한다" },
+
+    { "key": "inbox",     "path": "자료실/00_Inbox",   "module": "pkm", "tag": "type/inbox",  "hub": true },
+    { "key": "attach",    "path": "자료실/10_원본",    "module": "pkm", "hub": false,
+      "no_index": true, "attachment": true, "_why": "첨부파일 폴더 — app.json 이 여기를 가리킨다" },
+    { "key": "zettel",    "path": "자료실/20_카드노트", "module": "pkm", "tag": "type/zettel", "hub": true },
+    { "key": "moc",       "path": "자료실/20_카드노트/MOC", "module": "pkm", "tag": "type/moc", "hub": true },
+    { "key": "archive",   "path": "자료실/30_아카이브", "module": "pkm", "hub": false,
+      "no_index": true, "no_automove": true, "_why": "과거 보관 — 인덱싱도 이동도 하지 않는다" },
+
+    { "key": "journal",   "path": "개인/일기",   "module": "personal", "tag": "type/journal", "hub": false },
+    { "key": "book",      "path": "개인/책",     "module": "personal", "tag": "type/book",    "hub": true },
+    { "key": "scrap",     "path": "개인/스크랩", "module": "personal", "tag": "type/scrap",   "hub": true },
+
+    { "key": "templates", "path": "템플릿", "module": "devlog", "hub": false,
+      "no_index": true, "no_automove": true, "_why": "템플릿은 검색·이동·인덱싱 전부 제외" },
+    { "key": "guides",    "path": "가이드", "module": "devlog", "hub": false }
+  ]
+}

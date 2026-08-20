@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "기존 모드 (얹기) — 이미 쓰던 볼트에 우리 자동화를 올린다.",
+    "",
+    "⚠️ 두 가지를 절대 하지 않는다:",
+    "  1. 기존 노트를 움직이지 않는다  → automove.trigger = Manual",
+    "  2. 기존 서식을 바꾸지 않는다    → merge.linter = false",
+    "     (lintOnSave 인 볼트에 우리 규칙을 넣으면 저장할 때마다 서식이 바뀐다)"
+  ],
+  "id": "existing",
+  "label": "기존 볼트에 얹기",
+  "description": "기존 폴더를 그대로 쓰고 설정만 매핑합니다. 노트를 움직이지 않습니다.",
+
+  "folders":   { "scope": "selected_modules" },
+  "automove":  { "trigger": "Manual", "exclude_foreign_folders": true,
+                 "_why": "우리가 만들지 않은 폴더는 전부 제외 — 기존 노트가 갑자기 움직이지 않게" },
+  "hotkeys":   { "assign": true, "avoid_occupied": true },
+  "merge":     { "shellcommands": true,  "auto_note_mover": true, "templater": "non_conflicting",
+                 "daily_notes": "confirm", "hotkeys": true, "linter": false,
+                 "app": "safe_keys_only", "smart_env": true, "snippets": true },
+  "app_safe_keys": ["alwaysUpdateLinks", "attachmentFolderPath"],
+  "align":     { "enabled": false, "_why": "노트를 고치는 작업 — 별도 명령으로만" },
+  "post":      { "suggest_plan": true }
+}

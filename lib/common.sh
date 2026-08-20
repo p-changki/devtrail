@@ -66,7 +66,19 @@ require_config() {
 # ── Vault path resolution ────────────────────────────────────────────────────
 # 볼트 경로는 설정에 절대경로로 저장된다. root는 볼트 안의 최상위 폴더명.
 vault_path()  { cfg '.vault.path'; }
-vault_root()  { local p r; p=$(vault_path); r=$(cfg '.vault.root'); printf '%s' "${p%/}/$r"; }
+# 루트 폴더는 비어 있을 수 있다 — 볼트 최상위에 바로 노트를 두는 사람이 있다.
+# 그때 "$p/" 처럼 슬래시가 남으면 아래 경로들이 전부 // 로 어긋난다.
+vault_root() {
+  local p r; p=$(vault_path); r=$(cfg '.vault.root')
+  if [ -n "$r" ]; then printf '%s/%s' "${p%/}" "$r"; else printf '%s' "${p%/}"; fi
+}
+# 볼트 기준 상대경로 결합. Dataview FROM 에 쓰는 값이다.
+# 루트가 비면 앞에 슬래시가 붙어 FROM "/Daily" 가 되고, Dataview 는 이걸 못 찾는다.
+vault_rel() {
+  local r; r=$(cfg '.vault.root')
+  if [ -n "$r" ]; then printf '%s/%s' "$r" "$1"; else printf '%s' "$1"; fi
+}
+
 dir_devlog()  { printf '%s/%s' "$(vault_root)" "$(cfg '.dirs.devlog')"; }
 dir_weekly()  { printf '%s/%s' "$(vault_root)" "$(cfg '.dirs.weekly')"; }
 dir_templates() { printf '%s/%s' "$(vault_root)" "$(cfg '.dirs.templates')"; }

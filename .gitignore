@@ -18,6 +18,13 @@ secrets/
 *.plist
 !templates/launchd/*.plist.tmpl
 
+# 로컬 문서 — 구현계획·리서치는 추적하지 않는다
+# (장기 확정 결정만 docs/decisions/ 에 두고 예외 처리)
+# ⚠️ docs/ 로 쓰면 git이 하위로 내려가지 않아 아래 예외가 무효가 된다.
+#    디렉터리째 제외하면 재포함이 불가능하므로 docs/* 로 쓴다.
+docs/*
+!docs/decisions/
+
 # 로그·백업
 logs/
 *.log

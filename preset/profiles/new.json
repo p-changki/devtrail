@@ -1,0 +1,18 @@
+{
+  "_comment": [
+    "신규 모드 — 빈 볼트 또는 '새로 시작' 선택 시.",
+    "우리가 볼트 전체를 책임지므로 설정을 전부 적용한다."
+  ],
+  "id": "new",
+  "label": "새로 시작하기",
+  "description": "빈 볼트에 전체 구조를 만들고 설정을 전부 적용합니다.",
+
+  "folders":   { "scope": "all" },
+  "automove":  { "trigger": "Automatic", "exclude_foreign_folders": false },
+  "hotkeys":   { "assign": true,  "avoid_occupied": true },
+  "merge":     { "shellcommands": true, "auto_note_mover": true, "templater": true,
+                 "daily_notes": true, "hotkeys": true, "linter": true,
+                 "app": true, "smart_env": true, "snippets": true },
+  "align":     { "enabled": false, "_why": "대상이 0개라 무의미" },
+  "post":      { "suggest_plan": false }
+}
