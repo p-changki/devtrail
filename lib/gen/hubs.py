@@ -18,6 +18,9 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from i18n import t as T  # noqa: E402
+
 
 def load(path, default=None):
     try:
@@ -49,55 +52,76 @@ def dv(body):
     return "```dataview\n" + body.strip() + "\n```"
 
 
-def build_dashboard(P, date, cov):
+def devlog_suffix(cfg):
+    """개발일지 파일명에서 날짜를 뺀 나머지.
+
+    ⚠️ 여기를 박아두면 쿼리가 조용히 0건이 된다.
+       설정은 "{{DATE}} devlog.md" 인데 쿼리가 " 개발일지" 를 찾고 있었다 —
+       한국어 볼트에서도 오늘 할 일이 한 번도 뜨지 않았다.
+    """
+    pat = ((cfg.get("naming") or {}).get("devlog_file")
+           or "{{DATE}} devlog.md")
+    return pat.replace("{{DATE}}", "").replace(".md", "")
+
+
+def tpl_folder(P):
+    """템플릿 폴더 이름. 제외 조건에 쓴다.
+
+    ⚠️ "템플릿" 을 박으면 영어 볼트에서 제외가 조용히 실패해
+       템플릿 파일이 '최근 노트' 에 섞인다.
+    """
+    return (P.get("templates") or "Templates").split("/")[-1]
+
+
+def build_dashboard(P, date, cov, cfg):
     have = lambda k: k in P
     nav_items = [(lbl, P[k]) for lbl, k in [
-        ("📝 개발일지", "devlog"), ("📂 개발메모", "devnote"),
-        ("🏗️ 프로젝트", "projects"), ("💡 아이디어", "idea"),
-        ("🔧 트러블슈팅", "trouble"), ("📚 라이브러리", "library"),
-        ("📥 Inbox", "inbox"), ("🗂 카드노트", "zettel"),
+        (T("nav.devlog"), "devlog"), (T("nav.devnote"), "devnote"),
+        (T("nav.projects"), "projects"), (T("nav.idea"), "idea"),
+        (T("nav.trouble"), "trouble"), (T("nav.library"), "library"),
+        (T("nav.inbox"), "inbox"), (T("nav.zettel"), "zettel"),
     ] if have(k)]
 
     parts = [
         fm(scope="vault", created=date, updated=date),
         "",
-        "# 📊 대시보드",
+        f'# 📊 {T("l1.dashboard")}',
         "",
-        "> 볼트의 진입점입니다. 왼쪽 사이드바에서 북마크해두면 편합니다.",
+        T("l1.entry"),
         "",
         nav([(l, f"{t}/_index") for l, t in nav_items]),
         "",
-        "## 📅 오늘",
+        f'## 📅 {T("l1.today")}',
         "",
         dv(f'''TASK
 FROM "{P.get("devlog", "")}"
-WHERE file.name = dateformat(date(today), "yyyy-MM-dd") + " 개발일지"'''),
+WHERE file.name = dateformat(date(today), "yyyy-MM-dd") + "{devlog_suffix(cfg)}"'''),
         "",
-        "### 최근 개발일지",
+        f'### {T("l1.h_recent_log")}',
         "",
-        dv(f'''TABLE WITHOUT ID file.link AS "일지", dateformat(file.mtime, "MM-dd HH:mm") AS "수정"
+        dv(f'''TABLE WITHOUT ID file.link AS "{T("col.log")}", dateformat(file.mtime, "MM-dd HH:mm") AS "{T("col.modified")}"
 FROM "{P.get("devlog", "")}"
 WHERE file.name != "_index"
 SORT file.name DESC
 LIMIT 5'''),
         "",
-        "### 최근 7일에 만든 노트",
+        f'### {T("l1.h_recent_7")}',
         "",
         dv(f'''LIST
 FROM "{P.get("_root", "")}"
 WHERE file.ctime >= date(today) - dur(7 days)
-  AND !contains(file.folder, "템플릿")
+  AND !contains(file.folder, "{tpl_folder(P)}")
 SORT file.ctime DESC
 LIMIT 10'''),
         "",
-        "## 🏗️ 진행 중인 프로젝트",
+        f'## {T("l1.h_projects")}',
         "",
-        dv(f'''TABLE status AS "상태", stage AS "단계", updated AS "수정"
+        dv(f'''TABLE status AS "{T("col.status")}", stage AS "{T("col.stage")}", updated AS "{T("col.modified")}"
 FROM "{P.get("projects", "")}"
 WHERE type = "project-home"
 SORT updated DESC'''),
         "",
-        "## 🧭 영역별 개발메모",
+        f'## {T("l1.h_areas")}',
         "",
     ]
 
@@ -113,23 +137,22 @@ SORT file.mtime DESC
 LIMIT 6'''), ""]
 
     # 유지보수 — 커버리지에 따라 근거가 달라진다
-    parts += ["---", "", "## 🧹 볼트 유지보수", ""]
+    parts += ["---", "", f'## {T("l1.h_maint")}', ""]
     if cov.get("status", 0) < 10:
-        parts += [f"> ℹ️ `status` 커버리지가 {cov.get('status', 0)}% 라 "
-                  "분량으로 근사합니다.", ""]
+        parts += [T("l1.approx_size", pct=cov.get("status", 0)), ""]
     parts += [
-        "### 연결이 없는 노트",
+        f'### {T("l1.h_orphans")}',
         "",
         dv(f'''LIST
 FROM "{P.get("_root", "")}"
 WHERE length(file.outlinks) = 0 AND length(file.inlinks) = 0
-  AND file.name != "_index" AND !contains(file.folder, "템플릿")
+  AND file.name != "_index" AND !contains(file.folder, "{tpl_folder(P)}")
 SORT file.ctime DESC
 LIMIT 15'''),
         "",
-        "### Inbox 적체 (오래된 순)",
+        f'### {T("l1.h_inbox_age")}',
         "",
-        dv(f'''TABLE (date(today) - file.ctime).day AS "체류일"
+        dv(f'''TABLE (date(today) - file.ctime).day AS "{T("col.days")}"
 FROM "{P.get("inbox", "")}"
 WHERE file.name != "_index"
 SORT file.ctime ASC
@@ -139,60 +162,60 @@ LIMIT 15'''),
     return "\n".join(parts)
 
 
-def build_checkin(P, date):
+def build_checkin(P, date, cfg):
     return "\n".join([
         fm(scope="vault", created=date, updated=date),
         "",
-        "# ☀️ 일일 루틴",
+        f'# {T("l1.h_daily")}',
         "",
-        "> 하루를 여닫는 순서입니다. 5분이면 됩니다.",
+        T("l1.routine_intro"),
         "",
-        "## 🕗 아침 (2분)",
+        f'## {T("l1.h_morning")}',
         "",
-        "1. `⌘⇧D` — 개발일지를 만들고 오늘 할 것 Top 3 을 적는다",
-        "2. 아래 '오래 묵은 것' 을 한 번 훑는다",
+        T("l1.morning_1"),
+        T("l1.evening_2"),
         "",
-        "## 💻 작업 중 (수시)",
+        f'## {T("l1.h_working")}',
         "",
-        "| 무엇 | 단축키 |",
+        f'| {T("l1.tbl_what")} | {T("l1.tbl_key")} |',
         "|---|---|",
-        "| 배운 것을 메모 | `⌘⇧M` |",
-        "| 막힌 것을 기록 | 트러블슈팅 폴더에서 새 노트 |",
-        "| 아이디어 캡처 | `⌘⇧I` |",
-        "| 자료 저장 | `⌘⇧N` |",
+        f'| {T("l1.row_note")} | `⌘⇧M` |',
+        f'| {T("l1.row_stuck")} | {T("l1.row_stuck_v")} |',
+        f'| {T("l1.row_idea")} | `⌘⇧I` |',
+        f'| {T("l1.row_save")} | `⌘⇧N` |',
         "",
-        "## 🌇 퇴근 전 (3분)",
+        f'## {T("l1.h_evening")}',
         "",
-        "1. 개발일지의 '오늘 배운 것' 을 한 줄 채운다",
-        "2. `⌘⇧G` — GitHub 활동을 일지에 넣는다",
-        "3. 미완료를 내일로 옮긴다",
+        T("l1.evening_1"),
+        T("l1.morning_2"),
+        T("l1.evening_3"),
         "",
-        "## 📅 금요일 (10분)",
+        f'## {T("l1.h_friday")}',
         "",
-        "주간리뷰를 만들고 아래 헬스체크를 본다.",
+        T("l1.friday"),
         "",
         "---",
         "",
-        "## 🔴 오래 묵은 것",
+        f'## {T("l1.h_stale")}',
         "",
-        dv(f'''TABLE (date(today) - file.ctime).day AS "체류일"
+        dv(f'''TABLE (date(today) - file.ctime).day AS "{T("col.days")}"
 FROM "{P.get("inbox", "")}"
 WHERE file.name != "_index" AND file.ctime <= date(today) - dur(14 days)
 SORT file.ctime ASC
 LIMIT 10'''),
         "",
-        "## 🟡 이번 주 개발일지 (공백일 확인)",
+        f'## {T("l1.h_week")}',
         "",
         dv(f'''LIST
 FROM "{P.get("devlog", "")}"
 WHERE file.name != "_index" AND file.ctime >= date(today) - dur(7 days)
 SORT file.name DESC'''),
         "",
-        "## 🟢 오늘 만든 노트",
+        f'## {T("l1.h_created")}',
         "",
         dv(f'''LIST
 FROM "{P.get("_root", "")}"
-WHERE file.ctime >= date(today) AND !contains(file.folder, "템플릿")
+WHERE file.ctime >= date(today) AND !contains(file.folder, "{tpl_folder(P)}")
 SORT file.ctime DESC'''),
         "",
     ])
@@ -208,10 +231,10 @@ def build_area(name, title, children, P, date):
         "",
         nav(items) if items else "",
         "",
-        "## 최근 활동",
+        f'## {T("l1.h_recent_act")}',
         "",
-        dv(f'''TABLE WITHOUT ID file.link AS "노트", file.folder AS "위치",
-  dateformat(file.mtime, "MM-dd") AS "수정"
+        dv(f'''TABLE WITHOUT ID file.link AS "{T("col.note")}", file.folder AS "{T("col.where")}",
+  dateformat(file.mtime, "MM-dd") AS "{T("col.modified")}"
 FROM "{P.get(name, "")}"
 WHERE file.name != "_index"
 SORT file.mtime DESC
@@ -244,11 +267,11 @@ def main():
             fh.write(body)
         made.append(name)
 
-    write("대시보드.md", build_dashboard(P, date, cov))
-    write("일일 체크인.md", build_checkin(P, date))
+    write(T("l1.dashboard") + ".md", build_dashboard(P, date, cov, cfg))
+    write(T("l1.checkin") + ".md", build_checkin(P, date, cfg))
 
     print("\n".join(made))
-    print(f"L1 허브 {len(made)}개 생성", file=sys.stderr)
+    print(f"L1 {len(made)}", file=sys.stderr)
     return 0
 
 

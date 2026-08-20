@@ -88,6 +88,42 @@ t_contains "ko frontmatter 키" "devtrail_key: devlog" "$(_hub ko)"
 t_contains "en frontmatter 키" "devtrail_key: devlog" "$(_hub en)"
 t_contains "en 태그도 그대로" "type/moc" "$(_hub en)"
 
+# ── L1 대시보드 ──────────────────────────────────────────────────────────────
+t_start "L1 대시보드 언어"
+t_vault l1en
+t_config MyVault
+DEVTRAIL_LANG=en "$DT" augment --apply >/dev/null 2>&1
+t_file "영어 파일명" "$T_VAULT/MyVault/Dashboard.md"
+t_file "체크인도"     "$T_VAULT/MyVault/Daily check-in.md"
+t_eq "한글 0줄" "0" "$(grep -c '[가-힣]' "$T_VAULT/MyVault/Dashboard.md" | tr -d ' ')"
+
+t_vault l1ko
+t_config MyVault
+"$DT" augment --apply >/dev/null 2>&1
+t_file "한국어 파일명" "$T_VAULT/MyVault/대시보드.md"
+t_no_file "영어판은 없다" "$T_VAULT/MyVault/Dashboard.md"
+
+# ── 쿼리에 이름을 박지 않는다 ────────────────────────────────────────────────
+#
+# '오늘' 쿼리가 " 개발일지" 를 찾고 있었다. 실제 파일명은 설정의
+# naming.devlog_file("{{DATE}} devlog.md") 을 따르므로 한 번도 매칭되지
+# 않았다 — 한국어 볼트에서도 오늘 할 일이 빈 채였다.
+t_start "쿼리가 설정을 따른다"
+t_vault naming
+t_config MyVault '.naming.devlog_file = "{{DATE}} 일지.md"'
+"$DT" augment --apply >/dev/null 2>&1
+dash="$T_VAULT/MyVault/대시보드.md"
+t_contains "파일명 규칙을 따른다" '+ " 일지"' "$(grep 'dateformat(date(today)' "$dash")"
+t_not_contains "박아둔 이름이 없다" '개발일지"' "$(grep 'dateformat(date(today)' "$dash")"
+
+# 템플릿 폴더 제외도 실제 폴더 이름을 써야 한다
+t_start "템플릿 제외가 실제 폴더를 쓴다"
+t_vault tplex
+t_config MyVault
+DEVTRAIL_LANG=en "$DT" augment --apply >/dev/null 2>&1
+t_contains "영어 볼트는 Templates" 'file.folder, "Templates"' \
+  "$(grep -m1 'contains(file.folder' "$T_VAULT/MyVault/Dashboard.md")"
+
 # ── 없는 언어는 기본값으로 ───────────────────────────────────────────────────
 t_start "알 수 없는 언어"
 t_vault fallback
