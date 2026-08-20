@@ -99,6 +99,8 @@ def build_templater(tmpl_rel, paths, existing, have=None):
         ("zettel", "영구 카드노트 템플릿.md"),
         ("moc", "MOC 템플릿.md"),
         ("report", "회고 템플릿.md"),
+        ("journal", "일기양식.md"),
+        ("book", "책 템플릿.md"),
     ]
     out = dict(existing or {})
     old = out.get("folder_templates") or []

@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "frontmatter 규약을 저장 시점에 강제한다.",
+    "",
+    "규약을 문서로만 적어두면 지켜지지 않는다. 원본 볼트가 노트 1,727개에서",
+    "일관성을 유지한 건 lintOnSave 가 켜져 있었기 때문이다.",
+    "",
+    "⚠️ 기존 모드에서는 병합하지 않는다. lintOnSave 인 볼트에 우리 규칙을 넣으면",
+    "   사용자가 노트를 저장할 때마다 기존 서식이 바뀐다."
+  ],
+  "lintOnSave": true,
+  "ruleConfigs": {
+    "yaml-timestamp": {
+      "enabled": true,
+      "date-created-key": "created",
+      "date-modified-key": "updated",
+      "format": "YYYY-MM-DD"
+    },
+    "sort-yaml-array-values": { "enabled": true },
+    "force-yaml-escape": { "enabled": false },
+    "consecutive-blank-lines": { "enabled": true },
+    "remove-empty-list-markers": { "enabled": true },
+    "trailing-spaces": { "enabled": true },
+    "empty-line-around-code-fences": { "enabled": true }
+  },
+  "commonStyles": {
+    "aliasArrayStyle": "multi-line",
+    "tagArrayStyle": "multi-line",
+    "escapeCharacter": "\"",
+    "removeUnnecessaryEscapeCharsForMultiLineArrays": true
+  },
+  "sortAlphabeticallyIgnoreCase": true,
+  "includeCJKSymbolsAndPunctuation": true,
+  "includeFullWidthForms": true
+}

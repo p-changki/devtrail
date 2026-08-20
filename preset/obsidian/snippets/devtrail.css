@@ -1,0 +1,48 @@
+/* DevTrail 스타일 — 대시보드와 허브가 이 클래스를 씁니다.
+   이 스니펫이 활성화되지 않으면 대시보드의 버튼 그리드가 그냥 링크 목록으로 보입니다. */
+
+/* 본문 폭 확장 — Dataview 표가 잘리지 않게.
+   app.json 의 readableLineLength: false 와 짝입니다. 하나만 켜면 효과가 없습니다. */
+.markdown-source-view.mod-cm6 .cm-content,
+.markdown-rendered {
+  max-width: 100% !important;
+  padding-left: 4% !important;
+  padding-right: 4% !important;
+}
+
+/* 대시보드 이동 그리드 */
+.dt-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.dt-nav a,
+.dt-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  text-decoration: none !important;
+  font-weight: 500;
+  color: var(--text-normal) !important;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.dt-nav a:hover,
+.dt-btn:hover {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent) !important;
+  border-color: var(--interactive-accent);
+  transform: translateY(-1px);
+}
+
+/* 허브의 "근사치입니다" 안내 — 눈에 띄되 시끄럽지 않게 */
+.markdown-rendered blockquote:has(> p > code) {
+  border-left-color: var(--text-accent);
+}
