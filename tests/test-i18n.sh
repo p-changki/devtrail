@@ -184,6 +184,44 @@ import io, os
 m = dict(l.rstrip("\n").split("\t") for l in io.open("preset/templates/en/_map.tsv", encoding="utf-8") if l.strip())
 print(sum(1 for v in m.values() if not os.path.exists("preset/templates/en/" + v)))')"
 
+# ── init 흐름 — 영어 사용자가 끝까지 갈 수 있는가 ───────────────────────────
+#
+# 화면 전체가 영어여야 한다. 한 화면이라도 한국어면 거기서 막힌다.
+t_start "init 흐름 (영어)"
+t_vault flow
+_flow() {
+  # 2=English · 1=Local · 볼트 · 모드(Enter) · 루트(Enter) · 모듈(Enter)
+  # · GitHub(Enter) · 프로젝트폴더 · 나머지 Enter
+  { printf '2\n1\n%s\n\n\n\n\n' "$T_VAULT"
+    printf '%s\n\n\n\n\n\n' "$T_TMP/nonexistent"; } \
+  | LANG=en_US.UTF-8 DEVTRAIL_LANG= DEVTRAIL_SKILL_DIR="$T_TMP/sk-$$" \
+    "$DT" init 2>&1
+}
+out=$(_flow)
+
+t_contains "언어 선택이 첫 화면"   "Language / 언어"        "$out"
+t_contains "볼트 위치 질문"        "Where the vault lives"  "$out"
+t_contains "설치 방식 질문"        "How to install"         "$out"
+t_contains "기존 볼트에 얹기"      "Add to this vault"      "$out"
+t_contains "새로 시작"             "Start fresh"            "$out"
+t_contains "분리 설치"             "Isolated install"       "$out"
+t_contains "모듈 선택"             "Modules to install"     "$out"
+t_contains "모듈 라벨도 영어"      "Weekly · monthly"       "$out"
+t_contains "마무리 안내"           "Next steps"             "$out"
+t_contains "완료"                  "Setup complete"         "$out"
+
+# ⚠️ 화면에 한글이 섞이면 안 된다.
+#    단, 언어 선택 화면은 양쪽 병기가 맞다 — 아직 언어를 모르는 사람이 본다.
+ko_lines=$(printf '%s\n' "$out" | grep '[가-힣]' \
+           | grep -vE 'Language / 언어|한국어|폴더 이름|태그는 언어와' || true)
+t_eq "그 밖에 한글 없음" "" "$ko_lines"
+
+# ── 영어 볼트에 한글 파일이 남지 않는다 ──────────────────────────────────────
+t_start "영어 볼트 내용"
+left=$(grep -rl '[가-힣]' "$T_VAULT" 2>/dev/null \
+       | grep -v 'Folders and tags' || true)
+t_eq "한글 든 파일 없음" "" "$left"
+
 # ── 없는 언어는 기본값으로 ───────────────────────────────────────────────────
 t_start "알 수 없는 언어"
 t_vault fallback

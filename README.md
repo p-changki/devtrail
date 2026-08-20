@@ -22,7 +22,11 @@
 ```bash
 curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash
 
-devtrail init        # 대화형 셋업 — 폴더 이름을 제안받고 고릅니다
+devtrail init        # 대화형 셋업
+                     #   1) 언어 — 한국어 / English
+                     #   2) 볼트 경로
+                     #   3) 설치 방식 — 기존 볼트에 얹기 / 새로 시작 / 분리 설치
+                     #   4) 루트 폴더 이름 · 모듈 · GitHub · AI
                      # → Obsidian 에서 볼트를 열고 플러그인 4개 설치 후 재시작
 devtrail obsidian    # 플러그인 설정 병합 · 템플릿 · 단축키
 devtrail doctor      # 뭐가 안 되는지 정확히 알려줍니다

@@ -18,7 +18,7 @@ dashboard_run() {
 
   local port="${DEVTRAIL_PORT:-7823}"
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
-    die "포트 $port 를 이미 누가 쓰고 있습니다.
+    die "$(L "포트 $port 를 이미 누가 쓰고 있습니다." "Port $port is already in use.")
    다른 포트로: DEVTRAIL_PORT=7824 devtrail dashboard"
   fi
 

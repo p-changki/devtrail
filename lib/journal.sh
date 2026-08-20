@@ -133,7 +133,7 @@ jr_list() {
       "$(jq -r '.at' "$job/meta.json")" \
       "$(L "변경 ${n:-0}건" "${n:-0} changes")"
   done
-  [ "$found" = 0 ] && dim "   기록이 없습니다"
+  [ "$found" = 0 ] && dim "   $(L "기록이 없습니다" "Nothing recorded")"
   echo
   dim "   $(L "자세히" "Details"): devtrail undo <ID> --dry-run"
   return 0

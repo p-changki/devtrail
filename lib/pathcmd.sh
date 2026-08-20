@@ -23,7 +23,7 @@ DT_TREE="${DEVTRAIL_TREE:-$DEVTRAIL_ROOT/preset/tree.json}"
 path_cmd() {
   require_config
   require_bins jq
-  [ -f "$DT_TREE" ] || die "트리 정의 없음: $DT_TREE"
+  [ -f "$DT_TREE" ] || die "$(L "트리 정의 없음" "Tree definition missing"): $DT_TREE"
 
   local mode=abs key=""
   while [ $# -gt 0 ]; do
@@ -31,7 +31,7 @@ path_cmd() {
       --rel)  mode=rel ;;
       --json) mode=json ;;
       --abs)  mode=abs ;;
-      -*)     die "알 수 없는 옵션: $1" ;;
+      -*)     die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
       *)      key="$1" ;;
     esac
     shift
@@ -54,8 +54,8 @@ _path_rel() { dt_dir "$1"; }
 _path_one() {
   local key="$1" mode="$2" rel
   rel=$(_path_rel "$key")
-  [ -n "$rel" ] || die "알 수 없는 경로 키: $key
-   전체 목록: devtrail path"
+  [ -n "$rel" ] || die "$(L "알 수 없는 경로 키" "Unknown path key"): $key
+   $(L "전체 목록" "Full list"): devtrail path"
   if [ "$mode" = rel ]; then
     # Dataview FROM 은 볼트 기준 경로를 쓴다 (루트 폴더 포함, 없으면 생략)
     printf '%s\n' "$(vault_rel "$rel")"

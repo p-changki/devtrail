@@ -105,7 +105,7 @@ _init_render_scripts() {
 # ── 스캐폴딩 ─────────────────────────────────────────────────────────────────
 _init_scaffold() {
   echo
-  printf '%s\n' "${C_BOLD}볼트 구조${C_RESET}"
+  printf '%s\n' "${C_BOLD}$(L "볼트 구조" "Vault structure")${C_RESET}"
   local mods; mods=$(printf '%s' "${DT_MODULES:-devlog}" | tr '\n' ' ')
   dim "   $(L "모듈" "Modules"): $mods"
   # augment 는 없는 것만 만든다. 기존 폴더는 그대로 둔다.
@@ -149,7 +149,7 @@ _init_next_steps() {
   echo
   ok "$(L "셋업 완료" "Setup complete")"
   echo
-  printf '%s\n' "${C_BOLD}다음 단계${C_RESET}"
+  printf '%s\n' "${C_BOLD}$(L "다음 단계" "Next steps")${C_RESET}"
   info "  1) $(L "Obsidian 에서 볼트를 엽니다" "Open the vault in Obsidian"): $vault"
   dim "     $(L "처음 열어야 .obsidian/ 폴더가 생깁니다." \
               "The .obsidian/ folder only appears after you open it once.")"

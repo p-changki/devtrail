@@ -93,8 +93,13 @@ EOF
 
 _aug_list() {
   step "$(L "모듈" "Modules")"
-  jq -r '.modules | to_entries[]
-    | "  \(.key)\t\(.value.label)\t\(if .value.required then "필수" elif .value.default == false then "기본 꺼짐" else "기본 켬" end)"' \
+  local en; en=$([ "$(dt_lang)" = en ] && echo true || echo false)
+  jq -r --argjson en "$en" \
+     --arg req "$(L "필수" "required")" \
+     --arg off "$(L "기본 꺼짐" "off by default")" \
+     --arg on  "$(L "기본 켬" "on by default")" \
+     '.modules | to_entries[]
+    | "  \(.key)\t\(if $en then (.value.label_en // .value.label) else .value.label end)\t\(if .value.required then $req elif .value.default == false then $off else $on end)"' \
     "$DT_TREE" | while IFS=$'\t' read -r k l d; do
     printf '  %-10s %-28s %s\n' "$k" "$l" "$d"
   done
@@ -180,9 +185,11 @@ _aug_paths_note() {
 
   {
     printf -- '---\ntags:\n  - type/devtrail\ntype: devtrail-paths\nupdated: %s\n---\n\n' "$(date +%Y-%m-%d)"
-    printf '# DevTrail 경로 맵\n\n'
-    printf '> 자동 생성됩니다. 직접 고치지 마세요 — `devtrail augment --apply` 가 덮어씁니다.\n'
-    printf '> 템플릿이 이 파일을 파일명으로 찾아 읽습니다.\n\n'
+    printf '# DevTrail %s\n\n' "$(L "경로 맵" "path map")"
+    printf '> %s\n' "$(L "자동 생성됩니다. 직접 고치지 마세요 — \`devtrail augment --apply\` 가 덮어씁니다." \
+                         "Generated. Do not edit — \`devtrail augment --apply\` overwrites it.")"
+    printf '> %s\n\n' "$(L "템플릿이 이 파일을 파일명으로 찾아 읽습니다." \
+                            "Templates find this file by its name and read it.")"
     printf '```json\n'
     _aug_paths_json
     printf '\n```\n'
@@ -234,7 +241,9 @@ EOF
 # WEEKLY-REVIEW(회고) · milestone(스스로 시험).
 # 커리큘럼은 사람마다 달라서 빈 골격만 준다. 76일을 실제로 굴려본 구조다.
 _aug_learn() {
-  local src="$DEVTRAIL_ROOT/preset/learn"
+  # 언어별. 번역이 없으면 ko 로 떨어진다.
+  local src="$DEVTRAIL_ROOT/preset/learn/$(dt_lang)"
+  [ -d "$src" ] || src="$DEVTRAIL_ROOT/preset/learn/ko"
   local dest; dest="$(vault_root)/$(dt_dir study)"
   [ -d "$src" ] || return 0
   mkdir -p "$dest"

@@ -12,7 +12,7 @@ _init_scan() {
   local vault="$1"
   DT_SCAN=$(mktemp); export DT_SCAN
   echo
-  printf '%s\n' "${C_BOLD}볼트 진단${C_RESET}"
+  printf '%s\n' "${C_BOLD}$(L "볼트 진단" "Scanning the vault")${C_RESET}"
   if ! python3 "$DEVTRAIL_ROOT/lib/gen/scan.py" "$vault" \
         "$DEVTRAIL_ROOT/preset/tree.json" \
         "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" > "$DT_SCAN" 2>/dev/null; then
@@ -46,16 +46,19 @@ _init_mode() {
   [ "${n:-0}" -ge 10 ] && suggest=existing
   {
     echo
-    printf '%s\n' "${C_BOLD}설치 방식${C_RESET}"
+    printf '%s\n' "${C_BOLD}$(L "설치 방식" "How to install")${C_RESET}"
     if [ "$suggest" = existing ]; then
       dim "   $(L "노트 ${n}개가 있습니다. 기존 볼트로 보입니다." \
             "${n} notes here — this looks like an existing vault.")"
     else
       dim "   $(L "빈 볼트로 보입니다." "This looks like an empty vault.")"
     fi
-    echo "   1) 기존 볼트에 얹기 — 기존 폴더를 그대로 쓰고 설정만 매핑 (노트를 움직이지 않음)"
-    echo "   2) 새로 시작하기   — 전체 구조를 만들고 설정을 전부 적용"
-    echo "   3) 분리 설치       — 기존은 그대로 두고 새 하위 트리에만 설치"
+    echo "   1) $(L "기존 볼트에 얹기 — 기존 폴더를 그대로 쓰고 설정만 매핑 (노트를 움직이지 않음)" \
+                     "Add to this vault  — use your folders as-is, map settings only (nothing moves)")"
+    echo "   2) $(L "새로 시작하기   — 전체 구조를 만들고 설정을 전부 적용" \
+                     "Start fresh        — build the whole structure, apply every setting")"
+    echo "   3) $(L "분리 설치       — 기존은 그대로 두고 새 하위 트리에만 설치" \
+                     "Isolated install   — leave everything, install into a new subtree only")"
   } >&2
   local pick def=1
   [ "$suggest" = new ] && def=2
@@ -114,7 +117,7 @@ _init_root() {
 
   {
     echo
-    printf '%s\n' "${C_BOLD}루트 폴더${C_RESET}"
+    printf '%s\n' "${C_BOLD}$(L "루트 폴더" "Root folder")${C_RESET}"
     dim "   $(L "볼트 안에서 DevTrail 이 관리할 최상위 폴더입니다." \
             "The top folder DevTrail manages inside your vault.")"
     if [ -z "$suggest" ]; then
@@ -157,7 +160,7 @@ _init_adopt() {
 
   {
     echo
-    printf '%s\n' "${C_BOLD}기존 폴더 매핑${C_RESET}"
+    printf '%s\n' "${C_BOLD}$(L "기존 폴더 매핑" "Mapping your folders")${C_RESET}"
     dim "   $(L "찾은 폴더를 그대로 씁니다. 노트를 옮기지 않습니다." \
             "Uses the folders we found as-is. Nothing is moved.")"
     dim "   $(L "아니라고 하면 우리 기본 폴더를 새로 만듭니다." \
@@ -173,7 +176,8 @@ _init_adopt() {
       "$root"/*) rel="${path#"$root"/}" ;;
       "$root")   continue ;;
     esac
-    printf '   %s → %s  (%s개, 확신 %s)\n' "$role" "$rel" "$notes" "$score" >&2
+    printf '   %s → %s  (%s)\n' "$role" "$rel" \
+      "$(L "${notes}개, 확신 ${score}" "${notes} notes, conf ${score}")" >&2
     ans=$(_init_ask "   $(L "이 폴더를" "Use this folder as") '$role'? [y/N]" "y" 2>/dev/null)
     case "$ans" in
       [Yy]*) pairs="$pairs$role\t$rel\n" ;;

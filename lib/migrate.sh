@@ -47,9 +47,9 @@ mg_pending() {
     f=$(_mg_file "$n")
     if [ -n "$f" ]; then
       . "$f"
-      printf '%s\t%s\n' "$n" "$(eval "printf '%s' \"\${_mg_$(printf '%03d' "$n")_why:-설명 없음}\"")"
+      printf '%s\t%s\n' "$n" "$(eval "printf '%s' \"\${_mg_$(printf '%03d' "$n")_why:-?}\"")"
     else
-      printf '%s\t%s\n' "$n" "⚠️ 마이그레이션 파일이 없습니다"
+      printf '%s\t%s\n' "$n" "⚠️ $(L "마이그레이션 파일이 없습니다" "no migration file")"
     fi
     n=$((n + 1))
   done

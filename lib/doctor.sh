@@ -16,16 +16,16 @@ doctor_run() {
   DT_FAILS=0; DT_WARNS=0
 
   _d_section "$(L "의존성" "Dependencies")"
-  _d_bin jq        required "설정 파일 파싱 — 없으면 아무것도 동작하지 않음"
-  _d_bin gh        required "GitHub PR/이슈 조회"
-  _d_bin git       required "볼트 백업"
-  _d_bin rsync     required "문서 동기화"
-  _d_bin python3   required "볼트 백업(권한 우회 경유)"
-  _d_bin fswatch   optional "실시간 파일 감시 (미설치 시 주기 동기화만)"
+  _d_bin jq        required "$(L "설정 파일 파싱 — 없으면 아무것도 동작하지 않음" "parses the config — nothing works without it")"
+  _d_bin gh        required "$(L "GitHub PR/이슈 조회" "reads GitHub PRs and issues")"
+  _d_bin git       required "$(L "볼트 백업" "vault backups")"
+  _d_bin rsync     required "$(L "문서 동기화" "doc sync")"
+  _d_bin python3   required "$(L "볼트 백업(권한 우회 경유)" "vault backups (works around permissions)")"
+  _d_bin fswatch   optional "$(L "실시간 파일 감시 (미설치 시 주기 동기화만)" "live file watching (without it, periodic sync only)")"
 
   local ai; ai=$(cfg '.ai.provider' 'claude')
   if [ "$(cfg '.ai.summary_enabled' 'true')" = "true" ]; then
-    _d_bin "$ai" required "PR 쉬운말 요약 (ai.provider=$ai)"
+    _d_bin "$ai" required "$(L "PR 쉬운말 요약" "plain-language PR summaries") (ai.provider=$ai)"
   else
     dim "   ai.summary_enabled=false — $(L "AI 요약 비활성" "AI summaries off")"
   fi

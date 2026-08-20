@@ -19,9 +19,13 @@ _init_lang() {
   {
     echo
     printf '%s\n' "${C_BOLD}Language / 언어${C_RESET}"
-    dim "   Used for folder names and note templates. / 폴더 이름과 노트 템플릿에 쓰입니다."
+    dim "   Folder names, note templates, and everything DevTrail prints."
+    dim "   폴더 이름 · 노트 템플릿 · DevTrail 이 출력하는 모든 문구에 쓰입니다."
     printf '    1) 한국어  (개발/개발일지 · 자료실/20_카드노트)\n'
     printf '    2) English (Dev/Devlog · Library/20_Zettel)\n'
+    echo
+    dim "   Tags never change: #type/devlog is the same either way."
+    dim "   태그는 언어와 무관합니다 — #type/devlog 는 양쪽에서 같습니다."
   } >&2
 
   local hint="1"; [ "$guess" = "en" ] && hint="2"
@@ -102,7 +106,7 @@ _init_src_root() {
     echo
     printf '%s\n' "${C_BOLD}4. $(L "프로젝트 폴더" "Projects folder")${C_RESET}"
     dim "   $(L "레포들이 모여 있는 상위 폴더입니다. 각 레포의 docs/ 를 볼트로 가져옵니다." \
-                "The folder your repos live in. Each repo\x27s docs/ is pulled into the vault.")"
+                "The folder your repos live in. Each repo's docs/ is pulled into the vault.")"
     dim "   $(L "다음 단계에서 이 폴더 안의 레포를 골라 동기화 대상으로 지정합니다." \
                 "In the next step you pick which of those repos to sync.")"
   } >&2
@@ -122,7 +126,12 @@ _init_src_root() {
 # ── 모듈 ─────────────────────────────────────────────────────────────────────
 _init_modules() {
   local tree="$DEVTRAIL_ROOT/preset/tree.json" list
-  list=$(jq -r '.modules | to_entries[] | select(.value.required != true) | .key + " — " + .value.label' "$tree")
+  # ⚠️ label_en 이 있으면 그걸 쓴다. 없으면 label 로 떨어진다.
+  local en; en=$([ "$(dt_lang)" = en ] && echo true || echo false)
+  list=$(jq -r --argjson en "$en" '
+    .modules | to_entries[] | select(.value.required != true)
+    | .key + " — " + (if $en then (.value.label_en // .value.label) else .value.label end)
+  ' "$tree")
   {
     echo
     printf '%s\n' "${C_BOLD}$(L "설치할 모듈" "Modules to install")${C_RESET}"
@@ -146,7 +155,7 @@ _init_sync_repos() {
     echo
     printf '%s\n' "${C_BOLD}5. $(L "docs 동기화 대상" "Repos to sync docs from")${C_RESET}"
     dim "   $(L "레포의 docs/ 폴더를 볼트로 가져옵니다. docs/ 가 있는 폴더만 보여줍니다." \
-                "Pulls each repo\x27s docs/ into the vault. Only repos that have one are listed.")"
+                "Pulls each repo's docs/ into the vault. Only repos that have one are listed.")"
   } >&2
 
   if [ -d "$src" ]; then
@@ -177,8 +186,8 @@ _init_projects() {
   {
     echo
     printf '%s\n' "${C_BOLD}6. $(L "PR 요약 섹션" "PR summary sections")${C_RESET}"
-    dim "   $(L "머지된 PR 요약은 개발일지의 \x27#### <레포명>\x27 섹션 아래에 들어갑니다." \
-                "Merged-PR summaries go under the \x27#### <repo>\x27 sections in your devlog.")"
+    dim "   $(L "머지된 PR 요약은 개발일지의 '#### <레포명>' 섹션 아래에 들어갑니다." \
+                "Merged-PR summaries go under the '#### <repo>' sections in your devlog.")"
     dim "   $(L "여기서 고른 레포로 그 섹션을 미리 만들어 둡니다." \
                 "The repos you pick here become those sections.")"
     dim "   $(L "(섹션이 없으면 요약은 에러 없이 건너뛰기만 합니다)" \

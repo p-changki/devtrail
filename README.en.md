@@ -13,9 +13,13 @@ rolls up into weekly reviews.
 > **Platform**: macOS. Linux is not tested yet.
 >
 > **A note on the English support**: DevTrail was built in Korean first and
-> English support landed in v0.3. Folder names, note templates, and vault
-> content are fully English. **Some CLI messages are still Korean** — see
-> [Current state](#current-state) for exactly what.
+> English support landed in v0.3. Everything you see is English — folder
+> names, note templates, in-vault guides, every CLI message, and the AI
+> skills. `devtrail init` asks which language before anything else.
+>
+> Development still happens in Korean (comments, commit messages, internal
+> docs). That does not reach you, but it is worth knowing before you open
+> a PR.
 
 ---
 
@@ -24,7 +28,11 @@ rolls up into weekly reviews.
 ```bash
 curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash
 
-devtrail init        # interactive setup — asks for language first
+devtrail init        # interactive setup
+                     #   1) language — English / 한국어
+                     #   2) vault path
+                     #   3) how to install — add to this vault / start fresh / isolated
+                     #   4) root folder name · modules · GitHub · AI
                      # → open the vault in Obsidian, install 4 plugins, restart
 devtrail obsidian    # merge plugin config, templates, hotkeys
 devtrail doctor      # tells you exactly what is not working
@@ -214,9 +222,8 @@ Twelve skills for AI tools like Claude Code. Install with
 
 **DevTrail does not require an AI tool.** Skills are optional.
 
-> The skill files themselves are currently Korean. They work with English
-> vaults (they resolve paths through `devtrail path`), but the instructions
-> an AI reads are in Korean. English versions are planned.
+> Skills resolve paths through `devtrail path` at run time, so they follow
+> whatever you named your folders — and whichever language you chose.
 
 ---
 
@@ -274,11 +281,10 @@ It reports what is wrong **and how to fix it**.
 21 note templates · per-folder hubs · auto-filing · GitHub activity and PR
 summaries · weekly reviews · 12 AI skills · undo · menu bar app · web dashboard
 
-**English coverage** — folder names, folder hubs, and path resolution are fully
-translated. **Still Korean**: most CLI output, the dashboard and daily check-in
-notes, note templates, in-vault guides, and AI skill files. They function
-correctly in an English vault; the text is Korean. Being worked through in
-that order.
+**English coverage** — complete. Folder names, folder hubs, the dashboard and
+daily check-in, all 21 note templates, the in-vault guides, every CLI message,
+and all 12 AI skills. Tags and frontmatter keys are identical in both
+languages, so auto-filing and Dataview queries do not care which you picked.
 
 **Not yet** — Linux · Windows · git hosts other than GitHub · note apps
 other than Obsidian
