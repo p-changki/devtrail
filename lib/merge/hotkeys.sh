@@ -19,7 +19,7 @@ _ob_hotkeys() {
   local hk="$dot/hotkeys.json"
   local paths; paths=$(_ob_paths_json)
 
-  step "단축키"
+  step "$(L "단축키" "Hotkeys")"
   local ids; ids=$(mktemp)
   jq -r '[.[] | {key: .id, value: .id}] | from_entries' \
     "$DEVTRAIL_ROOT/templates/obsidian/shellcommands.json" > "$ids" 2>/dev/null || echo '{}' > "$ids"
@@ -29,12 +29,12 @@ _ob_hotkeys() {
      python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" hotkeys \
       "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$hk" ] && printf '%s' "$hk")" "$ids" > "$out"; then
-    jr_backup "$hk" >/dev/null || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $hk"; }
+    jr_backup "$hk" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $hk"; }
     mv "$out" "$hk"
-    ok "단축키 $(jq 'length' "$hk")개 등록"
-    dim "     Obsidian 을 재시작해야 적용됩니다"
+    ok "$(L "단축키 $(jq 'length' "$hk")개 등록" "$(jq 'length' "$hk") hotkeys registered")"
+    dim "     $(L "Obsidian 을 재시작해야 적용됩니다" "Restart Obsidian for these to take effect")"
   else
-    rm -f "$out"; warn "단축키 생성 실패 — 건드리지 않습니다"
+    rm -f "$out"; warn "$(L "단축키 생성 실패 — 건드리지 않습니다" "Could not build hotkeys — leaving them alone")"
   fi
   rm -f "$ids"
 }
@@ -42,14 +42,6 @@ _ob_hotkeys() {
 # 경로 맵을 임시 JSON 으로 낸다 (파이썬 쪽 입력용)
 
 # 경로 맵을 임시 JSON 으로 낸다 (파이썬 쪽 입력용)
-_ob_paths_json() {
-  local f; f=$(mktemp)
-  . "$DEVTRAIL_ROOT/lib/pathcmd.sh"
-  path_cmd --json > "$f" 2>/dev/null \
-    && jq -n --slurpfile p "$f" '{paths: ($p[0] | with_entries(.value = .value.rel))}' > "$f.2" \
-    && mv "$f.2" "$f"
-  printf '%s' "$f"
-}
 
 # ── 에디터 설정 ──────────────────────────────────────────────────────────────
 #

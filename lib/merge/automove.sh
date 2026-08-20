@@ -23,12 +23,13 @@ _ob_automove() {
   local mode; mode=$(cfg '.install.mode' 'existing')
   local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
 
-  step "노트 라우팅 (Auto Note Mover)"
-  [ -f "$profile" ] || { warn "프로파일 없음: $profile"; return 0; }
+  step "$(L "노트 라우팅" "Note routing") (Auto Note Mover)"
+  [ -f "$profile" ] || { warn "$(L "프로파일 없음" "Profile missing"): $profile"; return 0; }
 
   if [ ! -d "$(dirname "$data")" ]; then
-    _d_note "Auto Note Mover 플러그인이 설치/활성화되지 않았습니다."
-    dim "     설치 후 Obsidian을 재시작하고 다시 실행하세요."
+    _d_note "Auto Note Mover $(L "플러그인이 설치/활성화되지 않았습니다." "plugin is not installed or not enabled.")"
+    dim "     $(L "설치 후 Obsidian 을 재시작하고 다시 실행하세요." \
+                "Install it, restart Obsidian, then run this again.")"
     return 0
   fi
 
@@ -37,24 +38,25 @@ _ob_automove() {
   python3 "$DEVTRAIL_ROOT/lib/gen/anm.py" \
     "$DEVTRAIL_ROOT/preset/tree.json" "$CONFIG_FILE" "$profile" \
     "$([ -f "$data" ] && printf '%s' "$data")" > "$out" || {
-      rm -f "$out"; warn "규칙 생성 실패 — 건드리지 않습니다"; return 0; }
+      rm -f "$out"; warn "$(L "규칙 생성 실패 — 건드리지 않습니다" "Could not build rules — leaving them alone")"; return 0; }
 
   jq -e '.folder_tag_pattern | length > 0' "$out" >/dev/null 2>&1 || {
-    rm -f "$out"; warn "생성된 규칙이 비어 있습니다 — 원본 유지"; return 0; }
+    rm -f "$out"; warn "$(L "생성된 규칙이 비어 있습니다 — 원본 유지" "The generated rules are empty — keeping the original")"; return 0; }
 
   if [ -f "$data" ]; then
     local backup
-    backup=$(jr_backup "$data") || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
-    dim "     백업: $backup"
+    backup=$(jr_backup "$data") || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $data"; }
+    dim "     $(L "백업" "Backup"): $backup"
   fi
   mv "$out" "$data"
 
   local n trig
   n=$(jq '.folder_tag_pattern | length' "$data")
   trig=$(jq -r '.trigger_auto_manual' "$data")
-  ok "규칙 ${n}개 · 트리거 ${trig}"
+  ok "$(L "규칙 ${n}개" "${n} rules") · $(L "트리거" "trigger") ${trig}"
   [ "$trig" = "Manual" ] && \
-    dim "     기존 노트를 지키려고 수동으로 시작합니다. 익숙해지면 플러그인 설정에서 Automatic 으로 바꾸세요."
+    dim "     $(L "기존 노트를 지키려고 수동으로 시작합니다. 익숙해지면 플러그인 설정에서 Automatic 으로 바꾸세요." \
+                "Starts on Manual to protect your notes. Switch to Automatic in the plugin settings once you trust it.")"
 }
 
 # 볼트 최상위에서 우리가 만들지 않은 폴더들. 기존 모드의 제외 목록이 된다.

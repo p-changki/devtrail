@@ -28,8 +28,9 @@ jr_begin() {
   DT_JOB_DIR="$DT_JOURNAL_DIR/$DT_JOB"
 
   mkdir -p "$DT_JOB_DIR/files" || {
-    die "저널을 만들 수 없습니다: $DT_JOB_DIR
-   되돌릴 수 없는 변경을 하지 않기 위해 중단합니다."
+    die "$(L "저널을 만들 수 없습니다" "Cannot create the journal"): $DT_JOB_DIR
+   $(L "되돌릴 수 없는 변경을 하지 않기 위해 중단합니다." \
+       "Stopping rather than making a change we cannot undo.")"
   }
 
   jq -n --arg id "$DT_JOB" --arg cmd "$cmd" \
@@ -63,7 +64,8 @@ jr_backup() {
   local n; n=$(( $(wc -l < "$DT_JOB_DIR/entries.tsv" | tr -d ' ') + 1 ))
   local store="$DT_JOB_DIR/files/$(printf '%03d' "$n")-$(basename "$target")"
   cp "$target" "$store" || {
-    warn "백업 실패 — 원본을 건드리지 않습니다: $target"
+    warn "$(L "백업 실패 — 원본을 건드리지 않습니다" \
+            "Backup failed — leaving the original alone"): $target"
     return 1
   }
   printf 'modify\t%s\t%s\n' "$target" "$store" >> "$DT_JOB_DIR/entries.tsv"
@@ -111,13 +113,13 @@ jr_end() {
     return 0
   fi
   echo
-  dim "   되돌리기: devtrail undo ${DT_JOB}   (변경 ${n}건)"
+  dim "   $(L "되돌리기" "Undo"): devtrail undo ${DT_JOB}   ($(L "변경 ${n}건" "${n} changes"))"
 }
 
 # ── 목록 ─────────────────────────────────────────────────────────────────────
 jr_list() {
-  step "변경 이력"
-  [ -d "$DT_JOURNAL_DIR" ] || { dim "   기록이 없습니다"; return 0; }
+  step "$(L "변경 이력" "Change history")"
+  [ -d "$DT_JOURNAL_DIR" ] || { dim "   $(L "기록이 없습니다" "Nothing recorded")"; return 0; }
 
   local found=0 d
   for d in $(ls -1r "$DT_JOURNAL_DIR" 2>/dev/null); do
@@ -125,15 +127,15 @@ jr_list() {
     [ -f "$job/meta.json" ] || continue
     found=1
     local n; n=$(wc -l < "$job/entries.tsv" 2>/dev/null | tr -d ' ')
-    printf '  %-24s %-14s %s  변경 %s건\n' \
+    printf '  %-24s %-14s %s  %s\n' \
       "$d" \
       "$(jq -r '.command' "$job/meta.json")" \
       "$(jq -r '.at' "$job/meta.json")" \
-      "${n:-0}"
+      "$(L "변경 ${n:-0}건" "${n:-0} changes")"
   done
   [ "$found" = 0 ] && dim "   기록이 없습니다"
   echo
-  dim "   자세히: devtrail undo <ID> --dry-run"
+  dim "   $(L "자세히" "Details"): devtrail undo <ID> --dry-run"
   return 0
 }
 
@@ -164,7 +166,7 @@ jr_undo() {
     case "$1" in
       --apply) apply=1 ;;
       --dry-run) apply=0 ;;
-      -*) die "알 수 없는 옵션: $1" ;;
+      -*) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
       *) id="$1" ;;
     esac
     shift
@@ -173,12 +175,12 @@ jr_undo() {
   [ -n "$id" ] || { jr_list; return 0; }
 
   local job="$DT_JOURNAL_DIR/$id"
-  [ -d "$job" ] || die "그런 작업이 없습니다: $id
-   목록: devtrail undo"
-  [ -f "$job/entries.tsv" ] || die "저널이 손상됐습니다: $job"
+  [ -d "$job" ] || die "$(L "그런 작업이 없습니다" "No such job"): $id
+   $(L "목록" "List"): devtrail undo"
+  [ -f "$job/entries.tsv" ] || die "$(L "저널이 손상됐습니다" "The journal is damaged"): $job"
 
-  step "되돌리기 — $(jq -r '.command' "$job/meta.json") ($(jq -r '.at' "$job/meta.json"))"
-  [ "$apply" = 1 ] || dim "   (dry-run — 실제로 되돌리려면 --apply)"
+  step "$(L "되돌리기" "Undo") — $(jq -r '.command' "$job/meta.json") ($(jq -r '.at' "$job/meta.json"))"
+  [ "$apply" = 1 ] || dim "   $(L "(dry-run — 실제로 되돌리려면 --apply)" "(dry run — pass --apply to really undo)")"
   echo
 
   local vault; vault=$(jq -r '.vault // ""' "$job/meta.json" 2>/dev/null)
@@ -190,9 +192,9 @@ jr_undo() {
     case "$kind" in
       modify)
         if [ ! -f "$store" ]; then
-          warn "백업이 없습니다 — 건너뜀: $target"; skipped=$((skipped + 1)); continue
+          warn "$(L "백업이 없습니다 — 건너뜀" "No backup — skipping"): $target"; skipped=$((skipped + 1)); continue
         fi
-        ok "복원  $target"
+        ok "$(L "복원" "restore")  $target"
         [ "$apply" = 1 ] && cp "$store" "$target"
         n=$((n + 1)) ;;
       create)
@@ -203,10 +205,10 @@ jr_undo() {
         #    있고, 그건 우리 것이 아니다. 지우지 못했으면 반드시 말한다 —
         #    "삭제"라고 해놓고 남겨두면 사용자는 지워진 줄 안다.
         if [ "$apply" = 1 ] && [ -d "$target" ] && ! rmdir "$target" 2>/dev/null; then
-          warn "비어 있지 않아 남겨둡니다: $target"
+          warn "$(L "비어 있지 않아 남겨둡니다" "Not empty — leaving it"): $target"
           skipped=$((skipped + 1)); continue
         fi
-        ok "삭제  $target"
+        ok "$(L "삭제" "remove ")  $target"
         [ "$apply" = 1 ] && [ -f "$target" ] && rm -f "$target"
         [ "$apply" = 1 ] && _jr_prune_empty "$vault" "$target"
         n=$((n + 1)) ;;
@@ -217,14 +219,14 @@ EOF
 
   echo
   local tail=""
-  [ "$gone" -gt 0 ] && tail=" · ${gone}건은 이미 없음"
-  [ "$skipped" -gt 0 ] && tail="${tail} · ${skipped}건 남겨둠"
+  [ "$gone" -gt 0 ] && tail=" · $(L "${gone}건은 이미 없음" "${gone} already gone")"
+  [ "$skipped" -gt 0 ] && tail="${tail} · $(L "${skipped}건 남겨둠" "${skipped} left in place")"
 
   if [ "$apply" = 1 ]; then
-    ok "${n}건 되돌림${tail}"
-    dim "   저널은 남겨둡니다: $job"
+    ok "$(L "${n}건 되돌림" "${n} undone")${tail}"
+    dim "   $(L "저널은 남겨둡니다" "The journal is kept"): $job"
   else
-    info "되돌릴 것 ${n}건${tail}"
-    dim "   적용: devtrail undo ${id} --apply"
+    info "$(L "되돌릴 것 ${n}건" "${n} to undo")${tail}"
+    dim "   $(L "적용" "Apply"): devtrail undo ${id} --apply"
   fi
 }

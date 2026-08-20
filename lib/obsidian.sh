@@ -19,17 +19,32 @@
 #   templates 가 먼저여야 templater 가 존재하는 템플릿만 매핑한다.
 DT_MERGERS="shellcommands automove templates templater hotkeys app snippets linter smartenv"
 
+# 병합기들이 공유하는 경로 JSON.
+#
+# ⚠️ 여기(오케스트레이터)에 둔다. 예전에는 hotkeys.sh 안에 있었는데
+#    templater.sh 가 먼저 실행되면서 "command not found" 로 죽었다.
+#    병합기는 서로를 부르지 않는다는 규칙이 바로 이래서 있다.
+_ob_paths_json() {
+  local f; f=$(mktemp)
+  . "$DEVTRAIL_ROOT/lib/pathcmd.sh"
+  path_cmd --json > "$f" 2>/dev/null \
+    && jq -n --slurpfile p "$f" '{paths: ($p[0] | with_entries(.value = .value.rel))}' > "$f.2" \
+    && mv "$f.2" "$f"
+  printf '%s' "$f"
+}
+
 obsidian_apply() {
   require_config
   require_bins jq python3
 
   local vault; vault="$(vault_path)"
-  [ -d "$vault" ] || die "볼트 없음: $vault"
+  [ -d "$vault" ] || die "$(L "볼트 없음" "Vault not found"): $vault"
 
   local dot="$vault/.obsidian"
   if [ ! -d "$dot" ]; then
-    die "Obsidian 설정 폴더가 없습니다: $dot
-   Obsidian에서 이 볼트를 한 번 연 뒤 다시 실행하세요."
+    die "$(L "Obsidian 설정 폴더가 없습니다" "No Obsidian config folder"): $dot
+   $(L "Obsidian 에서 이 볼트를 한 번 연 뒤 다시 실행하세요." \
+       "Open this vault in Obsidian once, then run it again.")"
   fi
 
   # 한 번의 실행을 하나로 묶는다 — devtrail undo 가 되돌릴 단위다.
@@ -38,7 +53,7 @@ obsidian_apply() {
   local m
   for m in $DT_MERGERS; do
     local f="$DEVTRAIL_ROOT/lib/merge/$m.sh"
-    [ -f "$f" ] || { warn "병합기 없음 — 건너뜀: $m"; continue; }
+    [ -f "$f" ] || { warn "$(L "병합기 없음 — 건너뜀" "No merger — skipping"): $m"; continue; }
     # shellcheck disable=SC1090
     . "$f"
     "_ob_$m" "$dot"
@@ -51,16 +66,19 @@ obsidian_apply() {
 # ── 나머지는 안내만 ──────────────────────────────────────────────────────────
 _ob_advice() {
   local dot="$1"
-  step "수동 설정이 필요한 것"
-  dim "   아래는 기존 설정을 덮어쓸 위험이 있어 자동으로 건드리지 않습니다."
+  step "$(L "수동 설정이 필요한 것" "Needs your hand")"
+  dim "   $(L "아래는 기존 설정을 덮어쓸 위험이 있어 자동으로 건드리지 않습니다." \
+            "We leave these alone — changing them could overwrite your settings.")"
   echo
   info "  1) Daily notes"
-  dim "     폴더: $(vault_rel "$(dt_dir devlog)")"
-  dim "     템플릿: $(vault_rel "$(dt_dir templates)")/개발일지양식.md"
+  dim "     $(L "폴더" "Folder"): $(vault_rel "$(dt_dir devlog)")"
+  dim "     $(L "템플릿" "Template"): $(vault_rel "$(dt_dir templates)")/$(L "개발일지양식.md" "Devlog.md")"
   info "  2) Templater → Folder templates"
-  dim "     'Trigger Templater on new file creation' 을 켜야 자동 삽입이 동작합니다"
-  info "  3) 단축키 (선택)"
-  dim "     설정 → 단축키에서 'DevTrail'로 검색해 원하는 키를 지정"
+  dim "     $(L "'Trigger Templater on new file creation' 을 켜야 자동 삽입이 동작합니다" \
+                "Turn on 'Trigger Templater on new file creation' or nothing is inserted")"
+  info "  3) $(L "단축키 (선택)" "Hotkeys (optional)")"
+  dim "     $(L "설정 → 단축키에서 'DevTrail' 로 검색해 원하는 키를 지정" \
+                "Settings → Hotkeys, search 'DevTrail', assign what you like")"
 }
 
 _d_note() { printf '   %s\n' "$*"; }

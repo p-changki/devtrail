@@ -175,6 +175,12 @@ _M = {
     "nav.inbox":    {"ko": "📥 Inbox",      "en": "📥 Inbox"},
     "nav.zettel":   {"ko": "🗂 카드노트",   "en": "🗂 Zettel"},
 
+    "hk.assigned": {
+        "ko": "배정 {a}개 · 재배정 {r}개 · 건너뜀 {s}개",
+        "en": "{a} assigned · {r} remapped · {s} skipped",
+    },
+    "hk.remapped": {"ko": "  재배정 {old} → {new}", "en": "  remapped {old} → {new}"},
+
     "l1.generated":  {
         "ko": "> DevTrail 이 만들었습니다. 직접 고쳐도 됩니다 — 다시 만들지 않습니다.",
         "en": "> Created by DevTrail. Safe to edit — it will not be regenerated.",

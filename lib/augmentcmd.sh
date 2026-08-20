@@ -18,7 +18,7 @@ DT_TREE="${DEVTRAIL_TREE:-$DEVTRAIL_ROOT/preset/tree.json}"
 augment_cmd() {
   require_config
   require_bins jq python3
-  [ -f "$DT_TREE" ] || die "트리 정의 없음: $DT_TREE"
+  [ -f "$DT_TREE" ] || die "$(L "트리 정의 없음" "Tree definition missing"): $DT_TREE"
 
   local apply=0 want=""
   while [ $# -gt 0 ]; do
@@ -26,14 +26,14 @@ augment_cmd() {
       --apply) apply=1 ;;
       --dry-run) apply=0 ;;
       --list) _aug_list; return 0 ;;
-      -*) die "알 수 없는 옵션: $1" ;;
+      -*) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
       *) want="$want $1" ;;
     esac
     shift
   done
 
   local vroot; vroot="$(vault_root)"
-  [ -d "$(vault_path)" ] || die "볼트 경로 없음: $(vault_path)"
+  [ -d "$(vault_path)" ] || die "$(L "볼트 경로 없음" "Vault not found"): $(vault_path)"
 
   # ⚠️ 검증은 서브셸 밖에서 한다.
   #    $(...) 안에서 die 를 부르면 서브셸만 죽고 부모는 계속 간다.
@@ -44,13 +44,13 @@ augment_cmd() {
   # 대상 모듈 결정: 인자 > 설정 > 기본(default=false 인 것 제외)
   local modules
   modules=$(_aug_modules "$want")
-  [ -n "$modules" ] || die "설치할 모듈이 없습니다.  목록: devtrail augment --list"
+  [ -n "$modules" ] || die "$(L "설치할 모듈이 없습니다." "No modules to install.")  $(L "목록" "List"): devtrail augment --list"
 
   # 실제로 쓸 때만 저널을 연다. dry-run 은 아무것도 안 바꾼다.
   [ "$apply" = 1 ] && jr_begin augment
 
-  step "대상 모듈: $(printf '%s' "$modules" | tr '\n' ' ')"
-  [ "$apply" = 1 ] || dim "   (dry-run — 실제로 만들려면 --apply)"
+  step "$(L "대상 모듈" "Modules"): $(printf '%s' "$modules" | tr '\n' ' ')"
+  [ "$apply" = 1 ] || dim "   $(L "(dry-run — 실제로 만들려면 --apply)" "(dry run — pass --apply to create)")"
   echo
 
   local made=0 kept=0 hubs=0
@@ -61,10 +61,10 @@ augment_cmd() {
     abs="$vroot/$rel"
     if [ -d "$abs" ]; then
       kept=$((kept + 1))
-      dim "   유지  $rel"
+      dim "   $(L "유지" "keep  ")  $rel"
     else
       made=$((made + 1))
-      ok "생성  $rel"
+      ok "$(L "생성" "create")  $rel"
       [ "$apply" = 1 ] && jr_mkdir "$abs"
     fi
     if [ "$hub" = "true" ]; then
@@ -81,16 +81,18 @@ EOF
 
   echo
   if [ "$apply" = 1 ]; then
-    ok "폴더 ${made}개 생성 · ${kept}개 유지 · 허브 ${hubs}개"
+    ok "$(L "폴더 ${made}개 생성 · ${kept}개 유지 · 허브 ${hubs}개" \
+          "${made} folders created · ${kept} kept · ${hubs} hubs")"
     jr_end
   else
-    info "생성 예정 ${made}개 · 유지 ${kept}개 · 허브 ${hubs}개"
-    dim "   적용: devtrail augment --apply"
+    info "$(L "생성 예정 ${made}개 · 유지 ${kept}개 · 허브 ${hubs}개" \
+            "${made} would be created · ${kept} kept · ${hubs} hubs")"
+    dim "   $(L "적용" "Apply"): devtrail augment --apply"
   fi
 }
 
 _aug_list() {
-  step "모듈"
+  step "$(L "모듈" "Modules")"
   jq -r '.modules | to_entries[]
     | "  \(.key)\t\(.value.label)\t\(if .value.required then "필수" elif .value.default == false then "기본 꺼짐" else "기본 켬" end)"' \
     "$DT_TREE" | while IFS=$'\t' read -r k l d; do
@@ -104,7 +106,7 @@ _aug_check_modules() {
   [ -n "$(printf '%s' "$want" | tr -d ' ')" ] || return 0
   for m in $want; do
     jq -e --arg m "$m" '.modules[$m]' "$DT_TREE" >/dev/null 2>&1 \
-      || die "알 수 없는 모듈: $m  (목록: devtrail augment --list)"
+      || die "$(L "알 수 없는 모듈" "Unknown module"): $m  ($(L "목록" "list"): devtrail augment --list)"
   done
   return 0
 }
@@ -186,7 +188,7 @@ _aug_paths_note() {
     printf '\n```\n'
   } > "$out"
   jr_created "$out"
-  ok "경로 맵  $(dt_dir templates)/_devtrail-paths.md"
+  ok "$(L "경로 맵" "path map")  $(dt_dir templates)/_devtrail-paths.md"
 }
 
 _aug_paths_json() {
@@ -246,7 +248,7 @@ _aug_learn() {
     # {{PATH}} 는 Dataview FROM 에 들어간다 — 경로를 박지 않기 위한 치환이다.
     sed "s|{{PATH}}|$rel|g" "$f" > "$dest/$name" && n=$((n + 1))
   done
-  [ "$n" -gt 0 ] && ok "학습 골격 ${n}개  $(dt_dir study)/"
+  [ "$n" -gt 0 ] && ok "$(L "학습 골격 ${n}개" "${n} study files")  $(dt_dir study)/"
   return 0
 }
 
@@ -266,7 +268,7 @@ _aug_guides() {
     [ -f "$dest/$(basename "$f")" ] && continue
     cp "$f" "$dest/" && { jr_created "$dest/$(basename "$f")"; n=$((n + 1)); }
   done
-  [ "$n" -gt 0 ] && ok "가이드 ${n}개  $(dt_dir guides)/"
+  [ "$n" -gt 0 ] && ok "$(L "가이드 ${n}개" "${n} guides")  $(dt_dir guides)/"
   return 0
 }
 
@@ -282,14 +284,14 @@ _aug_l1_hubs() {
   DT_DATE="$(date +%Y-%m-%d)" \
   python3 "$DEVTRAIL_ROOT/lib/gen/hubs.py" "$paths" "$CONFIG_FILE" \
     "${DT_SCAN_CACHE:-/dev/null}" "$(vault_root)" > "$out" 2>/dev/null || {
-      rm -f "$paths" "$out"; warn "L1 허브 생성 실패"; return 0; }
+      rm -f "$paths" "$out"; warn "$(L "L1 허브 생성 실패" "Could not create the L1 hubs")"; return 0; }
 
   # grep -c 는 매치가 없으면 exit 1 이라 || echo 0 이 두 값을 이어붙인다.
   # wc 로 세고 공백을 떼는 편이 안전하다.
   local n; n=$(grep -c . "$out" 2>/dev/null | head -1 | tr -d ' ')
   [ -n "$n" ] || n=0
   if [ "$n" -gt 0 ] 2>/dev/null; then
-    ok "L1 허브 ${n}개  $(tr '\n' ' ' < "$out")"
+    ok "$(L "L1 허브 ${n}개" "${n} L1 hubs")  $(tr '\n' ' ' < "$out")"
     # 되돌릴 수 있게 기록한다. hubs.py 는 파일명만 낼 수도 있어 루트를 붙인다.
     local line
     while IFS= read -r line; do
@@ -310,9 +312,9 @@ _aug_l1_hubs() {
 _aug_hub() {
   local key="$1" rel="$2" abs="$3" apply="$4"
   local hub="$abs/_index.md"
-  [ -f "$hub" ] && { dim "         허브 유지"; return 1; }
+  [ -f "$hub" ] && { dim "         $(L "허브 유지" "hub kept")"; return 1; }
 
-  ok "         허브 생성  $rel/_index.md"
+  ok "         $(L "허브 생성" "hub    ")  $rel/_index.md"
   [ "$apply" = 1 ] || return 0
 
   mkdir -p "$abs"
@@ -324,7 +326,7 @@ _aug_hub() {
   DT_HUB_COV_REVIEW="$(_aug_cov review_at)" \
   DT_HUB_DATE="$(date +%Y-%m-%d)" \
     python3 "$DEVTRAIL_ROOT/lib/gen/hub.py" > "$hub" || {
-      rm -f "$hub"; warn "허브 생성 실패: $rel"; return 1; }
+      rm -f "$hub"; warn "$(L "허브 생성 실패" "Could not create hub"): $rel"; return 1; }
   jr_created "$hub"
   return 0
 }

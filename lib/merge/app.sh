@@ -25,10 +25,10 @@ _ob_app() {
   local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
   local src="$DEVTRAIL_ROOT/preset/obsidian/app.json"
 
-  step "에디터 설정"
+  step "$(L "에디터 설정" "Editor settings")"
   local how; how=$(jq -r '.merge.app // "false"' "$profile" 2>/dev/null)
-  [ "$how" = "false" ] && { dim "     이 모드에서는 건드리지 않습니다"; return 0; }
-  [ -f "$src" ] || { warn "프리셋 없음: $src"; return 0; }
+  [ "$how" = "false" ] && { dim "     $(L "이 모드에서는 건드리지 않습니다" "This mode leaves it alone")"; return 0; }
+  [ -f "$src" ] || { warn "$(L "프리셋 없음" "Preset missing"): $src"; return 0; }
 
   local attach; attach=$(vault_rel "$(dt_dir attach)")
   local want; want=$(mktemp)
@@ -45,12 +45,13 @@ _ob_app() {
   jq -s '.[0] * .[1]' "$([ -f "$app" ] && printf '%s' "$app" || echo /dev/null)" "$want" > "$out" 2>/dev/null \
     || jq '.' "$want" > "$out"
 
-  jr_backup "$app" >/dev/null || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $app"; }
+  jr_backup "$app" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $app"; }
   mv "$out" "$app"; rm -f "$want"
 
-  ok "$(jq -r 'keys | length' "$app")개 키 · alwaysUpdateLinks=$(jq -r '.alwaysUpdateLinks' "$app")"
+  ok "$(L "키 $(jq -r 'keys | length' "$app")개" "$(jq -r 'keys | length' "$app") keys") · alwaysUpdateLinks=$(jq -r '.alwaysUpdateLinks' "$app")"
   [ "$(jq -r '.alwaysUpdateLinks' "$app")" = "true" ] \
-    || warn "     alwaysUpdateLinks 가 꺼져 있습니다 — 노트를 옮기면 링크가 끊깁니다"
+    || warn "     $(L "alwaysUpdateLinks 가 꺼져 있습니다 — 노트를 옮기면 링크가 끊깁니다" \
+                 "alwaysUpdateLinks is off — moving a note will break its links")"
 }
 
 # ── CSS 스니펫 ───────────────────────────────────────────────────────────────

@@ -18,27 +18,28 @@ _ob_linter() {
   local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
   local src="$DEVTRAIL_ROOT/preset/obsidian/linter.json"
 
-  step "Linter (frontmatter 규약)"
+  step "Linter ($(L "frontmatter 규약" "frontmatter rules"))"
   if [ "$(jq -r '.merge.linter // false' "$profile" 2>/dev/null)" != "true" ]; then
-    dim "     기존 서식을 지키려고 건드리지 않습니다"
-    dim "     직접 켜려면: 설정 → Linter → Lint on save"
+    dim "     $(L "기존 서식을 지키려고 건드리지 않습니다" "Left alone so your formatting stays put")"
+    dim "     $(L "직접 켜려면" "To turn it on yourself"): Settings → Linter → Lint on save"
     return 0
   fi
   if [ ! -d "$(dirname "$data")" ]; then
-    _d_note "Linter 플러그인이 설치되지 않았습니다 (권장)."
-    dim "     없으면 frontmatter 의 updated 가 자동 갱신되지 않습니다."
+    _d_note "Linter $(L "플러그인이 설치되지 않았습니다 (권장)." "plugin is not installed (recommended).")"
+    dim "     $(L "없으면 frontmatter 의 updated 가 자동 갱신되지 않습니다." \
+                "Without it, the updated field in frontmatter never refreshes.")"
     return 0
   fi
-  [ -f "$src" ] || { warn "프리셋 없음: $src"; return 0; }
+  [ -f "$src" ] || { warn "$(L "프리셋 없음" "Preset missing"): $src"; return 0; }
 
   local out; out=$(mktemp)
   jq -s '.[0] * (.[1] | del(._comment))' \
     "$([ -f "$data" ] && printf '%s' "$data" || echo /dev/null)" "$src" > "$out" 2>/dev/null \
     || jq 'del(._comment)' "$src" > "$out"
 
-  jr_backup "$data" >/dev/null || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
+  jr_backup "$data" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $data"; }
   mv "$out" "$data"
-  ok "저장 시 정리 켬 · updated 자동 갱신"
+  ok "$(L "저장 시 정리 켬 · updated 자동 갱신" "Lint on save is on · updated refreshes automatically")"
 }
 
 # ── RAG 제외 설정 ────────────────────────────────────────────────────────────

@@ -22,10 +22,10 @@ _ob_snippets() {
   local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
   local src="$DEVTRAIL_ROOT/preset/obsidian/snippets"
 
-  step "CSS 스니펫"
+  step "$(L "CSS 스니펫" "CSS snippets")"
   [ "$(jq -r '.merge.snippets // false' "$profile" 2>/dev/null)" = "true" ] \
-    || { dim "     이 모드에서는 건드리지 않습니다"; return 0; }
-  [ -d "$src" ] || { warn "프리셋 없음: $src"; return 0; }
+    || { dim "     $(L "이 모드에서는 건드리지 않습니다" "This mode leaves it alone")"; return 0; }
+  [ -d "$src" ] || { warn "$(L "프리셋 없음" "Preset missing"): $src"; return 0; }
 
   mkdir -p "$dir"
   local n=0 f name
@@ -42,9 +42,9 @@ _ob_snippets() {
   ' "$([ -f "$app" ] && printf '%s' "$app" || echo /dev/null)" > "$out" 2>/dev/null \
     || printf '{"enabledCssSnippets":["devtrail"]}' > "$out"
 
-  jr_backup "$app" >/dev/null || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $app"; }
+  jr_backup "$app" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $app"; }
   mv "$out" "$app"
-  ok "스니펫 ${n}개 설치 · 활성화 등록"
+  ok "$(L "스니펫 ${n}개 설치 · 활성화 등록" "${n} snippets installed and enabled")"
 }
 
 # ── Linter ───────────────────────────────────────────────────────────────────

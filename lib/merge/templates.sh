@@ -17,11 +17,11 @@
 # 템플릿에는 경로가 한 글자도 없다 — 실행 시점에 _devtrail-paths.md 를
 # 파일명으로 찾아 읽는다. 그래서 여기서는 치환 없이 그대로 복사한다.
 _ob_templates() {
-  step "노트 템플릿"
+  step "$(L "노트 템플릿" "Note templates")"
   local dest; dest="$(vault_root)/$(dt_dir templates)"
   local base="$DEVTRAIL_ROOT/preset/templates"
   local src="$base/$(dt_lang)"
-  [ -d "$base/ko" ] || { warn "템플릿 없음: $base"; return 0; }
+  [ -d "$base/ko" ] || { warn "$(L "템플릿 없음" "Template missing"): $base"; return 0; }
 
   mkdir -p "$dest"
   local n=0 skipped=0 fb=0 f name
@@ -32,7 +32,7 @@ _ob_templates() {
       [ -e "$f" ] || continue
       name=$(basename "$f")
       [ -f "$dest/$name" ] && { skipped=$((skipped + 1)); continue; }
-      cp "$f" "$dest/$name" || { warn "복사 실패: $name"; continue; }
+      cp "$f" "$dest/$name" || { warn "$(L "복사 실패" "Copy failed"): $name"; continue; }
       n=$((n + 1))
     done
   fi
@@ -52,17 +52,22 @@ _ob_templates() {
     done
   fi
 
-  ok "템플릿 ${n}개 설치 (기존 유지 ${skipped}개) → $(dt_dir templates)"
-  [ "$fb" -gt 0 ] && dim "     번역 대기 ${fb}개는 한국어로 설치했습니다"
+  ok "$(L "템플릿 ${n}개 설치 (기존 유지 ${skipped}개)" \
+          "${n} templates installed (${skipped} kept)") → $(dt_dir templates)"
+  [ "$fb" -gt 0 ] && dim "     $(L "번역 대기 ${fb}개는 한국어로 설치했습니다" \
+                "${fb} not translated yet — installed in Korean")"
 
   local sections
   sections=$(jq -r '(.github.project_groups // {}) | [.[]] | unique | .[]' "$CONFIG_FILE" 2>/dev/null)
   if [ -n "$sections" ]; then
-    dim "     PR 요약 섹션: $(printf '%s' "$sections" | tr '\n' ' ')"
-    dim "     개발일지를 만들 때 선택창에서 고르면 #### 소제목이 생깁니다."
+    dim "     $(L "PR 요약 섹션" "PR summary sections"): $(printf '%s' "$sections" | tr '\n' ' ')"
+    dim "     $(L "개발일지를 만들 때 선택창에서 고르면 #### 소제목이 생깁니다." \
+                "Pick them when you create a devlog and the #### headings appear.")"
   else
-    warn "     project_groups 가 비어 있어 PR 요약이 넣을 자리를 못 찾습니다"
-    dim "     devtrail init 을 다시 돌리거나 설정의 github.project_groups 를 채우세요."
+    warn "     $(L "project_groups 가 비어 있어 PR 요약이 넣을 자리를 못 찾습니다" \
+                 "project_groups is empty, so PR summaries have nowhere to go")"
+    dim "     $(L "devtrail init 을 다시 돌리거나 설정의 github.project_groups 를 채우세요." \
+                "Run devtrail init again, or fill in github.project_groups.")"
   fi
 }
 

@@ -18,7 +18,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from i18n import LANG  # noqa: E402
+from i18n import LANG, t as T  # noqa: E402
 
 
 def load(path, default=None):
@@ -178,10 +178,10 @@ def main():
         out, assigned, remapped, skipped = build_hotkeys(
             spec, tmpl_rel, existing, shell_ids, have)
         print(json.dumps(out, ensure_ascii=False, indent=2))
-        print(f"배정 {len(assigned)}개 · 재배정 {len(remapped)}개 · 건너뜀 {len(skipped)}개",
+        print(T("hk.assigned", a=len(assigned), r=len(remapped), s=len(skipped)),
               file=sys.stderr)
         for cmd, old, new in remapped:
-            print(f"  재배정 {old} → {new}", file=sys.stderr)
+            print(T("hk.remapped", old=old, new=new), file=sys.stderr)
         for cmd, c, by in skipped:
             print(f"  건너뜀 {c} (이미 사용: {by})", file=sys.stderr)
         return 0
