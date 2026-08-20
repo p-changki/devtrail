@@ -44,12 +44,12 @@ _init_pick() {
       printf '   %2d) %s\n' $((i + 1)) "${list[$i]}"
       i=$((i + 1))
     done
-    local hint="그냥 Enter=선택 안 함"
-    [ "$default" = "a" ] && hint="그냥 Enter=전체"
-    dim "   a=전체 · 개별 선택 예) 1,3 · $hint"
+    local hint; hint=$(L "그냥 Enter=선택 안 함" "Enter = none")
+    [ "$default" = "a" ] && hint=$(L "그냥 Enter=전체" "Enter = all")
+    dim "   $(L "a=전체 · 개별 선택 예) 1,3" "a = all · pick some, e.g. 1,3") · $hint"
   } >&2
 
-  reply=$(_init_ask "선택" "$default" 2>/dev/null)
+  reply=$(_init_ask "$(L "선택" "Choose")" "$default" 2>/dev/null)
   [ -n "$reply" ] || return 0
 
   case "$reply" in

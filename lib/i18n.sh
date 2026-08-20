@@ -60,23 +60,17 @@ dt_ns() {
   fi
 }
 
-# 메시지 카탈로그를 읽는다. 없는 언어는 ko 로 떨어진다.
-dt_load_messages() {
-  local l; l="$(dt_lang)"
-  local f="$DEVTRAIL_ROOT/lib/i18n/${l}.sh"
-  [ -f "$f" ] || f="$DEVTRAIL_ROOT/lib/i18n/ko.sh"
-  [ -f "$f" ] && . "$f"
-}
-
-# msg <키> [인자...]  — 카탈로그에서 찾아 printf 로 낸다.
+# ── 문구 ─────────────────────────────────────────────────────────────────────
 #
-# 키가 없으면 키 이름을 그대로 낸다. 죽지 않는다 — 번역이 빠졌다고
-# 명령이 실패하면 안 된다. 대신 눈에 띄게 [key] 로 감싼다.
-msg() {
-  local key="$1"; shift
-  local var="M_$key" val
-  eval "val=\${$var:-}"
-  if [ -z "$val" ]; then printf '[%s]' "$key"; return 0; fi
-  # shellcheck disable=SC2059
-  printf "$val" "$@"
+# L <한국어> <English>
+#
+# 키 카탈로그를 두지 않는 이유:
+#   이 CLI 의 메시지는 대부분 '왜 그런지'를 설명하는 산문이다. 키로 빼면
+#   호출부에서 무슨 말을 하는지 안 보이고, 키와 문구가 어긋나는 새로운
+#   버그 종류가 생긴다. 언어가 둘뿐이라 그 값을 하지 않는다.
+#
+# ⚠️ 두 인자를 반드시 다 준다. 하나만 주면 영어에서 한국어가 그대로 나온다.
+#    tests/run.sh 가 검사한다.
+L() {
+  if [ "$(dt_lang)" = "en" ]; then printf '%s' "${2:-$1}"; else printf '%s' "$1"; fi
 }

@@ -16,17 +16,18 @@ _init_scan() {
   if ! python3 "$DEVTRAIL_ROOT/lib/gen/scan.py" "$vault" \
         "$DEVTRAIL_ROOT/preset/tree.json" \
         "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" > "$DT_SCAN" 2>/dev/null; then
-    warn "진단에 실패했습니다 — 빈 볼트로 간주합니다"
+    warn "$(L "진단에 실패했습니다 — 빈 볼트로 간주합니다" \
+            "Diagnosis failed — treating it as an empty vault")"
     echo '{}' > "$DT_SCAN"
     return 0
   fi
   local n fm
   n=$(jq -r '.scale.notes // 0' "$DT_SCAN")
   fm=$(jq -r '.scale.frontmatter_pct // 0' "$DT_SCAN")
-  ok "노트 ${n}개 · frontmatter ${fm}%"
+  ok "$(L "노트" "notes") ${n} · frontmatter ${fm}%"
   local roles
   roles=$(jq -r '[.folders[]? | select(.role_candidates|length>0)] | length' "$DT_SCAN")
-  [ "${roles:-0}" != "0" ] && dim "   역할로 보이는 폴더 ${roles}개를 찾았습니다 (자세히: devtrail scan)"
+  [ "${roles:-0}" != "0" ] && dim "   $(L "역할로 보이는 폴더" "Folders that look like roles") ${roles} (devtrail scan)"
 }
 
 
@@ -47,9 +48,10 @@ _init_mode() {
     echo
     printf '%s\n' "${C_BOLD}설치 방식${C_RESET}"
     if [ "$suggest" = existing ]; then
-      dim "   노트 ${n}개가 있습니다. 기존 볼트로 보입니다."
+      dim "   $(L "노트 ${n}개가 있습니다. 기존 볼트로 보입니다." \
+            "${n} notes here — this looks like an existing vault.")"
     else
-      dim "   빈 볼트로 보입니다."
+      dim "   $(L "빈 볼트로 보입니다." "This looks like an empty vault.")"
     fi
     echo "   1) 기존 볼트에 얹기 — 기존 폴더를 그대로 쓰고 설정만 매핑 (노트를 움직이지 않음)"
     echo "   2) 새로 시작하기   — 전체 구조를 만들고 설정을 전부 적용"
@@ -57,16 +59,17 @@ _init_mode() {
   } >&2
   local pick def=1
   [ "$suggest" = new ] && def=2
-  pick=$(_init_ask "선택" "$def" 2>/dev/null)
+  pick=$(_init_ask "$(L "선택" "Choose")" "$def" 2>/dev/null)
   case "$pick" in
     2)
       if [ "${n:-0}" -ge 10 ]; then
         {
           echo
-          warn "노트 ${n}개가 있는 볼트입니다."
-          dim "   '새로 시작'은 자동 이동을 켜고 Linter 설정을 덮어씁니다."
+          warn "$(L "노트 ${n}개가 있는 볼트입니다." "This vault already has ${n} notes.")"
+          dim "   $(L "'새로 시작'은 자동 이동을 켜고 Linter 설정을 덮어씁니다." \
+            "'Start fresh' turns on auto-move and overwrites Linter settings.")"
         } >&2
-        confirm "   그래도 계속할까요?" >&2 || { printf 'existing'; return 0; }
+        confirm "   $(L "그래도 계속할까요?" "Continue anyway?")" >&2 || { printf 'existing'; return 0; }
       fi
       printf 'new' ;;
     3) printf 'isolated' ;;
@@ -112,16 +115,19 @@ _init_root() {
   {
     echo
     printf '%s\n' "${C_BOLD}루트 폴더${C_RESET}"
-    dim "   볼트 안에서 DevTrail 이 관리할 최상위 폴더입니다."
+    dim "   $(L "볼트 안에서 DevTrail 이 관리할 최상위 폴더입니다." \
+            "The top folder DevTrail manages inside your vault.")"
     if [ -z "$suggest" ]; then
-      dim "   감싸는 폴더를 찾지 못했습니다 — 비워두면 볼트 최상위에 바로 만듭니다."
+      dim "   $(L "감싸는 폴더를 찾지 못했습니다 — 비워두면 볼트 최상위에 바로 만듭니다." \
+            "No wrapper folder found — leave it empty to use the vault root.")"
     fi
-    [ "${DT_MODE:-}" = isolated ] && dim "   분리 설치이므로 기존과 겹치지 않는 새 이름을 권합니다."
+    [ "${DT_MODE:-}" = isolated ] && dim "   $(L "분리 설치이므로 기존과 겹치지 않는 새 이름을 권합니다." \
+            "Isolated install — pick a new name that does not clash.")"
   } >&2
   if [ -n "$suggest" ]; then
-    _init_ask "폴더명 (비우면 볼트 최상위)" "$suggest" 2>/dev/null
+    _init_ask "$(L "폴더명 (비우면 볼트 최상위)" "Folder name (empty = vault root)")" "$suggest" 2>/dev/null
   else
-    _init_ask "폴더명 (비우면 볼트 최상위)" "" 2>/dev/null
+    _init_ask "$(L "폴더명 (비우면 볼트 최상위)" "Folder name (empty = vault root)")" "" 2>/dev/null
   fi
 }
 
@@ -152,8 +158,10 @@ _init_adopt() {
   {
     echo
     printf '%s\n' "${C_BOLD}기존 폴더 매핑${C_RESET}"
-    dim "   찾은 폴더를 그대로 씁니다. 노트를 옮기지 않습니다."
-    dim "   아니라고 하면 우리 기본 폴더를 새로 만듭니다."
+    dim "   $(L "찾은 폴더를 그대로 씁니다. 노트를 옮기지 않습니다." \
+            "Uses the folders we found as-is. Nothing is moved.")"
+    dim "   $(L "아니라고 하면 우리 기본 폴더를 새로 만듭니다." \
+            "Say no and we create our default folders instead.")"
   } >&2
 
   local role path notes score rel ans
@@ -166,7 +174,7 @@ _init_adopt() {
       "$root")   continue ;;
     esac
     printf '   %s → %s  (%s개, 확신 %s)\n' "$role" "$rel" "$notes" "$score" >&2
-    ans=$(_init_ask "   이 폴더를 '$role' 로 쓸까요? [y/N]" "y" 2>/dev/null)
+    ans=$(_init_ask "   $(L "이 폴더를" "Use this folder as") '$role'? [y/N]" "y" 2>/dev/null)
     case "$ans" in
       [Yy]*) pairs="$pairs$role\t$rel\n" ;;
     esac

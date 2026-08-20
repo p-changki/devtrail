@@ -286,6 +286,7 @@ run lint  "JSON"          check_json
 # 이 저장소 고유의 함정 — 문법 검사로는 안 잡힌다
 run guard "bash 3.2"      check_bash32
 run guard "local 자기참조"  check_local_selfref
+run guard "L 인자"        python3 ./tests/check-l-arity.py
 run guard "경로 하드코딩"   check_no_hardcoded_paths
 run guard "파일 길이"      check_file_size
 run guard "버전"          check_version

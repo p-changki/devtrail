@@ -19,7 +19,7 @@ _init_lang() {
   {
     echo
     printf '%s\n' "${C_BOLD}Language / 언어${C_RESET}"
-    dim "   폴더 이름과 노트 템플릿에 쓰입니다. 나중에 바꾸려면 볼트를 다시 만들어야 합니다."
+    dim "   Used for folder names and note templates. / 폴더 이름과 노트 템플릿에 쓰입니다."
     printf '    1) 한국어  (개발/개발일지 · 자료실/20_카드노트)\n'
     printf '    2) English (Dev/Devlog · Library/20_Zettel)\n'
   } >&2
@@ -37,13 +37,16 @@ _init_lang() {
 _init_backend() {
   {
     echo
-    printf '%s\n' "${C_BOLD}1. 저장소 위치${C_RESET}"
-    echo "   1) 로컬        — 클라우드 동기화 없음. 권한 문제 없음"
-    echo "   2) iCloud      — 맥 간 동기화. 전체 디스크 접근 권한 필요"
-    echo "   3) Google Drive— 미검증(MVP). 스트리밍 모드 주의"
+    printf '%s\n' "${C_BOLD}1. $(L "저장소 위치" "Where the vault lives")${C_RESET}"
+    echo "   1) $(L "로컬        — 클라우드 동기화 없음. 권한 문제 없음" \
+                    "Local        — no cloud sync, no permission issues")"
+    echo "   2) $(L "iCloud      — 맥 간 동기화. 전체 디스크 접근 권한 필요" \
+                    "iCloud       — syncs across Macs. Needs Full Disk Access")"
+    echo "   3) $(L "Google Drive— 미검증(MVP). 스트리밍 모드 주의" \
+                    "Google Drive — untested. Beware streaming mode")"
   } >&2
   local n
-  n=$(_init_ask "선택" "1" 2>/dev/null)
+  n=$(_init_ask "$(L "선택" "Choose")" "1" 2>/dev/null)
   case "$n" in
     2) printf 'icloud' ;;
     3) printf 'gdrive' ;;
@@ -61,15 +64,16 @@ _init_vault() {
   esac
   {
     echo
-    printf '%s\n' "${C_BOLD}2. 볼트 경로${C_RESET}"
-    dim "   Obsidian 볼트 폴더의 절대경로입니다. 없으면 만들어 드립니다."
+    printf '%s\n' "${C_BOLD}2. $(L "볼트 경로" "Vault path")${C_RESET}"
+    dim "   $(L "Obsidian 볼트 폴더의 절대경로입니다. 없으면 만들어 드립니다." \
+                "Absolute path to your Obsidian vault. We create it if missing.")"
   } >&2
   local p
-  p=$(_init_ask "경로" "$suggest" 2>/dev/null)
+  p=$(_init_ask "$(L "경로" "Path")" "$suggest" 2>/dev/null)
   p="${p%/}"
   if [ ! -d "$p" ]; then
-    if confirm "   폴더가 없습니다. 새로 만들까요? ($p)" >&2; then
-      mkdir -p "$p" || die "폴더 생성 실패: $p"
+    if confirm "   $(L "폴더가 없습니다. 새로 만들까요?" "That folder does not exist. Create it?") ($p)" >&2; then
+      mkdir -p "$p" || die "$(L "폴더 생성 실패" "Could not create folder"): $p"
     fi
   fi
   printf '%s' "$p"
@@ -84,22 +88,25 @@ _init_github() {
   local detected=""
   if has gh && gh auth status >/dev/null 2>&1; then
     detected=$(gh api user --jq .login 2>/dev/null)
-    [ -n "$detected" ] && ok "gh 인증 감지: $detected" >&2
+    [ -n "$detected" ] && ok "$(L "gh 인증 감지" "gh account detected"): $detected" >&2
   else
-    warn "gh 미인증 — 나중에 'gh auth login' 후 doctor를 다시 실행하세요" >&2
+    warn "$(L "gh 미인증 — 나중에 'gh auth login' 후 doctor 를 다시 실행하세요" \
+              "gh not authenticated — run 'gh auth login', then doctor again")" >&2
   fi
-  _init_ask "GitHub 사용자명" "$detected" 2>/dev/null
+  _init_ask "$(L "GitHub 사용자명" "GitHub username")" "$detected" 2>/dev/null
 }
 
 
 _init_src_root() {
   {
     echo
-    printf '%s\n' "${C_BOLD}4. 프로젝트 폴더${C_RESET}"
-    dim "   레포들이 모여 있는 상위 폴더입니다. 각 레포의 docs/ 를 볼트로 가져옵니다."
-    dim "   다음 단계에서 이 폴더 안의 레포를 골라 동기화 대상으로 지정합니다."
+    printf '%s\n' "${C_BOLD}4. $(L "프로젝트 폴더" "Projects folder")${C_RESET}"
+    dim "   $(L "레포들이 모여 있는 상위 폴더입니다. 각 레포의 docs/ 를 볼트로 가져옵니다." \
+                "The folder your repos live in. Each repo\x27s docs/ is pulled into the vault.")"
+    dim "   $(L "다음 단계에서 이 폴더 안의 레포를 골라 동기화 대상으로 지정합니다." \
+                "In the next step you pick which of those repos to sync.")"
   } >&2
-  _init_ask "경로" "$HOME/Desktop" 2>/dev/null
+  _init_ask "$(L "경로" "Path")" "$HOME/Desktop" 2>/dev/null
 }
 
 # _init_pick <제목> <개행으로 구분된 항목> [기본값]  →  선택된 항목을 개행으로 출력
@@ -118,12 +125,13 @@ _init_modules() {
   list=$(jq -r '.modules | to_entries[] | select(.value.required != true) | .key + " — " + .value.label' "$tree")
   {
     echo
-    printf '%s\n' "${C_BOLD}설치할 모듈${C_RESET}"
-    dim "   devlog(개발일지)는 항상 설치됩니다. 나머지는 나중에 추가할 수 있습니다:"
-    dim "     devtrail augment <모듈> --apply"
+    printf '%s\n' "${C_BOLD}$(L "설치할 모듈" "Modules to install")${C_RESET}"
+    dim "   $(L "devlog(개발일지)는 항상 설치됩니다. 나머지는 나중에 추가할 수 있습니다:" \
+                "devlog is always installed. You can add the rest later:")"
+    dim "     devtrail augment <module> --apply"
   } >&2
   local picked
-  picked=$(_init_pick "   추가 모듈:" "$list" "a")
+  picked=$(_init_pick "   $(L "추가 모듈:" "Optional modules:")" "$list" "a")
   # "key — label" 에서 key 만 남긴다
   { printf 'devlog\n'; printf '%s' "$picked" | sed 's/ —.*//' | grep -v '^$'; } | sort -u
 }
@@ -136,8 +144,9 @@ _init_sync_repos() {
   local src="$1" found="" d
   {
     echo
-    printf '%s\n' "${C_BOLD}5. docs 동기화 대상${C_RESET}"
-    dim "   레포의 docs/ 폴더를 볼트로 가져옵니다. docs/ 가 있는 폴더만 보여줍니다."
+    printf '%s\n' "${C_BOLD}5. $(L "docs 동기화 대상" "Repos to sync docs from")${C_RESET}"
+    dim "   $(L "레포의 docs/ 폴더를 볼트로 가져옵니다. docs/ 가 있는 폴더만 보여줍니다." \
+                "Pulls each repo\x27s docs/ into the vault. Only repos that have one are listed.")"
   } >&2
 
   if [ -d "$src" ]; then
@@ -152,11 +161,12 @@ EOF
   fi
 
   if [ -z "$found" ]; then
-    warn "docs/ 가 있는 레포를 찾지 못했습니다: $src" >&2
-    dim "   나중에 설정의 sync.repos 에 직접 추가하세요." >&2
+    warn "$(L "docs/ 가 있는 레포를 찾지 못했습니다" "No repos with a docs/ folder"): $src" >&2
+    dim "   $(L "나중에 설정의 sync.repos 에 직접 추가하세요." \
+                "Add them to sync.repos in the config later.")" >&2
     return 0
   fi
-  _init_pick "   찾은 레포:" "$found" "a"
+  _init_pick "   $(L "찾은 레포:" "Found:")" "$found" "a"
 }
 
 # PR 요약이 들어갈 개발일지 섹션. 섹션이 없으면 summary 는 조용히 건너뛴다.
@@ -166,10 +176,13 @@ _init_projects() {
   local gh_user="$1" found="" manual
   {
     echo
-    printf '%s\n' "${C_BOLD}6. PR 요약 섹션${C_RESET}"
-    dim "   머지된 PR 요약은 개발일지의 '#### <레포명>' 섹션 아래에 들어갑니다."
-    dim "   여기서 고른 레포로 그 섹션을 미리 만들어 둡니다."
-    dim "   (섹션이 없으면 요약은 에러 없이 건너뛰기만 합니다)"
+    printf '%s\n' "${C_BOLD}6. $(L "PR 요약 섹션" "PR summary sections")${C_RESET}"
+    dim "   $(L "머지된 PR 요약은 개발일지의 \x27#### <레포명>\x27 섹션 아래에 들어갑니다." \
+                "Merged-PR summaries go under the \x27#### <repo>\x27 sections in your devlog.")"
+    dim "   $(L "여기서 고른 레포로 그 섹션을 미리 만들어 둡니다." \
+                "The repos you pick here become those sections.")"
+    dim "   $(L "(섹션이 없으면 요약은 에러 없이 건너뛰기만 합니다)" \
+                "(With no section the summary is skipped without an error)")"
   } >&2
 
   if [ -n "$gh_user" ] && has gh && gh auth status >/dev/null 2>&1; then
@@ -177,32 +190,35 @@ _init_projects() {
   fi
 
   if [ -z "$found" ]; then
-    dim "   레포 목록을 가져오지 못했습니다. 쉼표로 직접 입력하세요 (예: my-app,my-api)" >&2
-    manual=$(_init_ask "레포명" "" 2>/dev/null)
+    dim "   $(L "레포 목록을 가져오지 못했습니다. 쉼표로 직접 입력하세요" \
+                "Could not list your repos. Type them comma-separated") (e.g. my-app,my-api)" >&2
+    manual=$(_init_ask "$(L "레포명" "Repos")" "" 2>/dev/null)
     [ -n "$manual" ] || return 0
     printf '%s' "$manual" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$'
     return 0
   fi
   # 기본값을 두지 않는다 — Enter 한 번에 레포 50개가 전부 섹션이 되면 안 된다.
-  _init_pick "   내 레포:" "$found" ""
+  _init_pick "   $(L "내 레포:" "Your repos:")" "$found" ""
 }
 
 
 _init_ai() {
   {
     echo
-    printf '%s\n' "${C_BOLD}7. AI (PR 쉬운말 요약)${C_RESET}"
-    dim "   MVP는 claude만 검증됐습니다. codex/gemini는 어댑터 자리만 있습니다."
+    printf '%s\n' "${C_BOLD}7. $(L "AI (PR 쉬운말 요약)" "AI (plain-language PR summaries)")${C_RESET}"
+    dim "   $(L "claude 만 검증됐습니다. codex/gemini 는 어댑터 자리만 있습니다." \
+                "Only claude is verified. codex/gemini are adapter stubs.")"
   } >&2
   local avail=()
   for c in claude codex gemini; do has "$c" && avail+=("$c"); done
   if [ ${#avail[@]} -gt 0 ]; then
-    ok "감지된 CLI: ${avail[*]}" >&2
+    ok "$(L "감지된 CLI" "Detected"): ${avail[*]}" >&2
   else
-    warn "AI CLI가 없습니다 — 요약 기능은 비활성으로 둡니다" >&2
+    warn "$(L "AI CLI 가 없습니다 — 요약 기능은 비활성으로 둡니다" \
+              "No AI CLI found — summaries stay off")" >&2
     printf 'none'; return
   fi
-  _init_ask "사용할 provider (none=비활성)" "${avail[0]}" 2>/dev/null
+  _init_ask "$(L "사용할 provider (none=비활성)" "Provider (none = off)")" "${avail[0]}" 2>/dev/null
 }
 
 # ── write ────────────────────────────────────────────────────────────────────

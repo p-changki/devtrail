@@ -63,7 +63,7 @@ _init_write_config() {
   bin:     { python: $python, brew_prefix: $brew }
 }
 JQ
-  ok "설정 저장: $CONFIG_FILE"
+  ok "$(L "설정 저장" "Config saved"): $CONFIG_FILE"
 }
 
 # 템플릿의 {{VAR}}를 설정값으로 치환해 ~/.devtrail/scripts/ 에 생성한다.
@@ -71,7 +71,7 @@ JQ
 # 템플릿의 {{VAR}}를 설정값으로 치환해 ~/.devtrail/scripts/ 에 생성한다.
 _init_render_scripts() {
   local src="$DEVTRAIL_ROOT/templates/scripts" dst="$DEVTRAIL_HOME/scripts"
-  [ -d "$src" ] || { warn "스크립트 템플릿 없음: $src"; return; }
+  [ -d "$src" ] || { warn "$(L "스크립트 템플릿 없음" "Script templates missing"): $src"; return; }
   mkdir -p "$dst"
 
   local n=0
@@ -85,8 +85,9 @@ _init_render_scripts() {
     chmod +x "$dst/$name"
     n=$((n+1))
   done
-  ok "스크립트 생성: ${n}개 → $dst"
-  dim "   설정값은 실행 시점에 $CONFIG_FILE 에서 읽습니다(하드코딩 없음)"
+  ok "$(L "스크립트 생성" "Scripts created"): ${n} → $dst"
+  dim "   $(L "설정값은 실행 시점에 읽습니다(하드코딩 없음)" \
+            "Values are read at run time, not baked in"): $CONFIG_FILE"
 }
 
 # Obsidian 설정은 여기서 건드리지 않는다.
@@ -106,7 +107,7 @@ _init_scaffold() {
   echo
   printf '%s\n' "${C_BOLD}볼트 구조${C_RESET}"
   local mods; mods=$(printf '%s' "${DT_MODULES:-devlog}" | tr '\n' ' ')
-  dim "   모듈: $mods"
+  dim "   $(L "모듈" "Modules"): $mods"
   # augment 는 없는 것만 만든다. 기존 폴더는 그대로 둔다.
   . "$DEVTRAIL_ROOT/lib/augmentcmd.sh"
   # shellcheck disable=SC2086
@@ -120,8 +121,9 @@ _init_scaffold() {
 _init_skills() {
   [ -d "$HOME/.claude" ] || {
     echo
-    dim "   Claude Code 를 설치하면 AI 스킬 8종을 함께 쓸 수 있습니다"
-    dim "   설치 후: devtrail skills install"
+    dim "   $(L "Claude Code 를 설치하면 AI 스킬 12종을 함께 쓸 수 있습니다" \
+            "Install Claude Code to use the 12 AI skills as well")"
+    dim "   $(L "설치 후" "Then"): devtrail skills install"
     return 0
   }
   echo
@@ -145,23 +147,29 @@ _init_skills() {
 _init_next_steps() {
   local vault="$1"
   echo
-  ok "셋업 완료"
+  ok "$(L "셋업 완료" "Setup complete")"
   echo
   printf '%s\n' "${C_BOLD}다음 단계${C_RESET}"
-  info "  1) Obsidian에서 볼트를 엽니다: $vault"
-  dim "     처음 열어야 .obsidian/ 폴더가 생깁니다."
-  info "  2) 플러그인 4개를 설치·활성화하고 Obsidian을 재시작합니다"
+  info "  1) $(L "Obsidian 에서 볼트를 엽니다" "Open the vault in Obsidian"): $vault"
+  dim "     $(L "처음 열어야 .obsidian/ 폴더가 생깁니다." \
+              "The .obsidian/ folder only appears after you open it once.")"
+  info "  2) $(L "플러그인 4개를 설치·활성화하고 Obsidian 을 재시작합니다" \
+               "Install and enable the 4 plugins, then restart Obsidian")"
   dim "     Shell commands · Templater · Dataview · Auto Note Mover"
-  info "  3) devtrail obsidian             # 셸커맨드 병합 · 노트 템플릿 설치"
-  dim "     2번을 마치기 전에 실행하면 셸커맨드 병합을 건너뜁니다."
-  info "  4) devtrail doctor               # 진단 — 여기서 ❌가 없어야 합니다"
-  info "  5) devtrail install-schedule     # 자동 실행 등록"
+  info "  3) devtrail obsidian             # $(L "셸커맨드 병합 · 노트 템플릿 설치" \
+                                                "merge shell commands · install templates")"
+  dim "     $(L "2번을 마치기 전에 실행하면 셸커맨드 병합을 건너뜁니다." \
+              "Running this before step 2 skips the shell-command merge.")"
+  info "  4) devtrail doctor               # $(L "진단 — 여기서 ❌ 가 없어야 합니다" \
+                                                "diagnose — you want no ❌ here")"
+  info "  5) devtrail install-schedule     # $(L "자동 실행 등록" "register automatic runs")"
   if [ "${DT_MODE:-existing}" != new ]; then
     echo
-    dim "   기존 볼트이므로 자동 이동은 수동(Manual)으로 시작합니다."
-    dim "   무엇이 달라지는지 먼저 보려면: devtrail scan"
+    dim "   $(L "기존 볼트이므로 자동 이동은 수동(Manual)으로 시작합니다." \
+            "This is an existing vault, so auto-move starts on Manual.")"
+    dim "   $(L "무엇이 달라지는지 먼저 보려면" "To see what would change first"): devtrail scan"
   fi
   echo
-  dim "설정: $CONFIG_FILE"
-  dim "스크립트: $DEVTRAIL_HOME/scripts/"
+  dim "$(L "설정" "Config"): $CONFIG_FILE"
+  dim "$(L "스크립트" "Scripts"): $DEVTRAIL_HOME/scripts/"
 }

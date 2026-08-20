@@ -20,17 +20,20 @@ done
 unset _dt_part
 
 init_run() {
-  printf '%s\n' "${C_BOLD}DevTrail 셋업${C_RESET}"
-  dim "언제든 Ctrl+C로 중단할 수 있습니다. 기존 파일은 덮어쓰지 않습니다."
+  printf '%s\n' "${C_BOLD}DevTrail $(L "셋업" "setup")${C_RESET}"
+  dim "$(L "언제든 Ctrl+C 로 중단할 수 있습니다. 기존 파일은 덮어쓰지 않습니다." \
+          "Ctrl+C to stop at any point. Nothing existing is overwritten.")"
   echo
 
   require_bins jq
 
   if config_exists; then
-    warn "설정이 이미 있습니다: $CONFIG_FILE"
-    confirm "다시 설정할까요? (기존 설정은 .bak으로 백업)" || { info "취소했습니다."; return 0; }
+    warn "$(L "설정이 이미 있습니다" "A config already exists"): $CONFIG_FILE"
+    confirm "$(L "다시 설정할까요? (기존 설정은 백업합니다)" \
+              "Set it up again? (the existing config is backed up)")" \
+      || { info "$(L "취소했습니다." "Cancelled.")"; return 0; }
     jr_backup "$CONFIG_FILE" >/dev/null \
-      || die "설정 백업 실패 — 중단합니다: $CONFIG_FILE"
+      || die "$(L "설정 백업 실패 — 중단합니다" "Config backup failed — stopping"): $CONFIG_FILE"
   fi
 
   mkdir -p "$DEVTRAIL_HOME"/{scripts,logs}
