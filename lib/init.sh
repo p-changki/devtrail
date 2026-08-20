@@ -38,6 +38,7 @@ init_run() {
   _init_write_config "$backend" "$vault" "$root" "$gh_user" "$ai_provider"
   _init_render_scripts
   _init_scaffold
+  _init_skills
   _init_next_steps "$vault"
 }
 
@@ -210,6 +211,20 @@ _init_modules() {
   picked=$(_init_pick "   추가 모듈:" "$list" "a")
   # "key — label" 에서 key 만 남긴다
   { printf 'devlog\n'; printf '%s' "$picked" | sed 's/ —.*//' | grep -v '^$'; } | sort -u
+}
+
+# ── AI 스킬 ──────────────────────────────────────────────────────────────────
+# Claude Code 가 있을 때만. 없어도 DevTrail 은 그대로 동작한다.
+_init_skills() {
+  [ -d "$HOME/.claude" ] || {
+    echo
+    dim "   Claude Code 를 설치하면 AI 스킬 8종을 함께 쓸 수 있습니다"
+    dim "   설치 후: devtrail skills install"
+    return 0
+  }
+  echo
+  . "$DEVTRAIL_ROOT/lib/skillcmd.sh"
+  skills_cmd install
 }
 
 # ── 스캐폴딩 ─────────────────────────────────────────────────────────────────

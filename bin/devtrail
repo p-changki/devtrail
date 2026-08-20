@@ -25,6 +25,7 @@ ${C_BOLD}설치${C_RESET}
   devtrail doctor            진단 — 의존성·인증·권한·자동화 상태
   devtrail scan [VAULT]      볼트 진단 — 구조·메타·충돌 (쓰기 없음)
   devtrail augment [모듈]    없는 폴더·허브만 생성 (기본 dry-run)
+  devtrail skills <sub>      AI 스킬 설치 (install|sync|list|remove)
   devtrail obsidian          Obsidian 설정 적용 (병합 — 덮어쓰지 않음)
   devtrail app <sub>         메뉴바 앱 (install|start|stop|status)
   devtrail dashboard         웹 대시보드 (상태·실행·설정)
@@ -84,6 +85,9 @@ case "$cmd" in
     . "$DEVTRAIL_ROOT/lib/scancmd.sh"; scan_cmd "$@" ;;
   augment)
     . "$DEVTRAIL_ROOT/lib/augmentcmd.sh"; augment_cmd "$@" ;;
+  skills)
+    . "$DEVTRAIL_ROOT/lib/doctor.sh"   # _d_section 재사용
+    . "$DEVTRAIL_ROOT/lib/skillcmd.sh"; skills_cmd "$@" ;;
   version|--version|-v)
     printf 'devtrail %s\n' "$VERSION" ;;
   help|--help|-h|"")

@@ -74,6 +74,22 @@ doctor_run() {
   _d_launchd "com.devtrail.daily"    "매일 $(cfg '.schedule.daily_hour' '10')시"
   _d_launchd "com.devtrail.repodocs" "$(cfg '.schedule.repodocs_interval_sec' '600')초 간격"
 
+  _d_section "AI 스킬"
+  if [ -d "$HOME/.claude/skills" ]; then
+    local have want
+    want=$(find "$DEVTRAIL_ROOT/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+    have=$(find "$HOME/.claude/skills" -mindepth 1 -maxdepth 1 -type d -name 'devtrail-*' 2>/dev/null | wc -l | tr -d ' ')
+    if [ "${have:-0}" -eq "${want:-0}" ] && [ "${want:-0}" -gt 0 ]; then
+      ok "스킬 ${have}/${want} 설치됨"
+    elif [ "${have:-0}" -gt 0 ]; then
+      _d_warn "스킬 ${have}/${want} — 일부 누락 → 'devtrail skills sync'"
+    else
+      dim "   스킬 미설치 (선택) → 'devtrail skills install'"
+    fi
+  else
+    dim "   Claude Code 없음 — 스킬은 선택 기능입니다"
+  fi
+
   _d_section "요약"
   # 요약 줄은 집계 결과를 '보고'만 한다 — _d_fail/_d_warn을 쓰면 자기 자신을
   # 한 번 더 세어 숫자가 틀어진다.
