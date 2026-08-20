@@ -41,6 +41,12 @@ def build_hotkeys(spec, tmpl_rel, existing, shell_ids, have=None):
     assigned, skipped, remapped = [], [], []
 
     def place(cmd_id, mods, key):
+        # 이미 우리가 배정한 커맨드면 그대로 둔다.
+        # 이걸 안 하면 재실행할 때마다 '남이 쓰는 키'로 보고 새 키를 소모해
+        # fallback 이 금방 고갈된다(실제로 5개가 배정되지 못했다).
+        if cmd_id in (existing or {}):
+            assigned.append((cmd_id, "유지"))
+            return
         c = combo(mods, key)
         if c in occupied and occupied[c] != cmd_id:
             # 점유됨 — 빈 키를 찾는다
