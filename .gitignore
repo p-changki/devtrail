@@ -24,6 +24,8 @@ secrets/
 #    디렉터리째 제외하면 재포함이 불가능하므로 docs/* 로 쓴다.
 docs/*
 !docs/decisions/
+!docs/design-tokens.md
+!docs/ARCHITECTURE.md
 
 # 로그·백업
 logs/
