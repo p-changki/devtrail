@@ -7,6 +7,33 @@
 # ⚠️ 한글 앞 변수는 중괄호로: "${n}개"  (bash 3.2)
 
 
+# ⚠️ 언어는 가장 먼저 묻는다. 이 답이 폴더 이름과 나머지 질문의 문구를
+#    결정하기 때문이다. 뒤에서 물으면 이미 만들어진 것과 어긋난다.
+#
+# 로케일은 '제안'일 뿐이다. 한국에서 영어 로케일을 쓰는 사람도 많고,
+# 그 반대도 있다. 판단은 사용자가 한다.
+_init_lang() {
+  local guess; guess=$(dt_lang_from_locale)
+  local reply
+
+  {
+    echo
+    printf '%s\n' "${C_BOLD}Language / 언어${C_RESET}"
+    dim "   폴더 이름과 노트 템플릿에 쓰입니다. 나중에 바꾸려면 볼트를 다시 만들어야 합니다."
+    printf '    1) 한국어  (개발/개발일지 · 자료실/20_카드노트)\n'
+    printf '    2) English (Dev/Devlog · Library/20_Zettel)\n'
+  } >&2
+
+  local hint="1"; [ "$guess" = "en" ] && hint="2"
+  read -r -p "선택 / Choose [$hint]: " reply
+  reply="${reply:-$hint}"
+
+  case "$reply" in
+    2|en|EN|english|English) printf 'en' ;;
+    *)                       printf 'ko' ;;
+  esac
+}
+
 _init_backend() {
   {
     echo

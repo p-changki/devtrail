@@ -2,13 +2,16 @@
 
 [![CI](https://github.com/p-changki/devtrail/actions/workflows/ci.yml/badge.svg)](https://github.com/p-changki/devtrail/actions/workflows/ci.yml)
 
+***한국어** · [English](README.en.md)*
+
 > 개발 기록용 **Obsidian 볼트 한 벌**을 만들어 주는 CLI.
 > 폴더 구조 · 노트 템플릿 · 자동 분류 · GitHub 활동 수집 · AI 스킬까지 한 번에.
 
 손으로 쓰지 않아도 기록이 쌓이고, 쌓인 것이 주간리뷰로 굴러 올라갑니다.
 
-> **언어**: 이 도구는 한국어 전용입니다. 폴더 이름 · 템플릿 · 안내 문구가
-> 전부 한국어입니다. 영어판 계획은 아직 없습니다.
+> **언어**: 한국어가 기본이고 영어를 함께 지원합니다. `init` 이 가장 먼저
+> 언어를 묻고, 폴더 이름과 볼트 내용이 그에 맞춰 만들어집니다.
+> 영어 지원 범위는 [README.en.md](README.en.md) 를 보세요.
 >
 > **플랫폼**: macOS. Linux 는 아직 시험해보지 않았습니다.
 

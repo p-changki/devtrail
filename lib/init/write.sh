@@ -32,6 +32,7 @@ _init_write_config() {
     --argjson syncrepos "$(_dt_json_array "${DT_SYNC_REPOS:-}")" \
     --argjson projects "$(_dt_json_array "${DT_PROJECTS:-}")" \
     --argjson groups "$(_dt_json_identity "${DT_PROJECTS:-}")" \
+    --arg lang "${DT_LANG:-ko}" \
     --arg mode "${DT_MODE:-existing}" \
     --argjson adopted "${DT_DIRS:-\{\}}" \
     --argjson modules "$(_dt_json_array "${DT_MODULES:-devlog}")" \
@@ -41,7 +42,8 @@ _init_write_config() {
     --arg backup "$DEVTRAIL_HOME/vault-backup" \
     -f /dev/stdin > "$CONFIG_FILE" <<'JQ'
 {
-  version: 1,
+  version: 3,
+  lang: $lang,
   install: { mode: $mode, modules: $modules },
   vault:   { backend: $backend, path: $vault, root: $root },
   dirs:    $adopted,

@@ -35,6 +35,10 @@ init_run() {
 
   mkdir -p "$DEVTRAIL_HOME"/{scripts,logs}
 
+  # ⚠️ 언어가 먼저다. 폴더 이름과 이후 질문의 문구가 여기서 갈린다.
+  DT_LANG=$(_init_lang); export DT_LANG
+  DEVTRAIL_LANG="$DT_LANG"; export DEVTRAIL_LANG
+
   local backend vault root gh_user ai_provider
   backend=$(_init_backend)
   vault=$(_init_vault "$backend")

@@ -15,7 +15,7 @@
 # ⚠️ 한글 앞 변수는 중괄호로: "${n}개"  (bash 3.2)
 
 # 코드가 기대하는 스키마. 단일 출처.
-DT_SCHEMA=2
+DT_SCHEMA=3
 
 DT_MIGRATIONS_DIR="$DEVTRAIL_ROOT/lib/migrations"
 

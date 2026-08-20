@@ -9,6 +9,8 @@
 # (경로·계정 같은 값은 init에서 다룬다 — UI에서 실수로 바꾸면 복구가 어렵다)
 DT_SETTABLE_BOOL="ai.summary_enabled backup.enabled linear.enabled"
 DT_SETTABLE_NUM="schedule.daily_hour schedule.repodocs_interval_sec"
+# 값이 정해진 문자열 키. "키:값1,값2" 형식.
+DT_SETTABLE_ENUM="lang:ko,en"
 
 # 🔑 기본값의 단일 출처.
 #
@@ -51,7 +53,8 @@ config_cmd() {
       _config_set "$2" "$3" ;;
     keys)
       echo "boolean: $DT_SETTABLE_BOOL"
-      echo "number:  $DT_SETTABLE_NUM" ;;
+      echo "number:  $DT_SETTABLE_NUM"
+      echo "enum:    $DT_SETTABLE_ENUM" ;;
     migrate)
       # 스키마만 따로 올린다. devtrail update 도 같은 함수를 부른다.
       . "$DEVTRAIL_ROOT/lib/migrate.sh"
@@ -75,6 +78,14 @@ _config_set() {
       ''|*[!0-9]*) die "숫자 키에는 정수만 허용합니다: $key=$val" ;;
       *) typed="$val" ;;
     esac
+  elif _config_enum_values "$key" >/dev/null; then
+    local allowed; allowed=$(_config_enum_values "$key")
+    case ",$allowed," in
+      *",$val,"*) typed="\"$val\"" ;;
+      *) die "허용되지 않는 값입니다: $key=$val
+   가능한 값: $(printf '%s' "$allowed" | tr ',' ' ')" ;;
+    esac
+    [ "$key" = "lang" ] && { _config_lang_guard "$val" || return 1; }
   else
     die "변경할 수 없는 키입니다: $key
    변경 가능: devtrail config keys
@@ -107,4 +118,45 @@ _dt_in_list() {
 # a.b.c → "a","b","c"  (jq setpath 인자용)
 _dt_jq_path() {
   printf '%s' "$1" | awk -F. '{for(i=1;i<=NF;i++){printf "%s\"%s\"", (i>1?",":""), $i}}'
+}
+
+# 열거형 키의 허용값을 낸다. 열거형이 아니면 종료코드 1.
+_config_enum_values() {
+  local key="$1" e
+  for e in $DT_SETTABLE_ENUM; do
+    case "$e" in "$key:"*) printf '%s' "${e#*:}"; return 0 ;; esac
+  done
+  return 1
+}
+
+# 언어를 바꾸면 폴더 이름 규칙이 바뀐다.
+#
+# ⚠️ 이미 만들어진 폴더는 이름이 바뀌지 않는다. 그대로 두면 DevTrail 이
+#    새 언어의 폴더를 따로 만들어 '평행 구조'가 생긴다 — 사용자가 노트를
+#    어디에 뒀는지 잃어버리는 가장 흔한 방식이다.
+#
+# 막지는 않는다. 다만 무슨 일이 일어나는지 먼저 말하고, 되돌리는 법을 준다.
+_config_lang_guard() {
+  local new="$1" cur; cur=$(cfg '.lang' 'ko')
+  [ "$new" != "$cur" ] || return 0
+
+  local root; root="$(vault_root 2>/dev/null)"
+  local existing=0
+  if [ -n "$root" ] && [ -d "$root" ]; then
+    existing=$(find "$root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+  fi
+
+  warn "언어를 ${cur} → ${new} 로 바꿉니다"
+  if [ "${existing:-0}" -gt 0 ]; then
+    echo
+    dim "   이미 만들어진 폴더 ${existing}개는 이름이 바뀌지 않습니다."
+    dim "   그대로 두면 DevTrail 이 새 이름의 폴더를 따로 만듭니다(평행 구조)."
+    echo
+    dim "   기존 폴더를 계속 쓰려면 매핑하세요:"
+    dim "     devtrail scan          — 지금 구조를 봅니다"
+    dim "     devtrail init          — 기존 폴더에 매핑합니다 (노트는 움직이지 않습니다)"
+    echo
+  fi
+  confirm "계속할까요?" || { info "취소했습니다."; return 1; }
+  return 0
 }
