@@ -296,6 +296,7 @@ run lint  "JSON"          check_json
 run guard "bash 3.2"      check_bash32
 run guard "local 자기참조"  check_local_selfref
 run guard "L 인자"        python3 ./tests/check-l-arity.py
+run guard "주석 중복"     python3 ./tests/check-dup-comments.py
 run guard "경로 하드코딩"   check_no_hardcoded_paths
 run guard "파일 길이"      check_file_size
 run guard "버전"          check_version
