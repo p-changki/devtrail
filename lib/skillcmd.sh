@@ -12,7 +12,12 @@
 #
 # Claude Code 가 없어도 DevTrail 은 그대로 동작한다. 스킬은 선택 기능이다.
 
-DT_SKILL_SRC="${DEVTRAIL_ROOT}/skills"
+# ⚠️ 언어별 하위 폴더. 번역이 없으면 ko 로 떨어진다 — 스킬이 통째로
+#    사라지는 것보다 한국어로라도 있는 편이 낫다.
+#    폴더명(=스킬 이름)은 언어와 무관하다. 내용만 다르다.
+DT_SKILL_BASE="${DEVTRAIL_ROOT}/skills"
+DT_SKILL_SRC="${DT_SKILL_BASE}/$(dt_lang)"
+[ -d "$DT_SKILL_SRC" ] || DT_SKILL_SRC="${DT_SKILL_BASE}/ko"
 DT_SKILL_DEST="${DEVTRAIL_SKILL_DIR:-$HOME/.claude/skills}"
 DT_SKILL_PREFIX="devtrail-"
 

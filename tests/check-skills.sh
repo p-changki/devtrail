@@ -18,33 +18,41 @@ SRC="skills"
 fails=0
 count=0
 
-for d in "$SRC"/*/; do
+# ⚠️ 두 언어를 모두 본다. 한쪽만 검사하면 번역본이 규약을 어겨도 통과한다.
+for d in "$SRC"/*/*/; do
   [ -d "$d" ] || continue
   name=$(basename "$d")
+  lang=$(basename "$(dirname "$d")")
   f="$d/SKILL.md"
   count=$((count + 1))
 
   if [ ! -f "$f" ]; then
-    echo "❌ ${name}: SKILL.md 없음"
+    echo "❌ ${lang}/${name}: SKILL.md 없음"
     fails=$((fails + 1))
     continue
   fi
 
   grep -q "^name: devtrail-${name}\$" "$f" \
-    || { echo "❌ ${name}: name 이 'devtrail-${name}' 이 아님"; fails=$((fails + 1)); }
+    || { echo "❌ ${lang}/${name}: name 이 'devtrail-${name}' 이 아님"; fails=$((fails + 1)); }
 
   grep -q '^description: ' "$f" \
-    || { echo "❌ ${name}: description 없음"; fails=$((fails + 1)); }
+    || { echo "❌ ${lang}/${name}: description 없음"; fails=$((fails + 1)); }
 
   grep -q 'devtrail path' "$f" \
-    || { echo "❌ ${name}: devtrail path 조회가 없음"; fails=$((fails + 1)); }
+    || { echo "❌ ${lang}/${name}: devtrail path 조회가 없음"; fails=$((fails + 1)); }
 
   # 하드코딩 검사 — 금지를 설명하는 줄은 뺀다.
   # "~/Desktop/worklogs 에 쓰지 마세요" 처럼 나쁜 예시를 드는 건 정상이다.
+  # 하드코딩 검사 — 금지를 설명하는 줄은 뺀다.
+  # "~/Desktop/worklogs 에 쓰지 마세요" 처럼 나쁜 예시를 드는 건 정상이다.
+  #
+  # ⚠️ 예외 문구는 두 언어를 모두 적는다. 한국어만 적으면 영어 스킬이
+  #    같은 설명을 해도 거짓 실패가 난다 — 실제로 그랬다.
   bad=$(grep -nE '창기/|"notes/|/Users/[a-z]|Desktop/worklogs' "$f" \
-        | grep -vE '마세요|말 것|안 된다|아니다|예전|원본은|하지 마' || true)
+        | grep -vE '마세요|말 것|안 된다|아니다|예전|원본은|하지 마' \
+        | grep -viE 'do not|never|used to|instead|not acceptable' || true)
   if [ -n "$bad" ]; then
-    echo "❌ ${name}: 경로 하드코딩"
+    echo "❌ ${lang}/${name}: 경로 하드코딩"
     printf '%s\n' "$bad" | sed 's/^/      /'
     fails=$((fails + 1))
   fi

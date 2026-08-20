@@ -255,9 +255,18 @@ check_docs() {
   actual=$(ls lib/merge/*.sh 2>/dev/null | wc -l | tr -d ' ')
   [ "$claim" = "$actual" ] || { echo "  ❌ 병합기: 문서 ${claim} · 실제 ${actual}"; return 1; }
 
+  # ⚠️ 스킬은 언어별로 한 벌씩 있다. 합쳐 세면 문서와 안 맞는다.
   claim=$(grep -oE '스킬 [0-9]+종' "$doc" | head -1 | grep -oE '[0-9]+')
-  actual=$(find skills -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')
+  actual=$(find skills/ko -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')
   [ "$claim" = "$actual" ] || { echo "  ❌ 스킬: 문서 ${claim} · 실제 ${actual}"; return 1; }
+
+  # 두 언어의 스킬 목록이 같아야 한다. 한쪽에만 있으면 그 언어 사용자가 못 쓴다.
+  local only
+  only=$(comm -3 <(ls skills/ko 2>/dev/null | sort) <(ls skills/en 2>/dev/null | sort))
+  if [ -n "$only" ]; then
+    printf '%s\n' "$only" | sed 's/^/  ❌ 한쪽 언어에만 있는 스킬: /'
+    return 1
+  fi
 
   # 문서·템플릿이 없는 명령을 안내하면, 그대로 따라한 사람이 거기서 막힌다.
   local known cmd unknown=""

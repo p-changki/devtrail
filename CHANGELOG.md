@@ -42,7 +42,8 @@ git push origin main --tags
   볼트 내용이 그에 맞춰 만들어진다. 로케일은 기본값 제안일 뿐이다.
 - 설정 스키마 v3 — `lang`. `devtrail config set lang` 으로 바꿀 수 있다.
 - `README.en.md`.
-- `install.sh` 와 `devtrail init` 전 과정이 영어로 나온다.
+- `install.sh` 와 `devtrail` 의 모든 명령이 영어로 나온다.
+- AI 스킬 12종의 영어판. 번역이 없는 스킬은 한국어로 설치한다.
 - 영어 노트 템플릿 21종 · 영어 가이드 4종. 번역이 없는 템플릿은 한국어로
   채운다 — 통째로 없는 것보다 낫다.
 - 태그 네임스페이스가 언어를 탄다: `#주제/` ↔ `#topic/` · `#상태/` ↔
