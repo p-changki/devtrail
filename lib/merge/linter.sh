@@ -12,7 +12,8 @@
 
 # ── Linter ───────────────────────────────────────────────────────────────────
 _ob_linter() {
-  local dot="$1" data="$dot/plugins/obsidian-linter/data.json"
+  local dot="$1"
+  local data="$dot/plugins/obsidian-linter/data.json"
   local mode; mode=$(cfg '.install.mode' 'existing')
   local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
   local src="$DEVTRAIL_ROOT/preset/obsidian/linter.json"

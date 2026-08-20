@@ -29,7 +29,7 @@ _ob_templater() {
   fi
 
   local out; out=$(mktemp)
-  if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates" \
+  if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates/$(dt_lang)" \
      python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" templater \
       "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$data" ] && printf '%s' "$data")" > "$out"; then

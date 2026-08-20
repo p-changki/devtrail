@@ -40,33 +40,74 @@ const dtCancel = (file) => {
 // 설정에서 프로젝트 목록을 읽는다. 없으면 직접 입력받는다.
 // (원본은 PROJECTS 배열을 JS 안에 박아뒀다 — 프로젝트가 늘 때마다 템플릿을 고쳐야 했다)
 const dtProjects = () => (DT.projects && DT.projects.length ? DT.projects : []);
+
+// 개발일지 파일명. 설정의 naming.devlog_file 을 따른다.
+// ⚠️ 여기를 박아두면 devtrail activity 가 만드는 파일과 다른 파일이 생긴다.
+const dtDevlogName = (date) => {
+  const pat = (DT.naming && DT.naming.devlog_file) || "{{DATE}} devlog.md";
+  return pat.replace("{{DATE}}", date).replace(/\.md$/, "");
+};
+
+// 템플릿 폴더 이름. 쿼리의 제외 조건에 쓴다.
+const dtTplFolder = () => ((DT.paths && DT.paths.templates) || "Templates").split("/").pop();
+
+// 태그 네임스페이스. 사용자가 손으로 붙이는 두 가지만 언어를 탄다.
+const dtNs = (k) => (DT.ns && DT.ns[k]) || k;
+
+// 주간리뷰 파일명. 설정의 naming.weekly_file 을 따른다.
+const dtWeeklyName = (iso) => {
+  const pat = (DT.naming && DT.naming.weekly_file) || "{{ISOWEEK}} weekly.md";
+  return pat.replace("{{ISOWEEK}}", iso).replace(/\.md$/, "");
+};
 _%>
 <%*
-const folder = dtPath("idea");
-const raw = (await tp.system.prompt("💡 아이디어 한 줄"))?.trim();
+const folder = dtPath("moc");
+const raw = (await tp.system.prompt("MOC 주제 (예: RAG)"))?.trim();
 if (!raw) { dtCancel(app.workspace.getActiveFile()); tR = ""; return; }
+const topic = dtSafe(raw);
+const slug = topic.toLowerCase().replace(/\s+/g, "-");
 if (!app.vault.getAbstractFileByPath(folder)) await app.vault.createFolder(folder);
-await tp.file.move(`${folder}/${dtUnique(folder, `${tp.date.now("YYYY-MM-DD")} ${dtSafe(raw)}`)}`);
-%>
----
+await tp.file.move(`${folder}/${dtUnique(folder, `${topic} MOC`)}`);
+tR += `---
 tags:
-  - type/idea
-type: idea
-status: draft
-created: <% tp.date.now("YYYY-MM-DD") %>
-updated: <% tp.date.now("YYYY-MM-DD") %>
-review_at: <% tp.date.now("YYYY-MM-DD", 14) %>
+  - type/moc
+  - ${dtNs("topic")}/${slug}
+type: moc
+scope: topic
+status: active
+created: ${tp.date.now("YYYY-MM-DD")}
+updated: ${tp.date.now("YYYY-MM-DD")}
+topic: ${slug}
+review_at:
 ---
 
-# 💡 <% tp.file.title %>
+# 🗺 ${topic} MOC
 
-## 핵심 아이디어
+> 이 주제의 허브. 관련 노트로 들어가는 입구다.
 
-## 왜 (Why)
+## 🎯 이 주제가 뭔가
 
-## 어떻게 (How)
+## 🌱 학습 로드맵
 
-## 필요한 것
+- [ ] 기초:
+- [ ] 중급:
+- [ ] 고급:
 
-## 관련 노트
+## 🔗 같은 주제 노트 (자동 집계)
+
+\`\`\`dataview
+TABLE status AS "숙성도", file.mtime AS "수정"
+FROM #${dtNs("topic")}/${slug}
+WHERE file.path != this.file.path
+SORT file.mtime DESC
+\`\`\`
+
+## 💡 열린 질문
+
+- 
+
+## 🔗 관련 MOC
+
 - [[ ]]
+`;
+%>

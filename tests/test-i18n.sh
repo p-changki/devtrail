@@ -124,6 +124,66 @@ DEVTRAIL_LANG=en "$DT" augment --apply >/dev/null 2>&1
 t_contains "영어 볼트는 Templates" 'file.folder, "Templates"' \
   "$(grep -m1 'contains(file.folder' "$T_VAULT/MyVault/Dashboard.md")"
 
+# ── 템플릿 · 가이드 ──────────────────────────────────────────────────────────
+t_start "템플릿 · 가이드 언어"
+t_vault tpl
+t_config MyVault
+mkdir -p "$T_VAULT/.obsidian"
+DEVTRAIL_LANG=en "$DT" augment --apply >/dev/null 2>&1
+DEVTRAIL_LANG=en "$DT" obsidian >/dev/null 2>&1
+
+tdir="$T_VAULT/MyVault/Templates"
+t_file "영어 템플릿" "$tdir/Devlog.md"
+t_no_file "한국어 이름은 없다" "$tdir/개발일지양식.md"
+t_eq "템플릿 21개" "21" \
+  "$(ls "$tdir"/*.md 2>/dev/null | grep -vc '_devtrail-paths' | tr -d ' ')"
+t_eq "한글 든 템플릿 0개" "0" \
+  "$(grep -l '[가-힣]' "$tdir"/*.md 2>/dev/null | grep -vc '_devtrail-paths' | tr -d ' ')"
+t_file "영어 가이드" "$T_VAULT/MyVault/Guides/1. Getting started.md"
+
+# ── 단축키가 존재하는 템플릿을 가리켜야 한다 ────────────────────────────────
+# 이름이 언어를 타므로, 매핑이 빠지면 눌렀을 때 "템플릿 없음" 이 뜬다.
+t_start "단축키가 실재하는 템플릿을 가리킨다"
+hk="$T_VAULT/.obsidian/hotkeys.json"
+if [ -f "$hk" ]; then
+  bad=0
+  # ⚠️ templater-obsidian:create-new-note-from-template 은 Templater 내장
+  #    명령이지 파일 경로가 아니다. 경로로 취급하면 거짓 실패가 난다.
+  # ⚠️ for k in $(...) 는 공백에서 쪼갠다. 템플릿 이름에 공백이 있다
+  #    ("Reference card.md"). while read 로 줄 단위로 읽는다.
+  while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    f="${k#templater-obsidian:create-}"
+    [ -f "$T_VAULT/$f" ] || { bad=$((bad + 1)); echo "    가리키는 곳 없음: $f"; }
+  done <<EOF
+$(jq -r 'keys[]
+   | select(startswith("templater-obsidian:create-"))
+   | select(. != "templater-obsidian:create-new-note-from-template")' "$hk")
+EOF
+  t_eq "가리키는 곳이 전부 실재" "0" "$bad"
+  # ⚠️ 개수를 단언해야 한다. 없는 템플릿은 조용히 '건너뛰어질' 뿐 매달린
+  #    포인터가 생기지 않아서, 실재 검사만으로는 언어를 무시해도 통과한다.
+  #    (변이 주입으로 확인했다)
+  t_eq "템플릿 단축키가 전부 배정됨" \
+    "$(jq '.templater|length' preset/obsidian/hotkeys.tmpl.json)" \
+    "$(jq -r '[keys[]
+        | select(startswith("templater-obsidian:create-"))
+        | select(. != "templater-obsidian:create-new-note-from-template")]
+       | length' "$hk")"
+fi
+
+# ── 파일명·태그를 박지 않는다 ────────────────────────────────────────────────
+t_start "템플릿이 이름을 박지 않는다"
+t_eq "개발일지 이름 하드코딩" "0" \
+  "$(grep -lE '\} 개발일지`|\} 주간리뷰`' preset/templates/ko/*.md 2>/dev/null | wc -l | tr -d ' ')"
+t_eq "태그 네임스페이스 하드코딩" "0" \
+  "$(grep -lE '^\s+- (주제|상태)/|#(주제|상태)/' preset/templates/ko/*.md 2>/dev/null | wc -l | tr -d ' ')"
+t_eq "번역 매핑이 전부 존재" "0" \
+  "$(python3 -c '
+import io, os
+m = dict(l.rstrip("\n").split("\t") for l in io.open("preset/templates/en/_map.tsv", encoding="utf-8") if l.strip())
+print(sum(1 for v in m.values() if not os.path.exists("preset/templates/en/" + v)))')"
+
 # ── 없는 언어는 기본값으로 ───────────────────────────────────────────────────
 t_start "알 수 없는 언어"
 t_vault fallback

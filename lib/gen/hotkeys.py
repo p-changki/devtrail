@@ -14,7 +14,11 @@
 """
 
 import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from i18n import LANG  # noqa: E402
 
 
 def load(path, default=None):
@@ -67,10 +71,11 @@ def build_hotkeys(spec, tmpl_rel, existing, shell_ids, have=None):
     for t in spec.get("templater", []):
         # 아직 배포하지 않은 템플릿에는 단축키를 걸지 않는다.
         # 걸어두면 눌렀을 때 "템플릿 없음"이 뜬다 — 부분 설치를 지원하려면 확인해야 한다.
-        if have is not None and t["template"] not in have:
+        name = tpl_name(t)
+        if have is not None and name not in have:
             continue
         # 여기가 경로가 박히는 자리다. 실제 템플릿 폴더로 조립한다.
-        place(f"templater-obsidian:create-{tmpl_rel}/{t['template']}",
+        place(f"templater-obsidian:create-{tmpl_rel}/{name}",
               t["modifiers"], t["key"])
 
     for sc in spec.get("shellcommands", []):
@@ -86,29 +91,42 @@ def build_hotkeys(spec, tmpl_rel, existing, shell_ids, have=None):
     return out, assigned, remapped, skipped
 
 
+def tpl_name(entry):
+    """언어에 맞는 템플릿 파일명.
+
+    ⚠️ 파일명이 언어를 타므로 여기서 고른다. 한국어 이름을 그대로 쓰면
+       영어 볼트에서 단축키가 없는 파일을 가리켜 "템플릿 없음"이 뜬다.
+    """
+    if LANG == "en":
+        return entry.get("template_en") or entry["template"]
+    return entry["template"]
+
+
 def build_templater(tmpl_rel, paths, existing, have=None):
     """폴더 → 템플릿 매핑. 새 노트를 만들면 양식이 자동으로 채워진다."""
+    # (폴더 키, 한국어 파일명, 영어 파일명)
     mapping = [
-        ("devlog", "개발일지양식.md"),
-        ("devnote", "개발메모 템플릿.md"),
-        ("inbox", "Inbox Capture 템플릿.md"),
-        ("idea", "아이디어 빠른저장 템플릿.md"),
-        ("trouble", "트러블슈팅 템플릿.md"),
-        ("youtube", "유튜브 노트 템플릿.md"),
-        ("library", "라이브러리 등록 템플릿.md"),
-        ("zettel", "영구 카드노트 템플릿.md"),
-        ("moc", "MOC 템플릿.md"),
-        ("report", "회고 템플릿.md"),
-        ("todo", "투두리스트 템플릿.md"),
-        ("journal", "일기양식.md"),
-        ("book", "책 템플릿.md"),
+        ("devlog",  "개발일지양식.md",              "Devlog.md"),
+        ("devnote", "개발메모 템플릿.md",           "Dev note.md"),
+        ("inbox",   "Inbox Capture 템플릿.md",      "Inbox capture.md"),
+        ("idea",    "아이디어 빠른저장 템플릿.md",  "Quick idea.md"),
+        ("trouble", "트러블슈팅 템플릿.md",         "Troubleshooting.md"),
+        ("youtube", "유튜브 노트 템플릿.md",        "YouTube note.md"),
+        ("library", "라이브러리 등록 템플릿.md",    "Library entry.md"),
+        ("zettel",  "영구 카드노트 템플릿.md",      "Zettel.md"),
+        ("moc",     "MOC 템플릿.md",                "MOC.md"),
+        ("report",  "회고 템플릿.md",               "Retro.md"),
+        ("todo",    "투두리스트 템플릿.md",         "Todo list.md"),
+        ("journal", "일기양식.md",                  "Journal.md"),
+        ("book",    "책 템플릿.md",                 "Book.md"),
     ]
     out = dict(existing or {})
     old = out.get("folder_templates") or []
     taken = {m.get("folder") for m in old}
 
     added = []
-    for key, tpl in mapping:
+    for key, tpl_ko, tpl_en in mapping:
+        tpl = tpl_en if LANG == "en" else tpl_ko
         folder = paths.get(key)
         if not folder or folder in taken:
             continue           # 사용자가 이미 매핑한 폴더는 건드리지 않는다
@@ -131,7 +149,7 @@ def main():
     existing = load(sys.argv[4], {}) if len(sys.argv) > 4 and sys.argv[4] else {}
 
     paths = paths_json.get("paths") or {}
-    tmpl_rel = paths.get("templates") or "템플릿"
+    tmpl_rel = paths.get("templates") or ("Templates" if LANG == "en" else "템플릿")
 
     # 실제로 배포된 템플릿 파일명. 없으면 확인을 건너뛴다.
     import os

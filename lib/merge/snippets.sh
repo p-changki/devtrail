@@ -15,7 +15,9 @@
 # 파일만 넣으면 아무 일도 안 일어난다. appearance.json 의 enabledCssSnippets 에
 # 등록해야 적용된다. 원본 볼트는 등록만 하고 파일이 없는 항목이 있었다.
 _ob_snippets() {
-  local dot="$1" dir="$dot/snippets" app="$dot/appearance.json"
+  local dot="$1"
+  local dir="$dot/snippets"
+  local app="$dot/appearance.json"
   local mode; mode=$(cfg '.install.mode' 'existing')
   local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
   local src="$DEVTRAIL_ROOT/preset/obsidian/snippets"

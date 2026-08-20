@@ -19,21 +19,41 @@
 _ob_templates() {
   step "노트 템플릿"
   local dest; dest="$(vault_root)/$(dt_dir templates)"
-  local src="$DEVTRAIL_ROOT/preset/templates"
-  [ -d "$src" ] || { warn "템플릿 없음: $src"; return 0; }
+  local base="$DEVTRAIL_ROOT/preset/templates"
+  local src="$base/$(dt_lang)"
+  [ -d "$base/ko" ] || { warn "템플릿 없음: $base"; return 0; }
 
   mkdir -p "$dest"
-  local n=0 skipped=0 f name
-  for f in "$src"/*.md; do
-    [ -e "$f" ] || continue
-    name=$(basename "$f")
-    if [ -f "$dest/$name" ]; then
-      skipped=$((skipped + 1)); continue
-    fi
-    cp "$f" "$dest/$name" || { warn "복사 실패: $name"; continue; }
-    n=$((n + 1))
-  done
+  local n=0 skipped=0 fb=0 f name
+
+  # 선택한 언어의 템플릿을 먼저 깐다.
+  if [ -d "$src" ]; then
+    for f in "$src"/*.md; do
+      [ -e "$f" ] || continue
+      name=$(basename "$f")
+      [ -f "$dest/$name" ] && { skipped=$((skipped + 1)); continue; }
+      cp "$f" "$dest/$name" || { warn "복사 실패: $name"; continue; }
+      n=$((n + 1))
+    done
+  fi
+
+  # ⚠️ 번역이 없는 템플릿은 한국어로 채운다.
+  #    번역이 늦었다고 템플릿이 통째로 없는 것보다, 한국어로라도 있는 편이 낫다.
+  #    같은 이름이 이미 있으면 건드리지 않으므로 영어판이 언제나 이긴다.
+  if [ "$(dt_lang)" != "ko" ]; then
+    for f in "$base/ko"/*.md; do
+      [ -e "$f" ] || continue
+      name=$(basename "$f")
+      # 영어판이 있으면 그쪽 이름으로 이미 깔렸다. 한국어 이름은 건너뛴다.
+      _tpl_has_translation "$src" "$name" && continue
+      [ -f "$dest/$name" ] && { skipped=$((skipped + 1)); continue; }
+      cp "$f" "$dest/$name" || continue
+      fb=$((fb + 1))
+    done
+  fi
+
   ok "템플릿 ${n}개 설치 (기존 유지 ${skipped}개) → $(dt_dir templates)"
+  [ "$fb" -gt 0 ] && dim "     번역 대기 ${fb}개는 한국어로 설치했습니다"
 
   local sections
   sections=$(jq -r '(.github.project_groups // {}) | [.[]] | unique | .[]' "$CONFIG_FILE" 2>/dev/null)
@@ -50,3 +70,14 @@ _ob_templates() {
 #
 # 이 둘이 있어야 "노트를 만들면 양식이 채워진다"가 성립한다.
 # trigger_on_file_creation 이 꺼져 있으면 아무 일도 일어나지 않는다.
+
+# 이 한국어 템플릿에 대응하는 번역이 있는가.
+# 매핑은 preset/templates/<lang>/_map.tsv 에 둔다: <한국어 파일명><TAB><번역 파일명>
+_tpl_has_translation() {
+  # ⚠️ local a="$1" b="$a/x" 는 set -u 에서 죽는다.
+  #    bash 가 이름을 먼저 전부 지역화(=unset)한 뒤 대입하기 때문이다.
+  local dir="$1" ko_name="$2"
+  local map="$dir/_map.tsv"
+  [ -f "$map" ] || return 1
+  grep -q "^$(printf '%s' "$ko_name" | sed 's/[[\.*^$/]/\\&/g')	" "$map"
+}

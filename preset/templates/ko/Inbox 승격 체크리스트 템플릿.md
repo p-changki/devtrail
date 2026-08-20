@@ -1,7 +1,7 @@
 ---
 tags:
   - type/zettel
-  - 상태/seedling
+  - <% dtNs("maturity") %>/seedling
 type: zettel
 status: seedling
 created: <% tp.date.now("YYYY-MM-DD") %>
@@ -27,15 +27,15 @@ review_at: <% tp.date.now("YYYY-MM-DD", 30) %>
 ## 🏷 태그 설계
 
 - 타입: `#type/zettel` (고정)
-- 주제: `#주제/` (예: `#주제/rag`, `#주제/nextjs`)
-- 숙성도: `#상태/seedling` → `#상태/budding` → `#상태/evergreen`
+- 주제: `#<% dtNs("topic") %>/` (예: `#<% dtNs("topic") %>/rag`)
+- 숙성도: `#<% dtNs("maturity") %>/seedling` → `budding` → `evergreen`
 
 ---
 
 ## ✅ 승격 체크리스트
 
 - [ ] 나의 언어로 재작성했다
-- [ ] `#주제/` 태그를 붙였다
+- [ ] `#<% dtNs("topic") %>/` 태그를 붙였다
 - [ ] 관련 노트를 2개 이상 링크했다
 
 **3개 모두 ✅** 여야 카드노트로 올린다.

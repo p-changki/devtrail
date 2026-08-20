@@ -117,6 +117,43 @@ check_bash32() {
   echo "  bash 3.2 한글 흡수 없음"
 }
 
+check_local_selfref() {
+  # bash 3.2 는 local 한 줄의 이름을 '전부 먼저' 지역화한 뒤 대입한다.
+  # 그래서 아래는 set -u 에서 죽는다:
+  #
+  #     local dot="$1" app="$dot/app.json"     # ✗ dot: unbound variable
+  #     local dot="$1"; local app="$dot/..."   # ✓
+  #
+  # 실제로 5곳이 이랬고, 그중 4곳은 아직 실행이 도달하지 않아 조용했다.
+  # 문법 검사로는 안 잡히고, 그 코드 경로를 밟아야만 터진다.
+  local hits
+  hits=$(git grep --untracked -nE 'local [A-Za-z_]+=' \
+           -- '*.sh' 'bin/devtrail' 'install.sh' 2>/dev/null \
+         | grep -vE ':[0-9]+:[[:space:]]*#' \
+         | grep -v '^tests/run\.sh:' \
+         | python3 -c '
+import sys, re
+for line in sys.stdin:
+    parts = line.split(":", 2)
+    if len(parts) < 3: continue
+    f, n, code = parts
+    m = re.search(r"\blocal\s+(.*)", code)
+    if not m: continue
+    names = []
+    for nm, val in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)=(\S*(?:\"[^\"]*\")?\S*)", m.group(1)):
+        for prev in names:
+            if re.search(r"\$\{?" + prev + r"\}?\b", val):
+                print(f"{f}:{n}: {nm} 가 같은 줄의 {prev} 를 참조")
+        names.append(nm)
+')
+  if [ -n "$hits" ]; then
+    printf '%s\n' "$hits" | sed 's/^/  ❌ /'
+    echo "  → local 을 줄로 나누세요 (bash 3.2 에서 unbound variable 로 죽습니다)"
+    return 1
+  fi
+  echo "  local 자기참조 없음"
+}
+
 check_no_hardcoded_paths() {
   # 프리셋의 템플릿·허브·스킬에 볼트 경로가 박히면 사용자가 폴더명을 바꿀 때 깨진다.
   local hits
@@ -248,6 +285,7 @@ run lint  "JSON"          check_json
 
 # 이 저장소 고유의 함정 — 문법 검사로는 안 잡힌다
 run guard "bash 3.2"      check_bash32
+run guard "local 자기참조"  check_local_selfref
 run guard "경로 하드코딩"   check_no_hardcoded_paths
 run guard "파일 길이"      check_file_size
 run guard "버전"          check_version

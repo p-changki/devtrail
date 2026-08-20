@@ -1,0 +1,135 @@
+<%*
+// ── DevTrail shared helpers ─────────────────────────────────────────────────
+// Prepended to every template. This is what keeps vault paths out of them.
+//
+// It finds the path-map note *by filename*, so it works wherever that note
+// lives — and no template contains a single character of a vault path.
+const DT = await (async () => {
+  const f = app.vault.getFiles().find(x => x.name === "_devtrail-paths.md");
+  if (!f) return { paths: {}, root: "", ok: false };
+  try {
+    const raw = await app.vault.read(f);
+    const m = raw.match(/```json\s*([\s\S]*?)```/);
+    if (!m) return { paths: {}, root: "", ok: false };
+    return Object.assign(JSON.parse(m[1]), { ok: true });
+  } catch (e) {
+    return { paths: {}, root: "", ok: false };
+  }
+})();
+
+// Look up a path. Falls back so the template never dies.
+const dtPath = (key, fallback) => (DT.paths && DT.paths[key]) || fallback || "";
+
+// Strip characters that are not valid in filenames.
+const dtSafe = (s) => (s || "").replace(/[\\/:*?"<>|#\[\]]/g, "-").replace(/\s+/g, " ").trim();
+
+// Append -1, -2 if the name is taken. Never overwrite.
+const dtUnique = (folder, base) => {
+  let name = base, i = 1;
+  while (app.vault.getAbstractFileByPath(`${folder}/${name}.md`)) name = `${base}-${i++}`;
+  return name;
+};
+
+// Clean up the empty orphan note when the user cancels.
+const dtCancel = (file) => {
+  tp.hooks.on_all_templates_executed(async () => {
+    if (file) await app.vault.trash(file, true);
+  });
+};
+
+// Read the project list from config; prompt if there is none.
+// (The original hardcoded a PROJECTS array — every new project meant editing
+//  the template.)
+const dtProjects = () => (DT.projects && DT.projects.length ? DT.projects : []);
+
+// Devlog filename. Follows naming.devlog_file from config.
+// ⚠️ Hardcoding this creates a different file than `devtrail activity` does.
+const dtDevlogName = (date) => {
+  const pat = (DT.naming && DT.naming.devlog_file) || "{{DATE}} devlog.md";
+  return pat.replace("{{DATE}}", date).replace(/\.md$/, "");
+};
+
+// Templates folder name, for query exclusions.
+const dtTplFolder = () => ((DT.paths && DT.paths.templates) || "Templates").split("/").pop();
+
+// Tag namespaces. Only the two a user types by hand vary by language.
+const dtNs = (k) => (DT.ns && DT.ns[k]) || k;
+
+// Weekly review filename. Follows naming.weekly_file from config.
+const dtWeeklyName = (iso) => {
+  const pat = (DT.naming && DT.naming.weekly_file) || "{{ISOWEEK}} weekly.md";
+  return pat.replace("{{ISOWEEK}}", iso).replace(/\.md$/, "");
+};
+_%>
+<%*
+const initial = app.workspace.getActiveFile();
+
+// Categories come from the path map. Edit tree.json and this follows.
+const cats = (DT.categories && DT.categories.length) ? DT.categories : [
+  { key: "frontend", path: "Frontend", tag: "type/dev-note/frontend" },
+  { key: "backend",  path: "Backend",  tag: "type/dev-note/backend"  },
+  { key: "devops",   path: "DevOps",   tag: "type/dev-note/devops"   },
+  { key: "infra",    path: "Infra",    tag: "type/dev-note/infra"    },
+  { key: "testing",  path: "Testing",  tag: "type/dev-note/testing"  },
+  { key: "general",  path: "General",  tag: "type/dev-note/general"  },
+];
+const LABEL = {
+  frontend: "frontend — React, Next.js, UI/UX",
+  backend:  "backend — APIs, databases",
+  devops:   "devops — CI/CD, Docker, deploys",
+  infra:    "infra — servers, networking, cloud",
+  testing:  "testing — TDD, E2E, unit tests",
+  general:  "general — concepts, tools, process",
+};
+const cat = await tp.system.suggester(
+  cats.map(c => LABEL[c.key] || c.key), cats, false, "📂 Which area?");
+
+const projects = dtProjects();
+let project = "";
+if (projects.length) {
+  const labels = ["None (not a project)", ...projects];
+  const values = ["", ...projects];
+  project = await tp.system.suggester(labels, values, false, "📁 Which project?") || "";
+}
+
+const title = await tp.system.prompt("📝 Title (e.g. understanding useState)");
+
+if (!cat || !title) { dtCancel(initial); tR = ""; return; }
+
+const date = tp.date.now("YYYY-MM-DD");
+// Create it in the right folder from the start.
+// Letting Auto Note Mover do it fails: at move time the tag is not there yet.
+const folder = dtPath("devnote." + cat.key, dtPath("devnote") + "/" + cat.path);
+await tp.file.move(`/${folder}/${dtUnique(folder, `${date} ${dtSafe(title)}`)}`);
+
+let tags = `  - ${cat.tag}\n`;
+if (project) tags += `  - project/${project}\n`;
+// Nothing moves after this. Even with the rule order fixed, multi-tag notes
+// are safer not depending on it.
+tR += `---\ntags:\n${tags}type: dev-note\ncategory: ${cat.key}\nstatus: draft\nAutoNoteMover: disable\ncreated: ${date}\nupdated: ${date}\nproject: ${project}\nreview_at:\n---\n\n# ${title}\n`;
+%>
+
+## 📌 One-line summary
+
+> 
+
+## 🎯 Background / problem
+
+## 📝 The note
+
+## 💡 Key points (3 or fewer)
+
+- 
+
+## 🔧 Example code
+
+```
+```
+
+## ⚠️ Gotchas
+
+- 
+
+## 🔗 Related notes
+
+- [[ ]]

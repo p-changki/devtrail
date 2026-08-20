@@ -209,8 +209,20 @@ EOF
     # 원본은 이 배열을 JS 안에 박아둬서 프로젝트가 늘 때마다 템플릿을 고쳐야 했다.
     printf '  "projects": %s,\n' \
       "$(jq -c '[(.github.project_groups // {}) | keys[]]' "$CONFIG_FILE" 2>/dev/null || echo '[]')"
-    printf '  "categories": %s\n}' \
-      "$(jq -c '[.folders[] | select(.key=="devnote") | (.children // [])[] | {key: (.key|split(".")[1]), path: .path, tag: .tag}]' "$DT_TREE")"
+    printf '  "categories": %s,\n' \
+      "$(jq -c --argjson en "$([ "$(dt_lang)" = en ] && echo true || echo false)" \
+         '[.folders[] | select(.key=="devnote") | (.children // [])[]
+           | {key: (.key|split(".")[1]),
+              path: (if $en then (.path_en // .path) else .path end),
+              tag: .tag}]' "$DT_TREE")"
+    # ⚠️ 파일명 규칙을 함께 내려보낸다.
+    #    템플릿이 "개발일지" 를 박아두는 바람에 셸(devtrail activity)이 만드는
+    #    "2026-08-21 devlog.md" 와 다른 파일이 생겼다. 둘이 같은 출처를 봐야 한다.
+    printf '  "naming": %s,\n' \
+      "$(jq -c '.naming // {}' "$CONFIG_FILE" 2>/dev/null || echo '{}')"
+    printf '  "lang": %s,\n' "$(dt_lang | jq -R .)"
+    printf '  "ns": {"topic": %s, "maturity": %s}\n}' \
+      "$(dt_ns topic | jq -R .)" "$(dt_ns maturity | jq -R .)"
   }
 }
 
@@ -241,7 +253,10 @@ _aug_learn() {
 # ── 입문 가이드 ──────────────────────────────────────────────────────────────
 # 없을 때만 복사한다. 사용자가 고친 가이드를 덮어쓰지 않는다.
 _aug_guides() {
-  local src="$DEVTRAIL_ROOT/preset/guides"
+  # 언어별 하위 폴더. 없는 언어는 ko 로 떨어진다 — 번역이 늦어도
+  # 가이드가 통째로 사라지는 것보다 낫다.
+  local src="$DEVTRAIL_ROOT/preset/guides/$(dt_lang)"
+  [ -d "$src" ] || src="$DEVTRAIL_ROOT/preset/guides/ko"
   local dest; dest="$(vault_root)/$(dt_dir guides)"
   [ -d "$src" ] || return 0
   jr_mkdir "$dest"

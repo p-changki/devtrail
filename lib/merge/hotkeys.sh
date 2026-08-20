@@ -15,7 +15,8 @@
 # ⚠️ Templater 커맨드 ID 안에 볼트 경로가 들어간다. 정적 파일을 복사하면
 #    루트명이 다른 사용자에게서 단축키가 조용히 죽는다. 조립해서 만든다.
 _ob_hotkeys() {
-  local dot="$1" hk="$dot/hotkeys.json"
+  local dot="$1"
+  local hk="$dot/hotkeys.json"
   local paths; paths=$(_ob_paths_json)
 
   step "단축키"
@@ -24,7 +25,7 @@ _ob_hotkeys() {
     "$DEVTRAIL_ROOT/templates/obsidian/shellcommands.json" > "$ids" 2>/dev/null || echo '{}' > "$ids"
 
   local out; out=$(mktemp)
-  if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates" \
+  if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates/$(dt_lang)" \
      python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" hotkeys \
       "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$hk" ] && printf '%s' "$hk")" "$ids" > "$out"; then

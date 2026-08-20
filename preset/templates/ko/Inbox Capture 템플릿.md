@@ -40,49 +40,55 @@ const dtCancel = (file) => {
 // 설정에서 프로젝트 목록을 읽는다. 없으면 직접 입력받는다.
 // (원본은 PROJECTS 배열을 JS 안에 박아뒀다 — 프로젝트가 늘 때마다 템플릿을 고쳐야 했다)
 const dtProjects = () => (DT.projects && DT.projects.length ? DT.projects : []);
+
+// 개발일지 파일명. 설정의 naming.devlog_file 을 따른다.
+// ⚠️ 여기를 박아두면 devtrail activity 가 만드는 파일과 다른 파일이 생긴다.
+const dtDevlogName = (date) => {
+  const pat = (DT.naming && DT.naming.devlog_file) || "{{DATE}} devlog.md";
+  return pat.replace("{{DATE}}", date).replace(/\.md$/, "");
+};
+
+// 템플릿 폴더 이름. 쿼리의 제외 조건에 쓴다.
+const dtTplFolder = () => ((DT.paths && DT.paths.templates) || "Templates").split("/").pop();
+
+// 태그 네임스페이스. 사용자가 손으로 붙이는 두 가지만 언어를 탄다.
+const dtNs = (k) => (DT.ns && DT.ns[k]) || k;
+
+// 주간리뷰 파일명. 설정의 naming.weekly_file 을 따른다.
+const dtWeeklyName = (iso) => {
+  const pat = (DT.naming && DT.naming.weekly_file) || "{{ISOWEEK}} weekly.md";
+  return pat.replace("{{ISOWEEK}}", iso).replace(/\.md$/, "");
+};
 _%>
 <%*
-const folder = dtPath("zettel");
-const raw = (await tp.system.prompt("자료카드 제목"))?.trim();
+const folder = dtPath("inbox");
+const raw = (await tp.system.prompt("캡처 제목"))?.trim();
 if (!raw) { dtCancel(app.workspace.getActiveFile()); tR = ""; return; }
-
-const labels = ["문서", "자격 / 수료", "계약", "영수증", "신분 / 서류", "기타"];
-const values = ["document", "certificate", "contract", "receipt", "identity", "misc"];
-const kind = await tp.system.suggester(labels, values, false, "자료 유형") || "misc";
-const source = ((await tp.system.prompt("출처 / 기관 (선택)", "")) || "").trim();
-
+const base = `${tp.date.now("YYYY-MM-DD HHmm")} ${dtSafe(raw)}`;
 if (!app.vault.getAbstractFileByPath(folder)) await app.vault.createFolder(folder);
-const base = `${tp.date.now("YYYY-MM-DD")} ${dtSafe(raw)}`;
 await tp.file.move(`${folder}/${dtUnique(folder, base)}`);
-
-tR += `---
+%>
+---
 tags:
-  - type/asset
+  - type/inbox
   - area/resource
-type: asset-card
-status: active
-asset_type: ${kind}
-source: "${source.replace(/"/g, '\\"')}"
-source_type: document
-created: ${tp.date.now("YYYY-MM-DD")}
-updated: ${tp.date.now("YYYY-MM-DD")}
+type: inbox-capture
+status: inbox
+created: <% tp.date.now("YYYY-MM-DD") %>
+updated: <% tp.date.now("YYYY-MM-DD") %>
+source:
+source_type: web
 project:
-review_at:
+review_at: <% tp.date.now("YYYY-MM-DD", 2) %>
 ---
 
-# ${raw}
+# <% tp.file.title %>
 
-## 원본
-- 파일:
-- 출처: ${source}
-
-## 핵심 요약
+## 원문 / 맥락
 - 
 
-## 인용 / 사실
+## 한 줄 캡처
 - 
 
-## 연결할 카드노트
-- [[ ]]
-`;
-%>
+## 다음 처리
+- [ ] 카드노트로 승격하거나 버린다 (2일 후 재방문)

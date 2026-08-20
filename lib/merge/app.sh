@@ -19,7 +19,8 @@
 # 기존 모드에서는 프로파일의 app_safe_keys 에 든 것만 넣는다 —
 # 나머지는 사용자의 편집 습관이라 건드리면 안 된다.
 _ob_app() {
-  local dot="$1" app="$dot/app.json"
+  local dot="$1"
+  local app="$dot/app.json"
   local mode; mode=$(cfg '.install.mode' 'existing')
   local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
   local src="$DEVTRAIL_ROOT/preset/obsidian/app.json"

@@ -12,6 +12,26 @@ LANG = os.environ.get("DEVTRAIL_LANG", "ko")
 if LANG not in ("ko", "en"):
     LANG = "ko"
 
+# 태그 네임스페이스.
+#
+# ⚠️ #type/* · #project/* · #area/* 는 언어와 무관하다 — 자동 이동 규칙이
+#    이것들로 동작한다. 언어를 타는 것은 사용자가 손으로 붙이는 두 가지뿐이다.
+#
+#   주제 → topic      주제 분류
+#   상태 → maturity   숙성도. 'status' 를 쓰지 않는 이유는 frontmatter 의
+#                     status 필드(draft·active·done)와 뜻이 달라서다.
+NS = {
+    "topic":    {"ko": "주제", "en": "topic"},
+    "maturity": {"ko": "상태", "en": "maturity"},
+}
+
+
+def ns(key):
+    """태그 네임스페이스. 예: ns("topic") → 주제 | topic"""
+    e = NS.get(key)
+    return (e.get(LANG) or e.get("ko")) if e else key
+
+
 _M = {
     # ── 허브 (hub.py) ────────────────────────────────────────────────────────
     "hub.scope": {

@@ -46,6 +46,20 @@ dt_jq_field() {
   fi
 }
 
+# 태그 네임스페이스.
+#
+# ⚠️ #type/* · #project/* · #area/* 는 언어와 무관하다 — 자동 이동 규칙이
+#    이것들로 동작한다. 언어를 타는 것은 사용자가 손으로 붙이는 두 가지뿐이다.
+#
+# dt_ns <키>   topic | maturity
+dt_ns() {
+  if [ "$(dt_lang)" = "en" ]; then
+    case "$1" in topic) printf 'topic' ;; maturity) printf 'maturity' ;; *) printf '%s' "$1" ;; esac
+  else
+    case "$1" in topic) printf '주제' ;; maturity) printf '상태' ;; *) printf '%s' "$1" ;; esac
+  fi
+}
+
 # 메시지 카탈로그를 읽는다. 없는 언어는 ko 로 떨어진다.
 dt_load_messages() {
   local l; l="$(dt_lang)"

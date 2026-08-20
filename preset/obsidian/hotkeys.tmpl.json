@@ -10,27 +10,121 @@
     "원본 볼트는 24개를 썼지만 이동·화면 단축키는 취향이라 배포하지 않는다.",
     "노트 생성과 DevTrail 명령만 배정한다."
   ],
-
   "templater": [
-    { "template": "개발일지양식.md",        "key": "D", "modifiers": ["Mod", "Shift"] },
-    { "template": "개발메모 템플릿.md",      "key": "M", "modifiers": ["Mod", "Shift"] },
-    { "template": "자료카드 템플릿.md",      "key": "N", "modifiers": ["Mod", "Shift"] },
-    { "template": "회고 템플릿.md",          "key": "R", "modifiers": ["Mod", "Shift"] },
-    { "template": "아이디어 빠른저장 템플릿.md", "key": "I", "modifiers": ["Mod", "Shift"] },
-    { "template": "프로젝트 생성 템플릿.md",  "key": "P", "modifiers": ["Mod", "Shift"] }
+    {
+      "template": "개발일지양식.md",
+      "template_en": "Devlog.md",
+      "key": "D",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    },
+    {
+      "template": "개발메모 템플릿.md",
+      "template_en": "Dev note.md",
+      "key": "M",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    },
+    {
+      "template": "자료카드 템플릿.md",
+      "template_en": "Reference card.md",
+      "key": "N",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    },
+    {
+      "template": "회고 템플릿.md",
+      "template_en": "Retro.md",
+      "key": "R",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    },
+    {
+      "template": "아이디어 빠른저장 템플릿.md",
+      "template_en": "Quick idea.md",
+      "key": "I",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    },
+    {
+      "template": "프로젝트 생성 템플릿.md",
+      "template_en": "New project.md",
+      "key": "P",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    }
   ],
-
   "shellcommands": [
-    { "id": "devtrail-activity",          "key": "G", "modifiers": ["Mod", "Shift"] },
-    { "id": "devtrail-summary",           "key": "S", "modifiers": ["Mod", "Shift"] },
-    { "id": "devtrail-backfill",          "key": "B", "modifiers": ["Mod", "Shift"] },
-    { "id": "devtrail-activity-force",    "key": "J", "modifiers": ["Mod", "Shift"] }
+    {
+      "id": "devtrail-activity",
+      "key": "G",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    },
+    {
+      "id": "devtrail-summary",
+      "key": "S",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    },
+    {
+      "id": "devtrail-backfill",
+      "key": "B",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    },
+    {
+      "id": "devtrail-activity-force",
+      "key": "J",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    }
   ],
-
   "plugin": [
-    { "command": "templater-obsidian:create-new-note-from-template", "key": "N", "modifiers": ["Mod"] },
-    { "command": "homepage:open-homepage", "key": "H", "modifiers": ["Mod", "Shift"] }
+    {
+      "command": "templater-obsidian:create-new-note-from-template",
+      "key": "N",
+      "modifiers": [
+        "Mod"
+      ]
+    },
+    {
+      "command": "homepage:open-homepage",
+      "key": "H",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
+    }
   ],
-
-  "fallback_keys": ["Y", "K", "U", "O", "L", "E", "W", "Q"]
+  "fallback_keys": [
+    "Y",
+    "K",
+    "U",
+    "O",
+    "L",
+    "E",
+    "W",
+    "Q"
+  ]
 }
