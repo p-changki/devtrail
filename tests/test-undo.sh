@@ -86,15 +86,29 @@ t_vault m1
 # 0.1.x 모양 — install 블록이 없다
 printf '{"version":1,"vault":{"path":"%s","root":"창기"}}\n' "$T_VAULT" > "$DEVTRAIL_CONFIG"
 
+# ⚠️ 목표 버전을 박지 않는다. 스키마를 올릴 때마다 테스트가 깨지면,
+#    고치는 김에 단언을 느슨하게 만들게 된다. 코드에서 읽는다.
+SCHEMA=$(grep -E '^DT_SCHEMA=' "$ROOT/lib/migrate.sh" | head -1 | cut -d= -f2)
+
 out=$("$DT" config migrate 2>&1)
-t_contains "올릴 것을 알린다" "1 → 2" "$out"
+t_contains "올릴 것을 알린다" "1 → ${SCHEMA}" "$out"
 t_eq "dry-run 은 안 바꾼다" "1" "$(jq -r '.version' "$DEVTRAIL_CONFIG")"
 
 "$DT" config migrate --apply >/dev/null 2>&1
-t_eq "버전이 올라간다" "2" "$(jq -r '.version' "$DEVTRAIL_CONFIG")"
+t_eq "버전이 올라간다" "$SCHEMA" "$(jq -r '.version' "$DEVTRAIL_CONFIG")"
 t_eq "mode 기본값은 안전한 쪽" "existing" "$(jq -r '.install.mode' "$DEVTRAIL_CONFIG")"
 t_eq "modules 기본값" "devlog" "$(jq -r '.install.modules[0]' "$DEVTRAIL_CONFIG")"
+# 기존 볼트는 전부 한국어다 — 여기서 로케일을 보면 한국어 볼트 옆에
+# 영어 폴더가 생긴다.
+t_eq "lang 은 로케일과 무관하게 ko" "ko" "$(jq -r '.lang' "$DEVTRAIL_CONFIG")"
 t_contains "최신이라고 말한다" "최신입니다" "$("$DT" config migrate 2>&1)"
+
+t_start "영어 로케일에서도 ko 로 채운다"
+t_vault m1b
+_iso_cfg() { printf '{"version":1,"vault":{"path":"%s","root":"창기"}}\n' "$T_VAULT" > "$DEVTRAIL_CONFIG"; }
+_iso_cfg
+LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 DEVTRAIL_LANG= "$DT" config migrate --apply >/dev/null 2>&1
+t_eq "그래도 ko" "ko" "$(jq -r '.lang' "$DEVTRAIL_CONFIG")"
 
 # ── 기존 값을 덮어쓰지 않는다 (jq // 함정) ───────────────────────────────────
 t_start "기존 값 보존"
