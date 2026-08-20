@@ -79,9 +79,34 @@ vault_rel() {
   if [ -n "$r" ]; then printf '%s/%s' "$r" "$1"; else printf '%s' "$1"; fi
 }
 
-dir_devlog()  { printf '%s/%s' "$(vault_root)" "$(cfg '.dirs.devlog')"; }
-dir_weekly()  { printf '%s/%s' "$(vault_root)" "$(cfg '.dirs.weekly')"; }
-dir_templates() { printf '%s/%s' "$(vault_root)" "$(cfg '.dirs.templates')"; }
+# dt_dir <key> — 볼트 루트 기준 상대경로.
+#   1) config 의 dirs.<key>        사용자가 채택한 경로가 최우선
+#   2) preset/tree.json 의 path    프리셋 기본값
+# 둘 다 없으면 빈 문자열이고, 그러면 호출부에서 "창기//devlog.md" 같은
+# 경로가 만들어진다. 실제로 그렇게 나왔다 — 반드시 폴백을 둔다.
+dt_dir() {
+  local key="$1" v tree
+  v=$(cfg ".dirs[\"$key\"]" '')
+  [ -n "$v" ] && { printf '%s' "$v"; return 0; }
+  tree="${DEVTRAIL_TREE:-$DEVTRAIL_ROOT/preset/tree.json}"
+  [ -f "$tree" ] || return 0
+  jq -r --arg k "$key" '
+    [ .folders[] | . as $p
+      | ({key: $p.key, path: $p.path}),
+        (($p.children // [])[] | {key: .key, path: ($p.path + "/" + .path)}) ]
+    | map(select(.key == $k)) | (.[0].path // empty)
+  ' "$tree" 2>/dev/null
+}
+
+# 절대경로. 키가 해석되지 않으면 볼트 루트를 그대로 돌려준다(슬래시 안 붙임).
+dt_path() {
+  local rel; rel=$(dt_dir "$1")
+  if [ -n "$rel" ]; then printf '%s/%s' "$(vault_root)" "$rel"; else vault_root; fi
+}
+
+dir_devlog()    { dt_path devlog; }
+dir_weekly()    { dt_path weekly; }
+dir_templates() { dt_path templates; }
 
 # ── Dependency checks ────────────────────────────────────────────────────────
 has() { command -v "$1" >/dev/null 2>&1; }

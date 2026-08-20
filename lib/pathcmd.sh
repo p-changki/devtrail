@@ -60,13 +60,8 @@ _path_tree_rel() {
   ' "$DT_TREE"
 }
 
-# 사용자 설정이 있으면 그게 이긴다.
-_path_rel() {
-  local key="$1" v
-  v=$(cfg ".dirs[\"$key\"]" '')
-  [ -n "$v" ] && { printf '%s' "$v"; return 0; }
-  _path_tree_rel "$key"
-}
+# 해석은 common.sh 의 dt_dir 한 곳에만 둔다 — 두 벌이면 반드시 갈라진다.
+_path_rel() { dt_dir "$1"; }
 
 _path_one() {
   local key="$1" mode="$2" rel

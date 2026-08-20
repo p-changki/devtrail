@@ -65,6 +65,8 @@ augment_cmd() {
 $(_aug_folders "$modules")
 EOF
 
+  [ "$apply" = 1 ] && _aug_paths_note
+
   echo
   if [ "$apply" = 1 ]; then
     ok "폴더 ${made}개 생성 · ${kept}개 유지 · 허브 ${hubs}개"
@@ -118,6 +120,59 @@ _aug_folders() {
         local mapped; mapped=$(cfg ".dirs[\"$key\"]" '')
         printf '%s\t%s\t%s\n' "$key" "${mapped:-$rel}" "$hub"
       done
+}
+
+# ── 경로 맵 노트 ─────────────────────────────────────────────────────────────
+#
+# Templater JS 는 셸을 부를 수 없다. 그래서 devtrail path 를 직접 못 쓴다.
+# 대신 경로 맵을 볼트 안에 노트로 두고, 템플릿이 파일명으로 찾아 읽는다.
+#
+#   app.vault.getFiles().find(f => f.name === "_devtrail-paths.md")
+#
+# 이러면 템플릿에 경로 하드코딩이 0 이 된다. 사용자가 루트를 뭘로 정하든,
+# 폴더를 어디로 옮기든 템플릿이 따라간다.
+# (원본 볼트는 "창기/개발/개발메모/Frontend" 를 JS 안에 박아뒀고,
+#  루트명을 바꾸면 템플릿 전체가 죽는 구조였다.)
+_aug_paths_note() {
+  local tdir; tdir="$(vault_root)/$(dt_dir templates)"
+  mkdir -p "$tdir"
+  local out="$tdir/_devtrail-paths.md"
+
+  {
+    printf -- '---\ntags:\n  - type/devtrail\ntype: devtrail-paths\nupdated: %s\n---\n\n' "$(date +%Y-%m-%d)"
+    printf '# DevTrail 경로 맵\n\n'
+    printf '> 자동 생성됩니다. 직접 고치지 마세요 — `devtrail augment --apply` 가 덮어씁니다.\n'
+    printf '> 템플릿이 이 파일을 파일명으로 찾아 읽습니다.\n\n'
+    printf '```json\n'
+    _aug_paths_json
+    printf '\n```\n'
+  } > "$out"
+  ok "경로 맵  $(dt_dir templates)/_devtrail-paths.md"
+}
+
+_aug_paths_json() {
+  local keys k
+  keys=$(jq -r '[ .folders[] | . as $p | $p.key, (($p.children // [])[] | .key) ] | .[]' "$DT_TREE")
+  {
+    printf '{\n  "root": %s,\n  "paths": {\n' "$(cfg '.vault.root' | jq -R .)"
+    local first=1
+    while IFS= read -r k; do
+      [ -n "$k" ] || continue
+      [ "$first" = 1 ] || printf ',\n'
+      first=0
+      printf '    %s: %s' "$(printf '%s' "$k" | jq -R .)" \
+                          "$(vault_rel "$(dt_dir "$k")" | jq -R .)"
+    done <<EOF
+$keys
+EOF
+    printf '\n  },\n'
+    # 프로젝트 목록도 함께 내려보낸다. 템플릿이 선택창을 띄울 때 쓴다 —
+    # 원본은 이 배열을 JS 안에 박아둬서 프로젝트가 늘 때마다 템플릿을 고쳐야 했다.
+    printf '  "projects": %s,\n' \
+      "$(jq -c '[(.github.project_groups // {}) | keys[]]' "$CONFIG_FILE" 2>/dev/null || echo '[]')"
+    printf '  "categories": %s\n}' \
+      "$(jq -c '[.folders[] | select(.key=="devnote") | (.children // [])[] | {key: (.key|split(".")[1]), path: .path, tag: .tag}]' "$DT_TREE")"
+  }
 }
 
 # ── L3 폴더 허브 ─────────────────────────────────────────────────────────────
