@@ -65,6 +65,9 @@ git push origin main --tags
 
 ### 내부
 
+- README 전면 재작성. 이전 README 는 프로젝트 초기 상태를 설명하고 있어
+  볼트 프리셋 · 모드 3종 · 스킬 12종 · `undo` · `update` 가 전부 빠져 있었다.
+  한국어 전용 · macOS 전용임을 맨 위에 밝힌다.
 - `CONTRIBUTING.md` · PR 템플릿 · 이슈 템플릿(버그·기능) · `.editorconfig`.
   버그 템플릿은 `devtrail version`·`doctor`·`scan` 과 설치 모드를 요구한다 —
   이 도구는 볼트 상태에 따라 동작이 갈려서 그게 없으면 재현이 안 된다.

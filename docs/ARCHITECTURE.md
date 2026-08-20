@@ -179,7 +179,7 @@ Obsidian 설정을 쓰기 전에 **반드시 `jr_backup`** 을 부른다. 백업
 
 | 경로 | 내용 |
 |---|---|
-| `preset/tree.json` | 폴더 25개 · 모듈 6개 정의 |
+| `preset/tree.json` | 폴더 정의 25개 (+ 하위 10) · 모듈 6개 |
 | `preset/profiles/*.json` | 설치 모드 3종 (`new`·`existing`·`isolated`) |
 | `preset/templates/` | Obsidian 노트 템플릿 21종 + 공용 JS 헤더 |
 | `preset/obsidian/` | 플러그인 설정 기본값 |

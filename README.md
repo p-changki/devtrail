@@ -2,168 +2,281 @@
 
 [![CI](https://github.com/p-changki/devtrail/actions/workflows/ci.yml/badge.svg)](https://github.com/p-changki/devtrail/actions/workflows/ci.yml)
 
-> 개발 기록을 **자동으로 남기는** 환경을 한 번에 셋업하는 CLI.
-> GitHub 활동 → Obsidian 개발일지 → 주간리뷰까지, 손으로 쓰지 않아도 쌓입니다.
+> 개발 기록용 **Obsidian 볼트 한 벌**을 만들어 주는 CLI.
+> 폴더 구조 · 노트 템플릿 · 자동 분류 · GitHub 활동 수집 · AI 스킬까지 한 번에.
+
+손으로 쓰지 않아도 기록이 쌓이고, 쌓인 것이 주간리뷰로 굴러 올라갑니다.
+
+> **언어**: 이 도구는 한국어 전용입니다. 폴더 이름 · 템플릿 · 안내 문구가
+> 전부 한국어입니다. 영어판 계획은 아직 없습니다.
+>
+> **플랫폼**: macOS. Linux 는 아직 시험해보지 않았습니다.
+
+---
+
+## 30초 요약
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash
 
-devtrail init      # 대화형 셋업
-# → Obsidian에서 볼트를 열고 플러그인 3개 설치 후 재시작
-devtrail obsidian  # 셸커맨드 병합 · 노트 템플릿 설치
-devtrail doctor    # 진단 — 뭐가 안 되는지 정확히 알려줍니다
+devtrail init        # 대화형 셋업 — 폴더 이름을 제안받고 고릅니다
+                     # → Obsidian 에서 볼트를 열고 플러그인 4개 설치 후 재시작
+devtrail obsidian    # 플러그인 설정 병합 · 템플릿 · 단축키
+devtrail doctor      # 뭐가 안 되는지 정확히 알려줍니다
 ```
 
-> ⚠️ **순서가 중요합니다.** `devtrail obsidian` 은 볼트의
-> `.obsidian/plugins/obsidian-shellcommands/data.json` 을 읽습니다.
-> 볼트를 한 번도 열지 않았거나 플러그인이 없으면 **셸커맨드 병합을 건너뜁니다.**
+이미 쓰던 볼트가 있어도 됩니다. `init` 이 먼저 진단하고 **기존 폴더를 그대로
+쓰는 쪽**을 제안합니다.
 
 ---
 
-## 무엇을 해결하나
+## 무엇이 생기나
 
-개발 기록을 남기려는 시도는 보통 이렇게 실패합니다.
+`init` 에서 정한 루트(예: `창기/`) 아래에 이런 트리가 생깁니다.
 
-| 방식 | 실패하는 이유 |
+```
+창기/
+├── 대시보드.md            오늘·이번 주가 한눈에
+├── 일일 체크인.md
+├── 개발/
+│   ├── 개발일지/          날짜별. GitHub 활동이 자동으로 들어옵니다
+│   ├── 개발메모/
+│   │   ├── Frontend/  Backend/  DevOps/  Infra/  Testing/  General/
+│   ├── 트러블슈팅/  아이디어/  유튜브/  라이브러리/  도구/  AI/  투두/
+│   ├── 주간리뷰/  월간리뷰/  회고/    회고는 주간·월간·분기·프로젝트로 나뉩니다
+│   ├── 프로젝트/          레포별 docs 골격
+│   ├── 레포docs/          `devtrail sync` 가 프로젝트 문서를 끌어옵니다
+│   └── 학습/
+├── 자료실/
+│   ├── 00_Inbox/          일단 담는 곳
+│   ├── 10_원본/           첨부 · 원본 파일
+│   ├── 20_카드노트/        승격된 것만. MOC 포함
+│   └── 30_아카이브/
+├── 템플릿/                노트 템플릿 21종
+└── 가이드/                시작하기 · 폴더와 태그 · 단축키 · 늘려 쓰기
+```
+
+**폴더마다 `_index.md` 허브**가 있어서, 그 폴더의 노트만 모아 보여줍니다.
+
+노트를 만들면 태그에 따라 **자동으로 제자리를 찾아갑니다.**
+`#type/dev-note/frontend` 를 붙이면 `개발메모/Frontend/` 로 갑니다.
+
+### 모듈 — 필요한 것만
+
+| 모듈 | 무엇 | 기본 |
+|---|---|---|
+| `devlog` | 개발일지 + GitHub 활동 | **필수** |
+| `review` | 주간 · 월간 리뷰 | 켬 |
+| `project` | 프로젝트 구조 + docs 골격 | 켬 |
+| `pkm` | 자료실 · 카드노트 · MOC | 켬 |
+| `learn` | 학습 시스템 | 켬 |
+| `personal` | 개인 (일기 · 책 · 스크랩) | 꺼짐 |
+
+나중에 추가할 수 있습니다: `devtrail augment personal --apply`
+
+---
+
+## 이미 볼트를 쓰고 계시다면
+
+가장 걱정되는 부분일 겁니다. **노트를 움직이지 않습니다.**
+
+`devtrail scan` 이 먼저 진단합니다 — 쓰기는 하지 않습니다.
+
+```
+볼트
+  노트   1727개 · 폴더 84개
+  메타   frontmatter 41%
+
+폴더 역할 추론
+  devlog    확신 0.92   312개  Daily
+  ...
+
+제안
+✅ 기존 볼트에 얹기 — 노트 1727개가 있습니다
+   기존 폴더를 그대로 쓰고 설정만 매핑합니다. 노트를 움직이지 않습니다.
+```
+
+폴더 **이름**이 아니라 내용의 형태로 역할을 추론합니다. 확정은 사용자가 합니다.
+`Daily/` 를 개발일지로 매핑하면, DevTrail 은 그 폴더를 씁니다 —
+`개발/개발일지` 를 새로 만들어 평행 구조를 만들지 않습니다.
+
+### 설치 모드 3가지
+
+| | 언제 | 자동 이동 | 기존 설정 |
+|---|---|---|---|
+| **새로 시작** | 빈 볼트 | 켬 | — |
+| **기존에 얹기** | 이미 쓰던 볼트 | **Manual** | 서식 규칙을 건드리지 않음 |
+| **분리 설치** | 가장 안전 | 우리 트리 안에서만 | 건드리지 않음 |
+
+**분리 설치**는 새 하위 트리에만 넣습니다. 마음에 안 들면 폴더째 지우면 끝입니다.
+
+---
+
+## 안전 계약
+
+남의 볼트를 건드리는 도구라서, 이게 기능보다 먼저입니다.
+
+**1. 덮어쓰지 않고 병합합니다.**
+Obsidian 설정을 쓰기 전에 반드시 백업합니다. 백업이 실패하면 **원본을
+건드리지 않고 멈춥니다.** 기존 단축키 · 자동 이동 규칙 · 태그는 보존됩니다.
+
+**2. 기본이 dry-run 입니다.**
+볼트를 바꾸는 명령은 무엇을 할지 먼저 보여줍니다. `--apply` 가 있어야 씁니다.
+
+**3. 되돌릴 수 있습니다.**
+
+```bash
+devtrail undo                    # 변경 이력
+devtrail undo <ID>               # 무엇을 되돌릴지 확인 (아무것도 바꾸지 않음)
+devtrail undo <ID> --apply
+```
+
+폴더는 **비어 있을 때만** 지웁니다. 안에 노트를 넣으셨으면 남겨두고,
+남겨뒀다고 말합니다.
+
+**4. 다시 실행해도 안전합니다.**
+`augment` 는 **없는 것만** 만듭니다. 고쳐 쓰신 노트는 그대로 둡니다.
+
+---
+
+## 명령
+
+### 설치 · 진단
+
+```bash
+devtrail init              대화형 셋업
+devtrail scan [경로]        볼트 진단 — 구조 · 메타 · 충돌 (쓰기 없음)
+devtrail doctor            의존성 · 인증 · 권한 · 자동화 상태
+devtrail obsidian          Obsidian 설정 병합
+devtrail augment [모듈]     없는 폴더 · 허브만 생성
+devtrail skills <하위>      AI 스킬 설치 (install|sync|list|remove)
+```
+
+### 기록
+
+```bash
+devtrail activity [날짜]    GitHub 이슈/PR 을 개발일지에 삽입
+devtrail summary  [날짜]    머지된 PR 을 AI 로 쉬운말 요약
+devtrail weekly            이번 주 주간리뷰 초안
+devtrail backfill [날짜]    지난 날짜를 채워 넣기
+devtrail sync              프로젝트 docs → 볼트
+```
+
+### 관리
+
+```bash
+devtrail update            DevTrail 자체를 최신으로
+devtrail undo [ID]         되돌리기
+devtrail config [get|set]  설정
+devtrail path [키]          볼트 경로 조회
+devtrail app <하위>         메뉴바 앱 (macOS)
+devtrail dashboard         웹 대시보드
+devtrail install-schedule  자동 실행 등록
+devtrail uninstall         자동화 제거 (볼트는 건드리지 않음)
+```
+
+---
+
+## AI 스킬 12종
+
+Claude Code 같은 AI 도구에서 쓰는 스킬을 함께 설치합니다.
+`devtrail skills install` 로 넣고, 스킬은 실행 시점에 `devtrail path` 를 불러
+**사용자의 실제 폴더 이름**을 찾습니다.
+
+| | |
 |---|---|
-| 노션에 매일 수기 작성 | 3일 하고 멈춤 |
-| 프로젝트마다 `NOTES.md` | 흩어져서 나중에 못 찾음 |
-| 커밋 메시지로 대체 | 나중에 읽으면 무슨 말인지 모름 |
+| `youtube` | 자막을 뽑아 정리하고 볼트에 저장 |
+| `web-capture` | 웹 페이지를 마크다운으로 Inbox 에 |
+| `promote` | Inbox → 카드노트 승격 (3항목 검증) |
+| `moc` | 흩어진 노트를 주제로 묶기 |
+| `rollup` | 개발일지 → 주간 → 월간 |
+| `worklog` | 작업 하나 = 폴더 하나 |
+| `docs` | 프로젝트 문서를 올바른 위치에 |
+| `pdca` | 계획·설계·분석·보고 |
+| `qa-check` | 재현 가능한 QA 체크리스트 |
+| `refcard` | 라이브러리 레퍼런스 카드 |
+| `study-log` | 학습 진도 기록 |
+| `vault-health` | Inbox 적체 · 고아 노트 · 깨진 링크 |
 
-DevTrail은 **이미 남긴 흔적**(PR·이슈·커밋)을 긁어와 노트에 자동으로 꽂아넣습니다.
-쓰는 게 아니라 **쌓이는** 구조입니다.
+DevTrail 은 **AI 도구를 요구하지 않습니다.** 스킬은 선택입니다.
 
-## 무엇을 설치하나
-
-```
-devtrail init
-  ├─ ~/.devtrail/devtrail.config.json   설정 (모든 값의 단일 출처)
-  ├─ ~/.devtrail/scripts/*.sh           설정을 읽어 동작하는 스크립트
-  ├─ ~/Library/LaunchAgents/*.plist     자동 실행 (macOS)
-  └─ <볼트>/.obsidian/                  Obsidian 프리셋 (선택)
-```
-
-## 명령어
-
-| 명령 | 하는 일 |
-|---|---|
-| `devtrail init` | 대화형 셋업 (저장소·볼트·GitHub·AI) |
-| `devtrail doctor` | 의존성·인증·권한·자동화 상태 진단 |
-| `devtrail obsidian` | Obsidian 설정 적용 (**병합** — 기존 설정 보존) |
-| `devtrail app <sub>` | 메뉴바 앱 (install·start·stop·status) |
-| `devtrail dashboard` | 로컬 웹 대시보드 (상태·실행·설정) |
-| `devtrail install-schedule` | launchd 자동 실행 등록 |
-| `devtrail activity [DATE]` | GitHub 이슈/PR을 개발일지에 삽입 |
-| `devtrail summary [DATE]` | 머지된 PR을 AI로 쉬운말 요약 |
-| `devtrail weekly` | 주간리뷰 초안 생성 |
-| `devtrail backfill [DATE]` | 지난 날짜의 활동·요약을 채워 넣기 |
-| `devtrail sync` | 레포 docs → 볼트 동기화 |
-| `devtrail config [get\|set]` | 설정 조회/변경 (메뉴바 앱·대시보드가 이 명령을 씁니다) |
-| `devtrail uninstall` | 자동화 제거 (**볼트 데이터는 건드리지 않음**) |
-
-### 남의 설정을 덮어쓰지 않습니다
-
-이 도구가 줄 수 있는 최악의 피해는 **기존 Obsidian 설정과 노트를 날리는 것**입니다. 그래서:
-
-| 대상 | 방식 |
-|---|---|
-| Obsidian 셸 커맨드 | id 기준 **병합** — 기존 커맨드·다른 설정 키 그대로 |
-| 노트 템플릿 | **없을 때만** 생성 |
-| 단축키·Templater 폴더매핑 | 손대지 않고 **안내만** |
-| 개발일지 삽입 | 마커가 정확히 한 쌍일 때만 교체. 아니면 **아무것도 바꾸지 않음** |
-| 레포 docs 동기화 | 볼트에서 더 새로 고친 파일은 건너뜀 + 덮어쓸 땐 백업 |
-
-### `doctor`가 이 도구의 핵심입니다
-
-자동화의 가장 큰 문제는 **"도는지 안 도는지 모른다"**는 것입니다.
-
-```
-의존성
-✅ jq   ✅ gh   ✅ git   ⚠️ fswatch 없음 (선택)
-인증
-✅ gh 인증됨 (yourname)
-자동화
-❌ com.devtrail.daily 로드됐으나 마지막 종료코드 1 — 로그: ~/.devtrail/logs/...
-```
-
-> **확인하지 못한 것을 "정상"이라고 말하지 않습니다.**
-> 예를 들어 launchd의 iCloud 접근 권한은 대화형 셸에서 검증이 불가능합니다.
-> 그럴 땐 통과 처리하지 않고 **확인 방법을 알려줍니다.**
+---
 
 ## 요구사항
 
-**필수** — macOS · [Obsidian](https://obsidian.md) · `gh` · `jq` · `git` · `rsync` · `python3`
-
-```bash
-brew install gh jq fswatch
-gh auth login
-```
-
-**선택** — `fswatch`(실시간 감시) · AI CLI(`claude` 등, PR 요약용) · Linear API 키
-· Xcode Command Line Tools(`swift` — 메뉴바 앱을 소스에서 빌드할 때만)
-
-**Obsidian 플러그인 3개(필수)** — Shell commands · Templater · **Dataview**
-
-| 플러그인 | 왜 필요한가 |
+| | |
 |---|---|
-| Shell commands | Obsidian에서 DevTrail 스크립트를 실행하는 통로 |
-| Templater | 개발일지를 템플릿으로 생성 — 활동 삽입의 전제 |
-| Dataview | 주간리뷰 노트는 본문 전체가 Dataview 쿼리입니다 |
+| **필수** | macOS · `bash` · `git` · `jq` · `python3` |
+| **Obsidian 플러그인 4종** | Shell commands · Templater · Dataview · Auto Note Mover |
+| **권장** | Calendar · Omnisearch · Linter · Homepage |
+| **GitHub 활동** | `gh` (`brew install gh && gh auth login`) |
+| **AI 요약** | Claude 또는 OpenAI (선택) |
 
-## 저장소 위치
-
-`init`에서 선택합니다.
-
-| 백엔드 | 상태 |
-|---|---|
-| 로컬 | ✅ 검증됨. 권한 문제 없음 |
-| iCloud | ✅ 검증됨. **전체 디스크 접근 권한 필요** (아래 참고) |
-| Google Drive | ⚠️ 미검증 — 스트리밍 모드면 파일이 로컬에 없을 수 있음 |
-
-> **iCloud 주의**: launchd에서 iCloud에 접근하려면 전체 디스크 접근 권한이 필요합니다.
-> 또한 `git` 바이너리는 iCloud 직접 접근이 막혀 있어, 백업은 `python3`을 경유합니다.
-> 이건 우회가 아니라 **필수**입니다 — 모르면 백업이 조용히 실패합니다.
-
-## 현재 지원 범위 (v0.1 MVP)
-
-솔직하게 적습니다. 안 되는 걸 된다고 하지 않습니다.
-
-| 항목 | 상태 |
-|---|---|
-| macOS | ✅ |
-| Linux · Windows | ❌ 미지원 (launchd 의존). 어댑터 자리만 있음 |
-| AI: `claude` | ✅ 검증됨 |
-| AI: `codex` · `gemini` | ⚠️ 어댑터 자리만 — 미구현 |
-| Obsidian 셸커맨드·템플릿 | ✅ 병합 설치 |
-| 메뉴바 앱 (macOS) | ✅ |
-| 웹 대시보드 | ✅ `devtrail dashboard` (127.0.0.1 전용 · 실행마다 토큰 발급) |
-| Obsidian 노트 템플릿 | ⚠️ 개발일지 1종만. 주간리뷰는 `weekly` 명령이 직접 생성 |
-
-## 기여
-
-```bash
-./tests/scan-secrets.sh    # 커밋 전 필수 — 시크릿·개인경로 검사
-bash -n lib/*.sh           # 문법 검사
-```
-
-> ⚠️ 이 저장소는 특정인의 실사용 세팅에서 추출됐습니다.
-> 개인 경로(`/Users/이름/`)나 API 키가 섞이기 쉬우니 **스캐너를 반드시 통과**시켜 주세요.
-> macOS 기본 bash는 **3.2**입니다. `mapfile`·`declare -A` 등 bash 4 기능은 쓰지 마세요.
-
-## 라이선스
-
-MIT
+플러그인은 **직접 재구현하지 않습니다.** 설치를 안내하고, 활성화되면 설정을
+병합해 드립니다. `devtrail doctor` 가 무엇이 빠졌는지 알려줍니다.
 
 ---
 
-## 기여하기
+## `doctor` 를 먼저 보세요
 
-- [아키텍처](docs/ARCHITECTURE.md) — 계층 · 어디에 무엇을 넣는가 · 지켜야 할 규칙
-- [디자인 토큰](docs/design-tokens.md) — 색 · 타이포의 단일 출처
-- [변경 이력](CHANGELOG.md) — 버전 규칙과 릴리스 절차
+무언가 안 될 때 추측하지 않아도 됩니다.
 
-```bash
-./tests/run.sh        # 커밋 전에 이걸 돌린다
+```
+$ devtrail doctor
+
+의존성
+✅ jq   ✅ gh   ✅ git   ✅ rsync
+
+Obsidian
+❌ 필수 플러그인 누락: dataview
+⚠️  alwaysUpdateLinks 가 꺼져 있습니다 — 노트를 옮기면 링크가 끊깁니다
 ```
 
-⚠️ macOS 기본 bash 는 **3.2** 다. `"$n개"` 는 죽는다 — `"${n}개"` 로 쓴다.
+무엇이 문제인지와 **어떻게 고치는지**를 같이 냅니다.
+
+---
+
+## 저장소 위치
+
+| | |
+|---|---|
+| 설치본 | `~/.devtrail/src/` |
+| 설정 | `~/.devtrail/devtrail.config.json` |
+| 변경 저널 | `~/.devtrail/journal/` |
+| 볼트 | 직접 정하신 곳 |
+
+`devtrail uninstall` 은 자동화만 제거합니다. **노트는 건드리지 않습니다.**
+
+---
+
+## 현재 상태 (v0.2)
+
+**되는 것** — 볼트 구조 생성 · 기존 볼트에 얹기 · 모드 3종 · 노트 템플릿
+21종 · 폴더별 허브 · 자동 분류 · GitHub 활동/PR 요약 · 주간리뷰 · AI 스킬
+12종 · 되돌리기 · 메뉴바 앱 · 웹 대시보드
+
+**아직인 것** — Linux · Windows · 영어 · GitHub 외 다른 호스팅 ·
+Obsidian 외 다른 노트 앱
+
+**시험 중** — 실제 볼트에서의 장기 사용. 버그를 만나시면
+[이슈](https://github.com/p-changki/devtrail/issues)로 알려주세요.
+`devtrail doctor` 와 `devtrail scan` 출력이 있으면 훨씬 빨리 고칩니다.
+
+---
+
+## 기여
+
+[CONTRIBUTING.md](CONTRIBUTING.md) · [아키텍처](docs/ARCHITECTURE.md) ·
+[디자인 토큰](docs/design-tokens.md) · [변경 이력](CHANGELOG.md)
+
+```bash
+./tests/run.sh        # 커밋 전에 이걸 돌립니다
+```
+
+⚠️ macOS 기본 bash 는 **3.2** 입니다. `"$n개"` 는 죽습니다 — `"${n}개"` 로 씁니다.
+
+---
+
+## 라이선스
+
+[MIT](LICENSE)
