@@ -13,7 +13,7 @@ T_TMP=$(mktemp -d)
 trap 'rm -rf "$T_TMP"' EXIT
 
 DT="$ROOT/bin/devtrail"
-PY="$ROOT/lib/scan.py"
+PY="$ROOT/lib/gen/scan.py"
 
 # ── 쓰기가 없어야 한다 ───────────────────────────────────────────────────────
 t_start "쓰기 없음"

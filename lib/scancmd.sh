@@ -12,7 +12,7 @@
 #
 # ⚠️ 한글이 뒤따르는 변수는 반드시 중괄호로 감싼다: "${n}개"  (bash 3.2)
 
-DT_SCAN_PY="${DEVTRAIL_ROOT}/lib/scan.py"
+DT_SCAN_PY="${DEVTRAIL_ROOT}/lib/gen/scan.py"
 
 scan_cmd() {
   require_bins python3 jq

@@ -1,15 +1,27 @@
 #!/usr/bin/env bash
-# DevTrail — Obsidian 설정 적용 (`devtrail obsidian`)
+# DevTrail — `devtrail obsidian`
+#
+# Obsidian 설정을 볼트에 병합한다. 이 파일은 순서만 정하고, 실제 병합은
+# lib/merge/*.sh 가 각자 한다.
 #
 # 설계 원칙: 남의 볼트 설정을 절대 통째로 덮어쓰지 않는다.
-#   - 셸 커맨드는 id 기준으로 '병합'한다 (기존 커맨드 보존)
+#   - 셸 커맨드 · 라우팅 규칙은 id/태그 기준으로 '병합'한다
 #   - 노트 템플릿은 없을 때만 만든다
-#   - 그 외 설정(단축키·Templater 폴더매핑)은 '안내'만 하고 건드리지 않는다
+#   - 단축키·Templater 는 이미 쓰이는 자리를 피한다
+#   - 그 외(단축키 취향·Templater 세부)는 '안내'만 하고 건드리지 않는다
 # 덮어쓰기로 남의 세팅을 날리는 것이 이 도구가 줄 수 있는 최악의 피해다.
+#
+# 병합기를 추가하려면 lib/merge/<이름>.sh 를 만들고 아래 DT_MERGERS 에 넣는다.
+# 병합기끼리는 서로를 부르지 않는다 — 추가·삭제가 독립적이어야 한다.
+
+# 실행 순서. 앞의 것이 뒤의 전제가 되는 경우만 순서에 의미가 있다:
+#   shellcommands 가 먼저여야 hotkeys 가 셸커맨드 id 를 찾을 수 있다.
+#   templates 가 먼저여야 templater 가 존재하는 템플릿만 매핑한다.
+DT_MERGERS="shellcommands automove templates templater hotkeys app snippets linter smartenv"
 
 obsidian_apply() {
   require_config
-  require_bins jq
+  require_bins jq python3
 
   local vault; vault="$(vault_path)"
   [ -d "$vault" ] || die "볼트 없음: $vault"
@@ -20,405 +32,16 @@ obsidian_apply() {
    Obsidian에서 이 볼트를 한 번 연 뒤 다시 실행하세요."
   fi
 
-  _ob_shellcommands "$dot"
-  _ob_automove "$dot"
-  _ob_note_templates
-  _ob_templater "$dot"
-  _ob_hotkeys "$dot"
-  _ob_app "$dot"
-  _ob_snippets "$dot"
-  _ob_linter "$dot"
-  _ob_smartenv
+  local m
+  for m in $DT_MERGERS; do
+    local f="$DEVTRAIL_ROOT/lib/merge/$m.sh"
+    [ -f "$f" ] || { warn "병합기 없음 — 건너뜀: $m"; continue; }
+    # shellcheck disable=SC1090
+    . "$f"
+    "_ob_$m" "$dot"
+  done
+
   _ob_advice "$dot"
-}
-
-# ── 셸 커맨드 병합 ───────────────────────────────────────────────────────────
-_ob_shellcommands() {
-  local dot="$1"
-  local data="$dot/plugins/obsidian-shellcommands/data.json"
-  local src="$DEVTRAIL_ROOT/templates/obsidian/shellcommands.json"
-
-  step "Shell commands"
-
-  if [ ! -f "$data" ]; then
-    _d_note "Shell commands 플러그인이 설치/활성화되지 않았습니다."
-    dim "     설치 후 Obsidian을 재시작하고 다시 실행하세요."
-    dim "     경로: $data"
-    return 0
-  fi
-  [ -f "$src" ] || { warn "템플릿 없음: $src"; return 0; }
-
-  # {{DEVTRAIL_HOME}} 치환
-  local rendered; rendered=$(mktemp)
-  sed "s|{{DEVTRAIL_HOME}}|$DEVTRAIL_HOME|g" "$src" > "$rendered"
-
-  if ! jq -e . "$rendered" >/dev/null 2>&1; then
-    rm -f "$rendered"; die "셸 커맨드 템플릿이 유효한 JSON이 아닙니다"
-  fi
-
-  # 백업 실패를 확인하지 않으면, 백업 없이 원본을 교체하고도
-  # 사용자에게는 "백업했다"고 말하게 된다. README의 안전 계약이 거짓이 된다.
-  local backup="$data.bak.$(date +%Y%m%d%H%M%S)"
-  cp "$data" "$backup" || { rm -f "$rendered"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
-
-  local merged; merged=$(mktemp)
-  # 같은 id는 교체, 없는 id는 뒤에 추가. 기존 커맨드의 순서는 그대로 둔다.
-  if ! jq --slurpfile new "$rendered" '
-      ($new[0] | map({key: .id, value: .}) | from_entries) as $byid
-      | (.shell_commands // [])                as $old
-      | ($old | map(.id))                      as $oldids
-      | .shell_commands =
-          ($old | map($byid[.id] // .))
-          + ($new[0] | map(select(.id as $i | ($oldids | index($i)) == null)))
-    ' "$data" > "$merged" 2>/dev/null; then
-    rm -f "$rendered" "$merged"
-    die "병합 실패 — 원본은 그대로입니다: $data"
-  fi
-
-  if ! jq -e '.shell_commands | length > 0' "$merged" >/dev/null 2>&1; then
-    rm -f "$rendered" "$merged"
-    die "병합 결과가 비정상입니다 — 원본 유지: $data"
-  fi
-
-  mv "$merged" "$data"
-  rm -f "$rendered"
-
-  local n; n=$(jq '.shell_commands | length' "$data")
-  ok "셸 커맨드 병합 완료 (전체 ${n}개)"
-  dim "     백업: $backup"
-}
-
-# ── 태그 → 폴더 라우팅 ───────────────────────────────────────────────────────
-#
-# ⚠️ 기존 볼트에서 이걸 Automatic 으로 켜면, 사용자가 기존 노트를 열어 저장하는
-#    순간 태그에 따라 폴더가 바뀐다. 데이터가 사라지진 않지만 "내 노트가 어디
-#    갔지"가 되는, 신뢰를 한 번에 잃는 종류다.
-#    프로파일이 기존 모드에서 Manual 을 쓰는 이유이고, 우리가 만들지 않은
-#    폴더를 전부 제외 목록에 넣는 이유다.
-_ob_automove() {
-  local dot="$1"
-  local data="$dot/plugins/auto-note-mover/data.json"
-  local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
-
-  step "노트 라우팅 (Auto Note Mover)"
-  [ -f "$profile" ] || { warn "프로파일 없음: $profile"; return 0; }
-
-  if [ ! -d "$(dirname "$data")" ]; then
-    _d_note "Auto Note Mover 플러그인이 설치/활성화되지 않았습니다."
-    dim "     설치 후 Obsidian을 재시작하고 다시 실행하세요."
-    return 0
-  fi
-
-  local out; out=$(mktemp)
-  DT_FOREIGN_FOLDERS="$(_ob_foreign_folders)" \
-  python3 "$DEVTRAIL_ROOT/lib/anm.py" \
-    "$DEVTRAIL_ROOT/preset/tree.json" "$CONFIG_FILE" "$profile" \
-    "$([ -f "$data" ] && printf '%s' "$data")" > "$out" || {
-      rm -f "$out"; warn "규칙 생성 실패 — 건드리지 않습니다"; return 0; }
-
-  jq -e '.folder_tag_pattern | length > 0' "$out" >/dev/null 2>&1 || {
-    rm -f "$out"; warn "생성된 규칙이 비어 있습니다 — 원본 유지"; return 0; }
-
-  if [ -f "$data" ]; then
-    local backup="$data.bak.$(date +%Y%m%d%H%M%S)"
-    cp "$data" "$backup" || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
-    dim "     백업: $backup"
-  fi
-  mv "$out" "$data"
-
-  local n trig
-  n=$(jq '.folder_tag_pattern | length' "$data")
-  trig=$(jq -r '.trigger_auto_manual' "$data")
-  ok "규칙 ${n}개 · 트리거 ${trig}"
-  [ "$trig" = "Manual" ] && \
-    dim "     기존 노트를 지키려고 수동으로 시작합니다. 익숙해지면 플러그인 설정에서 Automatic 으로 바꾸세요."
-}
-
-# 볼트 최상위에서 우리가 만들지 않은 폴더들. 기존 모드의 제외 목록이 된다.
-_ob_foreign_folders() {
-  local vault root ours
-  vault="$(vault_path)"; root="$(cfg '.vault.root')"
-  ours=$(jq -r '.folders[].path | split("/")[0]' "$DEVTRAIL_ROOT/preset/tree.json" | sort -u)
-  find "$vault" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | while read -r d; do
-    local b; b=$(basename "$d")
-    case "$b" in .*) continue ;; esac
-    [ -n "$root" ] && [ "$b" = "$root" ] && continue
-    printf '%s\n' "$ours" | grep -qxF "$b" && continue
-    printf '%s\n' "$b"
-  done
-}
-
-# ── 노트 템플릿 ──────────────────────────────────────────────────────────────
-#
-# 없을 때만 만든다. 사용자가 고친 템플릿을 덮어쓰지 않는다.
-#
-# 템플릿에는 경로가 한 글자도 없다 — 실행 시점에 _devtrail-paths.md 를
-# 파일명으로 찾아 읽는다. 그래서 여기서는 치환 없이 그대로 복사한다.
-_ob_note_templates() {
-  step "노트 템플릿"
-  local dest; dest="$(vault_root)/$(dt_dir templates)"
-  local src="$DEVTRAIL_ROOT/preset/templates"
-  [ -d "$src" ] || { warn "템플릿 없음: $src"; return 0; }
-
-  mkdir -p "$dest"
-  local n=0 skipped=0 f name
-  for f in "$src"/*.md; do
-    [ -e "$f" ] || continue
-    name=$(basename "$f")
-    if [ -f "$dest/$name" ]; then
-      skipped=$((skipped + 1)); continue
-    fi
-    cp "$f" "$dest/$name" || { warn "복사 실패: $name"; continue; }
-    n=$((n + 1))
-  done
-  ok "템플릿 ${n}개 설치 (기존 유지 ${skipped}개) → $(dt_dir templates)"
-
-  local sections
-  sections=$(jq -r '(.github.project_groups // {}) | [.[]] | unique | .[]' "$CONFIG_FILE" 2>/dev/null)
-  if [ -n "$sections" ]; then
-    dim "     PR 요약 섹션: $(printf '%s' "$sections" | tr '\n' ' ')"
-    dim "     개발일지를 만들 때 선택창에서 고르면 #### 소제목이 생깁니다."
-  else
-    warn "     project_groups 가 비어 있어 PR 요약이 넣을 자리를 못 찾습니다"
-    dim "     devtrail init 을 다시 돌리거나 설정의 github.project_groups 를 채우세요."
-  fi
-}
-
-# ── Templater 폴더매핑 · 데일리노트 ─────────────────────────────────────────
-#
-# 이 둘이 있어야 "노트를 만들면 양식이 채워진다"가 성립한다.
-# trigger_on_file_creation 이 꺼져 있으면 아무 일도 일어나지 않는다.
-_ob_templater() {
-  local dot="$1"
-  local data="$dot/plugins/templater-obsidian/data.json"
-  local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
-  local paths; paths=$(_ob_paths_json)
-
-  step "Templater 폴더 매핑"
-  if [ ! -d "$(dirname "$data")" ]; then
-    _d_note "Templater 플러그인이 설치/활성화되지 않았습니다."
-    dim "     이게 없으면 노트를 만들어도 양식이 채워지지 않습니다."
-    return 0
-  fi
-
-  local out; out=$(mktemp)
-  if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates" \
-     python3 "$DEVTRAIL_ROOT/lib/hotkeys.py" templater \
-      "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
-      "$([ -f "$data" ] && printf '%s' "$data")" > "$out"; then
-    [ -f "$data" ] && cp "$data" "$data.bak.$(date +%Y%m%d%H%M%S)"
-    mv "$out" "$data"
-    ok "매핑 $(jq '.folder_templates|length' "$data")개 · 새 파일 생성 시 자동 삽입 켬"
-  else
-    rm -f "$out"; warn "매핑 생성 실패 — 건드리지 않습니다"
-  fi
-
-  # 데일리노트: 프로파일이 허용할 때만
-  local dn="$dot/daily-notes.json"
-  local allow; allow=$(jq -r '.merge.daily_notes // false' "$profile" 2>/dev/null)
-  if [ "$allow" = "false" ]; then
-    dim "     데일리노트 설정은 이 모드에서 건드리지 않습니다"
-    return 0
-  fi
-  if [ "$allow" = "confirm" ] && [ -f "$dn" ]; then
-    dim "     기존 데일리노트 설정이 있습니다 — 유지합니다"
-    dim "     바꾸려면 설정 → 데일리 노트 → 폴더: $(vault_rel "$(dt_dir devlog)")"
-    return 0
-  fi
-  local out2; out2=$(mktemp)
-  if python3 "$DEVTRAIL_ROOT/lib/hotkeys.py" daily \
-      "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
-      "$([ -f "$dn" ] && printf '%s' "$dn")" > "$out2"; then
-    [ -f "$dn" ] && cp "$dn" "$dn.bak.$(date +%Y%m%d%H%M%S)"
-    mv "$out2" "$dn"
-    ok "데일리노트 → $(jq -r '.folder' "$dn")"
-  else
-    rm -f "$out2"
-  fi
-}
-
-# ── 단축키 ───────────────────────────────────────────────────────────────────
-#
-# ⚠️ Templater 커맨드 ID 안에 볼트 경로가 들어간다. 정적 파일을 복사하면
-#    루트명이 다른 사용자에게서 단축키가 조용히 죽는다. 조립해서 만든다.
-_ob_hotkeys() {
-  local dot="$1" hk="$dot/hotkeys.json"
-  local paths; paths=$(_ob_paths_json)
-
-  step "단축키"
-  local ids; ids=$(mktemp)
-  jq -r '[.[] | {key: .id, value: .id}] | from_entries' \
-    "$DEVTRAIL_ROOT/templates/obsidian/shellcommands.json" > "$ids" 2>/dev/null || echo '{}' > "$ids"
-
-  local out; out=$(mktemp)
-  if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates" \
-     python3 "$DEVTRAIL_ROOT/lib/hotkeys.py" hotkeys \
-      "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
-      "$([ -f "$hk" ] && printf '%s' "$hk")" "$ids" > "$out"; then
-    [ -f "$hk" ] && cp "$hk" "$hk.bak.$(date +%Y%m%d%H%M%S)"
-    mv "$out" "$hk"
-    ok "단축키 $(jq 'length' "$hk")개 등록"
-    dim "     Obsidian 을 재시작해야 적용됩니다"
-  else
-    rm -f "$out"; warn "단축키 생성 실패 — 건드리지 않습니다"
-  fi
-  rm -f "$ids"
-}
-
-# 경로 맵을 임시 JSON 으로 낸다 (파이썬 쪽 입력용)
-_ob_paths_json() {
-  local f; f=$(mktemp)
-  . "$DEVTRAIL_ROOT/lib/pathcmd.sh"
-  path_cmd --json > "$f" 2>/dev/null \
-    && jq -n --slurpfile p "$f" '{paths: ($p[0] | with_entries(.value = .value.rel))}' > "$f.2" \
-    && mv "$f.2" "$f"
-  printf '%s' "$f"
-}
-
-# ── 에디터 설정 ──────────────────────────────────────────────────────────────
-#
-# ⚠️ alwaysUpdateLinks 가 핵심이다. Auto Note Mover 가 노트를 '이동'시키는데
-#    이 옵션이 꺼져 있으면 옮길 때마다 링크가 조용히 끊긴다.
-#    자동 이동과 이 옵션은 반드시 세트다.
-#
-# 기존 모드에서는 프로파일의 app_safe_keys 에 든 것만 넣는다 —
-# 나머지는 사용자의 편집 습관이라 건드리면 안 된다.
-_ob_app() {
-  local dot="$1" app="$dot/app.json"
-  local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
-  local src="$DEVTRAIL_ROOT/preset/obsidian/app.json"
-
-  step "에디터 설정"
-  local how; how=$(jq -r '.merge.app // "false"' "$profile" 2>/dev/null)
-  [ "$how" = "false" ] && { dim "     이 모드에서는 건드리지 않습니다"; return 0; }
-  [ -f "$src" ] || { warn "프리셋 없음: $src"; return 0; }
-
-  local attach; attach=$(vault_rel "$(dt_dir attach)")
-  local want; want=$(mktemp)
-  jq --arg a "$attach" 'del(._comment) | .attachmentFolderPath = $a' "$src" > "$want"
-
-  # 기존 모드는 안전 키만
-  if [ "$how" = "safe_keys_only" ]; then
-    local keys; keys=$(jq -c '.app_safe_keys // []' "$profile")
-    jq --argjson k "$keys" 'with_entries(select(.key as $x | $k | index($x)))' "$want" > "$want.f" \
-      && mv "$want.f" "$want"
-  fi
-
-  local out; out=$(mktemp)
-  jq -s '.[0] * .[1]' "$([ -f "$app" ] && printf '%s' "$app" || echo /dev/null)" "$want" > "$out" 2>/dev/null \
-    || jq '.' "$want" > "$out"
-
-  [ -f "$app" ] && cp "$app" "$app.bak.$(date +%Y%m%d%H%M%S)"
-  mv "$out" "$app"; rm -f "$want"
-
-  ok "$(jq -r 'keys | length' "$app")개 키 · alwaysUpdateLinks=$(jq -r '.alwaysUpdateLinks' "$app")"
-  [ "$(jq -r '.alwaysUpdateLinks' "$app")" = "true" ] \
-    || warn "     alwaysUpdateLinks 가 꺼져 있습니다 — 노트를 옮기면 링크가 끊깁니다"
-}
-
-# ── CSS 스니펫 ───────────────────────────────────────────────────────────────
-#
-# 파일만 넣으면 아무 일도 안 일어난다. appearance.json 의 enabledCssSnippets 에
-# 등록해야 적용된다. 원본 볼트는 등록만 하고 파일이 없는 항목이 있었다.
-_ob_snippets() {
-  local dot="$1" dir="$dot/snippets" app="$dot/appearance.json"
-  local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
-  local src="$DEVTRAIL_ROOT/preset/obsidian/snippets"
-
-  step "CSS 스니펫"
-  [ "$(jq -r '.merge.snippets // false' "$profile" 2>/dev/null)" = "true" ] \
-    || { dim "     이 모드에서는 건드리지 않습니다"; return 0; }
-  [ -d "$src" ] || { warn "프리셋 없음: $src"; return 0; }
-
-  mkdir -p "$dir"
-  local n=0 f name
-  for f in "$src"/*.css; do
-    [ -e "$f" ] || continue
-    name=$(basename "$f" .css)
-    cp "$f" "$dir/$name.css" && n=$((n + 1))
-  done
-
-  # 활성화 등록 — 이게 없으면 파일만 있고 적용은 안 된다
-  local out; out=$(mktemp)
-  jq --arg n "devtrail" '
-    .enabledCssSnippets = ((.enabledCssSnippets // []) + [$n] | unique)
-  ' "$([ -f "$app" ] && printf '%s' "$app" || echo /dev/null)" > "$out" 2>/dev/null \
-    || printf '{"enabledCssSnippets":["devtrail"]}' > "$out"
-
-  [ -f "$app" ] && cp "$app" "$app.bak.$(date +%Y%m%d%H%M%S)"
-  mv "$out" "$app"
-  ok "스니펫 ${n}개 설치 · 활성화 등록"
-}
-
-# ── Linter ───────────────────────────────────────────────────────────────────
-_ob_linter() {
-  local dot="$1" data="$dot/plugins/obsidian-linter/data.json"
-  local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
-  local src="$DEVTRAIL_ROOT/preset/obsidian/linter.json"
-
-  step "Linter (frontmatter 규약)"
-  if [ "$(jq -r '.merge.linter // false' "$profile" 2>/dev/null)" != "true" ]; then
-    dim "     기존 서식을 지키려고 건드리지 않습니다"
-    dim "     직접 켜려면: 설정 → Linter → Lint on save"
-    return 0
-  fi
-  if [ ! -d "$(dirname "$data")" ]; then
-    _d_note "Linter 플러그인이 설치되지 않았습니다 (권장)."
-    dim "     없으면 frontmatter 의 updated 가 자동 갱신되지 않습니다."
-    return 0
-  fi
-  [ -f "$src" ] || { warn "프리셋 없음: $src"; return 0; }
-
-  local out; out=$(mktemp)
-  jq -s '.[0] * (.[1] | del(._comment))' \
-    "$([ -f "$data" ] && printf '%s' "$data" || echo /dev/null)" "$src" > "$out" 2>/dev/null \
-    || jq 'del(._comment)' "$src" > "$out"
-
-  [ -f "$data" ] && cp "$data" "$data.bak.$(date +%Y%m%d%H%M%S)"
-  mv "$out" "$data"
-  ok "저장 시 정리 켬 · updated 자동 갱신"
-}
-
-# ── RAG 제외 설정 ────────────────────────────────────────────────────────────
-#
-# 인덱스는 넓히는 게 아니라 좁히는 것이 품질을 만든다.
-# 헤딩 제외는 템플릿에서 생성한다 — 손으로 관리하면 반드시 샌다.
-_ob_smartenv() {
-  local se; se="$(vault_path)/.smart-env"
-  local data="$se/smart_env.json"
-  local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
-
-  step "RAG 제외 설정"
-  if [ "$(jq -r '.merge.smart_env // false' "$profile" 2>/dev/null)" != "true" ]; then
-    dim "     이 모드에서는 건드리지 않습니다"; return 0
-  fi
-  if [ ! -d "$se" ]; then
-    _d_note "Smart Connections 가 설치/활성화되지 않았습니다 (선택 기능)."
-    dim "     설치하면 볼트 전체에 로컬 임베딩 검색이 생깁니다."
-    return 0
-  fi
-
-  local out; out=$(mktemp)
-  DT_FOREIGN_FOLDERS="$(_ob_foreign_folders)" \
-  python3 "$DEVTRAIL_ROOT/lib/smartenv.py" \
-    "$DEVTRAIL_ROOT/preset/tree.json" "$CONFIG_FILE" \
-    "$(vault_root)/$(dt_dir templates)" \
-    "$([ -f "$data" ] && printf '%s' "$data")" > "$out" || {
-      rm -f "$out"; warn "제외 설정 생성 실패 — 건드리지 않습니다"; return 0; }
-
-  if [ -f "$data" ]; then
-    cp "$data" "$data.bak.$(date +%Y%m%d%H%M%S)" \
-      || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
-  fi
-  mv "$out" "$data"
-  ok "폴더 $(jq -r '.smart_sources.folder_exclusions | split(",") | length' "$data")개 · 헤딩 $(jq -r '.smart_sources.excluded_headings | split(",") | length' "$data")개 제외"
-  dim "     헤딩 제외는 템플릿의 Dataview 블록에서 생성됩니다 — 쿼리를 추가하면 따라옵니다."
 }
 
 # ── 나머지는 안내만 ──────────────────────────────────────────────────────────
@@ -429,9 +52,8 @@ _ob_advice() {
   echo
   info "  1) Daily notes"
   dim "     폴더: $(vault_rel "$(dt_dir devlog)")"
-  dim "     템플릿: $(vault_rel "$(dt_dir templates)")/devlog.md"
+  dim "     템플릿: $(vault_rel "$(dt_dir templates)")/개발일지양식.md"
   info "  2) Templater → Folder templates"
-  dim "     '$(dt_dir devlog)' 폴더에 devlog 템플릿 매핑"
   dim "     'Trigger Templater on new file creation' 을 켜야 자동 삽입이 동작합니다"
   info "  3) 단축키 (선택)"
   dim "     설정 → 단축키에서 'DevTrail'로 검색해 원하는 키를 지정"

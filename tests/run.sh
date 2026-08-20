@@ -37,7 +37,8 @@ run() {
 # ── 정적 검사 ────────────────────────────────────────────────────────────────
 check_shell() {
   bash -n bin/devtrail install.sh || return 1
-  for f in lib/*.sh tests/*.sh tests/lib/*.sh templates/scripts/*.tmpl; do
+  for f in lib/*.sh lib/merge/*.sh lib/init/*.sh \
+           tests/*.sh tests/lib/*.sh templates/scripts/*.tmpl; do
     [ -e "$f" ] || continue
     bash -n "$f" || return 1
   done
@@ -45,7 +46,7 @@ check_shell() {
 }
 
 check_python() {
-  python3 -m py_compile lib/*.py templates/dashboard/server.py || return 1
+  python3 -m py_compile lib/gen/*.py templates/dashboard/server.py || return 1
   echo "  파이썬 OK"
 }
 
@@ -63,11 +64,16 @@ check_json() {
 #
 # 둘 다 실제로 사고가 났던 것이다. 문법 검사로는 안 잡힌다.
 check_bash32() {
-  # macOS 기본 bash 3.2 는 한글의 첫 바이트를 변수명에 흡수한다.
-  # "$n개" → n<0xEA>: unbound variable 로 죽는다. "${n}개" 로 써야 한다.
+  # macOS 기본 bash 3.2 는 한글의 첫 바이트를 변수명에 흡수해
+  # "unbound variable" 로 죽는다. 중괄호로 감싸야 한다.
+  #
+  # 검사 대상에서 이 파일과 규약 문서를 뺀다 — 나쁜 예시를 드는 것은 정상이다.
+  # scan-secrets.sh 도 같은 이유로 자신을 제외한다.
   local hits
   hits=$(git grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[가-힣]' \
-         -- '*.sh' 'bin/devtrail' 'install.sh' 2>/dev/null | grep -v '^\s*#' | grep -v ':#')
+         -- '*.sh' 'bin/devtrail' 'install.sh' 2>/dev/null \
+         | grep -v '^tests/run\.sh:' | grep -v '^tests/lib/harness\.sh:' \
+         | grep -vE ':[0-9]+:[[:space:]]*#')
   if [ -n "$hits" ]; then
     printf '%s\n' "$hits" | sed 's/^/  /'
     echo "  → 한글 앞 변수는 중괄호로: \"\${n}개\""
@@ -90,7 +96,7 @@ check_no_hardcoded_paths() {
 check_file_size() {
   # 400줄을 넘으면 분리를 검토한다. 600줄은 실패다.
   local over="" f n
-  for f in lib/*.sh lib/*.py bin/devtrail; do
+  for f in lib/*.sh lib/merge/*.sh lib/init/*.sh lib/gen/*.py bin/devtrail; do
     [ -e "$f" ] || continue
     n=$(wc -l < "$f" | tr -d ' ')
     if [ "$n" -gt 600 ]; then
