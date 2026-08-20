@@ -140,15 +140,20 @@ _aug_modules() {
 #    개발/개발일지 를 새로 만들어 평행 구조를 만든다(실제로 그렇게 동작했다).
 _aug_folders() {
   local modules="$1" key rel hub
+  # ⚠️ 언어를 여기서도 봐야 한다. tree.json 의 .path 만 읽으면 영어 사용자에게
+  #    한국어 폴더와 영어 폴더가 '둘 다' 생긴다 — 실제로 그랬다.
+  #    경로 규칙은 dt_dir 과 같아야 한다: path_en 이 있으면 그것, 없으면 path.
+  local en; en=$([ "$(dt_lang)" = en ] && echo true || echo false)
   printf '%s\n' "$modules" | jq -R -s 'split("\n") | map(select(length>0))' \
-    | jq -r --slurpfile t "$DT_TREE" '
+    | jq -r --slurpfile t "$DT_TREE" --argjson en "$en" '
+      def pick: if $en then (.path_en // .path) else .path end;
       . as $mods
       | $t[0].folders[]
       | select(.module as $m | $mods | index($m))
       | . as $p
-      | ([$p.key, $p.path, (($p.hub // false) | tostring)] | @tsv),
+      | ([$p.key, ($p | pick), (($p.hub // false) | tostring)] | @tsv),
         (($p.children // [])[]
-         | [.key, ($p.path + "/" + .path), ((.hub // false) | tostring)] | @tsv)
+         | [.key, (($p | pick) + "/" + (. | pick)), ((.hub // false) | tostring)] | @tsv)
     ' | while IFS=$'\t' read -r key rel hub; do
         local mapped; mapped=$(cfg ".dirs[\"$key\"]" '')
         printf '%s\t%s\t%s\n' "$key" "${mapped:-$rel}" "$hub"

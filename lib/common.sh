@@ -105,10 +105,17 @@ dt_dir() {
   [ -n "$v" ] && { printf '%s' "$v"; return 0; }
   tree="${DEVTRAIL_TREE:-$DEVTRAIL_ROOT/preset/tree.json}"
   [ -f "$tree" ] || return 0
-  jq -r --arg k "$key" '
+  # 언어에 따라 path 또는 path_en 을 고른다.
+  #
+  # ⚠️ key 는 언어와 무관하다. 라우팅·허브·스킬이 전부 key 로 동작하므로
+  #    사용자가 언어를 바꿔도 자동 분류가 깨지지 않는다.
+  # ⚠️ path_en 이 없으면 path 로 떨어진다 — 이미 영어인 폴더(Frontend 등)는
+  #    번역을 두지 않았다.
+  jq -r --arg k "$key" --argjson en "$([ "$(dt_lang)" = en ] && echo true || echo false)" '
+    def pick: if $en then (.path_en // .path) else .path end;
     [ .folders[] | . as $p
-      | ({key: $p.key, path: $p.path}),
-        (($p.children // [])[] | {key: .key, path: ($p.path + "/" + .path)}) ]
+      | ({key: $p.key, path: ($p | pick)}),
+        (($p.children // [])[] | {key: .key, path: (($p | pick) + "/" + (. | pick))}) ]
     | map(select(.key == $k)) | (.[0].path // empty)
   ' "$tree" 2>/dev/null
 }
@@ -150,6 +157,10 @@ confirm() {
   read -r -p "$prompt [y/N] " reply
   [[ "$reply" =~ ^[Yy]$ ]]
 }
+
+# 언어. dt_dir 이 dt_lang 을 쓰므로 저널보다 먼저 읽는다.
+# shellcheck source=lib/i18n.sh
+. "$DEVTRAIL_ROOT/lib/i18n.sh"
 
 # 변경 저널. 모든 명령이 쓸 수 있어야 하므로 여기서 읽어들인다.
 # common.sh 의 die/warn/dim/vault_path 를 쓰므로 반드시 파일 끝에서 부른다.

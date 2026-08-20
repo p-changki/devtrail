@@ -17,6 +17,9 @@
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from i18n import t as T  # noqa: E402
+
 FULL, MIXED, FALLBACK = "full", "mixed", "fallback"
 STALE_DAYS = 90
 THIN_BYTES = 500
@@ -31,12 +34,12 @@ def tier(pct):
 
 
 def block_recent(src):
-    return f"""## 최근
+    return f"""## {T("hub.recent")}
 
 ```dataview
 TABLE WITHOUT ID
-  file.link AS "노트",
-  dateformat(file.mtime, "yyyy-MM-dd") AS "수정"
+  file.link AS "{T("col.note")}",
+  dateformat(file.mtime, "yyyy-MM-dd") AS "{T("col.modified")}"
 FROM "{src}"
 WHERE file.name != "_index"
 SORT file.mtime DESC
@@ -51,19 +54,17 @@ def block_stale(src, pct):
         where = "review_at AND review_at <= date(today)"
         order = "review_at ASC"
     elif t == MIXED:
-        note = (f"> ℹ️ `review_at` 커버리지가 {pct}% 입니다 — "
-                "값이 있는 노트는 예정일로, 없는 노트는 마지막 수정일로 봅니다.\n\n")
+        note = T("hub.mixed_review", pct=pct) + T("hub.mixed_note")
         where = (f'(review_at AND review_at <= date(today))\n'
                  f'  OR (!review_at AND file.mtime <= date(today) - dur({STALE_DAYS} days))')
         order = "file.mtime ASC"
     else:
-        note = (f"> ℹ️ 이 볼트는 `review_at` 을 거의 쓰지 않아 (커버리지 {pct}%) "
-                f"**마지막 수정일로 근사**합니다.\n"
-                "> 정확하게 하려면: `devtrail align --field review_at`\n\n")
+        note = (T("hub.low_review", pct=pct) + T("hub.approx_mtime")
+                + T("hub.align_hint"))
         where = f"file.mtime <= date(today) - dur({STALE_DAYS} days)"
         order = "file.mtime ASC"
 
-    return f"""## 재방문할 때가 됐다
+    return f"""## {T("hub.due")}
 
 {note}```dataview
 LIST
@@ -81,17 +82,16 @@ def block_unfinished(src, pct):
         note = ""
         where = 'status = "draft"'
     elif t == MIXED:
-        note = f"> ℹ️ `status` 커버리지가 {pct}% 입니다 — 분량이 적은 노트도 함께 봅니다.\n\n"
+        note = T("hub.mixed_status", pct=pct)
         where = f'status = "draft" OR (!status AND file.size < {THIN_BYTES})'
     else:
-        note = (f"> ℹ️ 이 볼트는 `status` 를 거의 쓰지 않아 (커버리지 {pct}%) "
-                "**분량이 적은 노트로 근사**합니다.\n\n")
+        note = T("hub.low_status", pct=pct) + T("hub.approx_short")
         where = f"file.size < {THIN_BYTES}"
 
-    return f"""## 미완성
+    return f"""## {T("hub.unfinished")}
 
 {note}```dataview
-TABLE WITHOUT ID file.link AS "노트", file.size AS "크기"
+TABLE WITHOUT ID file.link AS "{T("col.note")}", file.size AS "{T("col.size")}"
 FROM "{src}"
 WHERE file.name != "_index" AND ({where})
 SORT file.size ASC
@@ -100,7 +100,7 @@ LIMIT 10
 
 
 def block_orphan(src):
-    return f"""## 연결이 없다
+    return f"""## {T("hub.orphans")}
 
 ```dataview
 LIST
@@ -114,11 +114,11 @@ LIMIT 10
 
 def main():
     src = os.environ.get("DT_HUB_FROM", "")
-    title = os.environ.get("DT_HUB_TITLE", "폴더")
+    title = os.environ.get("DT_HUB_TITLE", T("col.folder"))
     key = os.environ.get("DT_HUB_KEY", "")
     date = os.environ.get("DT_HUB_DATE", "")
     if not src:
-        print("DT_HUB_FROM 이 필요합니다", file=sys.stderr)
+        print(T("err.need_from"), file=sys.stderr)
         return 2
 
     def pct(name):
@@ -143,7 +143,7 @@ def main():
         "",
         f"# {title}",
         "",
-        "> 이 폴더만 봅니다. DevTrail 이 만들었고 `devtrail augment --refresh-hubs` 로 갱신됩니다.",
+        T("hub.scope"),
         "",
         block_recent(src),
         "",

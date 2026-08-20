@@ -63,7 +63,11 @@ _ob_automove() {
 _ob_foreign_folders() {
   local vault root ours
   vault="$(vault_path)"; root="$(cfg '.vault.root')"
-  ours=$(jq -r '.folders[].path | split("/")[0]' "$DEVTRAIL_ROOT/preset/tree.json" | sort -u)
+  # ⚠️ 언어를 봐야 한다. 영어 볼트에서 한국어 최상위 이름을 '우리 것'으로
+  #    보면, 정작 사용자의 Dev/ 를 남의 폴더로 취급해 규칙에서 빼버린다.
+  ours=$(jq -r --argjson en "$([ "$(dt_lang)" = en ] && echo true || echo false)" '
+    .folders[] | (if $en then (.path_en // .path) else .path end) | split("/")[0]
+  ' "$DEVTRAIL_ROOT/preset/tree.json" | sort -u)
   find "$vault" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | while read -r d; do
     local b; b=$(basename "$d")
     case "$b" in .*) continue ;; esac

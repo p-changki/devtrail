@@ -48,18 +48,6 @@ path_cmd() {
   esac
 }
 
-# 트리에서 key → 볼트루트 기준 상대경로. 부모 경로를 이어붙인다.
-_path_tree_rel() {
-  jq -r --arg k "$1" '
-    [ .folders[]
-      | . as $p
-      | ({key: $p.key, path: $p.path}),
-        (($p.children // [])[] | {key: .key, path: ($p.path + "/" + .path)})
-    ]
-    | map(select(.key == $k)) | (.[0].path // empty)
-  ' "$DT_TREE"
-}
-
 # 해석은 common.sh 의 dt_dir 한 곳에만 둔다 — 두 벌이면 반드시 갈라진다.
 _path_rel() { dt_dir "$1"; }
 
