@@ -68,6 +68,7 @@ EOF
   [ "$apply" = 1 ] && _aug_paths_note
   [ "$apply" = 1 ] && _aug_l1_hubs
   [ "$apply" = 1 ] && _aug_guides
+  [ "$apply" = 1 ] && printf '%s\n' "$modules" | grep -qx learn && _aug_learn
 
   echo
   if [ "$apply" = 1 ]; then
@@ -175,6 +176,30 @@ EOF
     printf '  "categories": %s\n}' \
       "$(jq -c '[.folders[] | select(.key=="devnote") | (.children // [])[] | {key: (.key|split(".")[1]), path: .path, tag: .tag}]' "$DT_TREE")"
   }
+}
+
+# ── 학습 시스템 골격 ─────────────────────────────────────────────────────────
+#
+# 내용이 아니라 운영 체계를 배포한다 — PROGRESS(진도) · SUBJECTS(순서) ·
+# WEEKLY-REVIEW(회고) · milestone(스스로 시험).
+# 커리큘럼은 사람마다 달라서 빈 골격만 준다. 76일을 실제로 굴려본 구조다.
+_aug_learn() {
+  local src="$DEVTRAIL_ROOT/preset/learn"
+  local dest; dest="$(vault_root)/$(dt_dir study)"
+  [ -d "$src" ] || return 0
+  mkdir -p "$dest"
+
+  local rel; rel=$(vault_rel "$(dt_dir study)")
+  local n=0 f name
+  for f in "$src"/*.md; do
+    [ -e "$f" ] || continue
+    name=$(basename "$f")
+    [ -f "$dest/$name" ] && continue
+    # {{PATH}} 는 Dataview FROM 에 들어간다 — 경로를 박지 않기 위한 치환이다.
+    sed "s|{{PATH}}|$rel|g" "$f" > "$dest/$name" && n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] && ok "학습 골격 ${n}개  $(dt_dir study)/"
+  return 0
 }
 
 # ── 입문 가이드 ──────────────────────────────────────────────────────────────
