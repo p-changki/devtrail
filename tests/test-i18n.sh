@@ -14,6 +14,19 @@ ROOT="$PWD"
 T_TMP=$(mktemp -d)
 trap 'rm -rf "$T_TMP"' EXIT
 DT="$ROOT/bin/devtrail"
+
+# ⚠️ 이 파일은 grep '[가-힣]' 로 한글을 센다. 그 문자 범위는 로케일의 대조
+#    순서에 의존해서, C 로케일의 GNU grep 은 "Invalid collation character"
+#    로 거부한다(BSD grep 은 통과시킨다).
+#
+#    CI 의 동작 잡은 macOS 라 문제가 없지만, Linux 에서 전체를 돌리는
+#    기여자는 원인을 알 수 없는 실패를 만난다. 먼저 확인하고 알려준다.
+if ! printf '%s\n' '한글' | grep -q '[가-힣]' 2>/dev/null; then
+  echo "❌ 이 환경의 grep 이 [가-힣] 범위를 쓰지 못합니다 (LC_ALL=${LC_ALL:-unset})"
+  echo "   UTF-8 로케일에서 실행하세요:  LC_ALL=ko_KR.UTF-8 ./tests/test-i18n.sh"
+  echo "   (macOS 는 영향 없음 — CI 의 동작 잡도 macOS 입니다)"
+  exit 1
+fi
 unset DEVTRAIL_LANG DEVTRAIL_JOURNAL
 
 # ── 로케일에서 제안값 ────────────────────────────────────────────────────────

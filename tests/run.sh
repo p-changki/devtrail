@@ -83,39 +83,6 @@ check_json() {
 # ── 이 프로젝트 고유의 함정 ──────────────────────────────────────────────────
 #
 # 둘 다 실제로 사고가 났던 것이다. 문법 검사로는 안 잡힌다.
-check_bash32() {
-  # macOS 기본 bash 3.2 는 한글의 첫 바이트를 변수명에 흡수해
-  # "unbound variable" 로 죽는다. 중괄호로 감싸야 한다.
-  #
-  # ⚠️ 먼저 정규식 자체가 동작하는지 확인한다.
-  #    [가-힣] 범위는 로케일을 탄다. C 로케일의 ubuntu 러너에서 이 범위가
-  #    아무것도 못 맞추면 검사는 '통과'로 보이지만 실제로는 아무것도
-  #    안 본 것이다 — 거짓 초록불이 가장 위험하다.
-  if ! printf '%s\n' 'echo "$n개"' | grep -qE '\$[A-Za-z_][A-Za-z0-9_]*[가-힣]'; then
-    echo "  ❌ 한글 정규식이 동작하지 않습니다 (로케일 문제)"
-    echo "     LANG=${LANG:-unset} LC_ALL=${LC_ALL:-unset}"
-    echo "     이대로면 검사가 통과해도 아무것도 지키지 못합니다."
-    return 1
-  fi
-  #
-  # ⚠️ --untracked 가 필요하다. git grep 은 기본적으로 추적된 파일만 본다.
-  #    새로 만든 파일이 검사를 통째로 빠져나간다 — 커밋 전에 잡아야 하는데
-  #    커밋 후에야 보이면 이 검사의 의미가 없다. (실증으로 확인했다)
-  #
-  # 검사 대상에서 이 파일과 규약 문서를 뺀다 — 나쁜 예시를 드는 것은 정상이다.
-  # scan-secrets.sh 도 같은 이유로 자신을 제외한다.
-  local hits
-  hits=$(git grep --untracked -nE '\$[A-Za-z_][A-Za-z0-9_]*[가-힣]' \
-         -- '*.sh' 'bin/devtrail' 'install.sh' 2>/dev/null \
-         | grep -v '^tests/run\.sh:' | grep -v '^tests/lib/harness\.sh:' \
-         | grep -vE ':[0-9]+:[[:space:]]*#')
-  if [ -n "$hits" ]; then
-    printf '%s\n' "$hits" | sed 's/^/  /'
-    echo "  → 한글 앞 변수는 중괄호로: \"\${n}개\""
-    return 1
-  fi
-  echo "  bash 3.2 한글 흡수 없음"
-}
 
 check_local_selfref() {
   # bash 3.2 는 local 한 줄의 이름을 '전부 먼저' 지역화한 뒤 대입한다.
@@ -293,7 +260,7 @@ run lint  "파이썬"         check_python
 run lint  "JSON"          check_json
 
 # 이 저장소 고유의 함정 — 문법 검사로는 안 잡힌다
-run guard "bash 3.2"      check_bash32
+run guard "bash 3.2"      python3 ./tests/check-bash32.py
 run guard "local 자기참조"  check_local_selfref
 run guard "L 인자"        python3 ./tests/check-l-arity.py
 run guard "주석 중복"     python3 ./tests/check-dup-comments.py
