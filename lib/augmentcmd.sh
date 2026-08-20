@@ -66,6 +66,8 @@ $(_aug_folders "$modules")
 EOF
 
   [ "$apply" = 1 ] && _aug_paths_note
+  [ "$apply" = 1 ] && _aug_l1_hubs
+  [ "$apply" = 1 ] && _aug_guides
 
   echo
   if [ "$apply" = 1 ]; then
@@ -173,6 +175,47 @@ EOF
     printf '  "categories": %s\n}' \
       "$(jq -c '[.folders[] | select(.key=="devnote") | (.children // [])[] | {key: (.key|split(".")[1]), path: .path, tag: .tag}]' "$DT_TREE")"
   }
+}
+
+# ── 입문 가이드 ──────────────────────────────────────────────────────────────
+# 없을 때만 복사한다. 사용자가 고친 가이드를 덮어쓰지 않는다.
+_aug_guides() {
+  local src="$DEVTRAIL_ROOT/preset/guides"
+  local dest; dest="$(vault_root)/$(dt_dir guides)"
+  [ -d "$src" ] || return 0
+  mkdir -p "$dest"
+  local n=0 f
+  for f in "$src"/*.md; do
+    [ -e "$f" ] || continue
+    [ -f "$dest/$(basename "$f")" ] && continue
+    cp "$f" "$dest/" && n=$((n + 1))
+  done
+  [ "$n" -gt 0 ] && ok "가이드 ${n}개  $(dt_dir guides)/"
+  return 0
+}
+
+# ── L1 대시보드 · 일일 체크인 ────────────────────────────────────────────────
+# 볼트 루트에 둔다. 없을 때만 만든다.
+_aug_l1_hubs() {
+  local out; out=$(mktemp)
+  local paths; paths=$(mktemp)
+  . "$DEVTRAIL_ROOT/lib/pathcmd.sh"
+  path_cmd --json 2>/dev/null | jq '{paths: (. | with_entries(.value = .value.rel))}' > "$paths" 2>/dev/null \
+    || { rm -f "$paths" "$out"; return 0; }
+
+  DT_DATE="$(date +%Y-%m-%d)" \
+  python3 "$DEVTRAIL_ROOT/lib/hubs.py" "$paths" "$CONFIG_FILE" \
+    "${DT_SCAN_CACHE:-/dev/null}" "$(vault_root)" > "$out" 2>/dev/null || {
+      rm -f "$paths" "$out"; warn "L1 허브 생성 실패"; return 0; }
+
+  # grep -c 는 매치가 없으면 exit 1 이라 || echo 0 이 두 값을 이어붙인다.
+  # wc 로 세고 공백을 떼는 편이 안전하다.
+  local n; n=$(grep -c . "$out" 2>/dev/null | head -1 | tr -d ' ')
+  [ -n "$n" ] || n=0
+  if [ "$n" -gt 0 ] 2>/dev/null; then
+    ok "L1 허브 ${n}개  $(tr '\n' ' ' < "$out")"
+  fi
+  rm -f "$paths" "$out"
 }
 
 # ── L3 폴더 허브 ─────────────────────────────────────────────────────────────
