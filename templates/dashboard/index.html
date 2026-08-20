@@ -6,19 +6,54 @@
 <meta name="referrer" content="no-referrer">
 <title>DevTrail</title>
 <style>
+  /* 토큰은 docs/design-tokens.md 가 단일 출처다. 여기서 색을 새로 고르지 않는다.
+     세 블록이 다 필요하다 — 시스템 기본(스탬프 없음) · 명시적 다크 · 명시적 라이트.
+     하나라도 빠지면 한쪽 테마의 글자가 다른 쪽 배경에 얹힌다. */
   :root {
-    --bg: #0f1115; --card: #181b22; --card2: #1f232c;
-    --line: #2a2f3a; --tx: #e6e9ef; --dim: #8b93a3;
-    --ok: #3fb950; --warn: #d29922; --bad: #f85149; --accent: #4d9fff;
-    --r: 11px;
+    --dt-bg:       #f5f8f5;
+    --dt-surface:  #ffffff;
+    --dt-sunken:   #eef3ef;
+    --dt-line:     #dae2dc;
+    --dt-ink:      #16201a;
+    --dt-muted:    #4c584f;
+    --dt-faint:    #68756c;
+    --dt-accent:   #2f6b4f;
+    --dt-success:  #2f6b4f;
+    --dt-warning:  #8d6316;
+    --dt-danger:   #8c3f36;
+    --dt-r: 11px;
   }
-  @media (prefers-color-scheme: light) {
-    :root { --bg:#f5f6f8; --card:#fff; --card2:#f0f2f5; --line:#e2e5ea;
-            --tx:#1a1d23; --dim:#6b7280; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --dt-bg:      #0f1411;
+      --dt-surface: #161d18;
+      --dt-sunken:  #1c2520;
+      --dt-line:    #26312a;
+      --dt-ink:     #e5ece7;
+      --dt-muted:   #a2b0a7;
+      --dt-faint:   #78877e;
+      --dt-accent:  #74c397;
+      --dt-success: #74c397;
+      --dt-warning: #d6a75c;
+      --dt-danger:  #dd8b80;
+    }
+  }
+  :root[data-theme="dark"] {
+    --dt-bg:      #0f1411;
+    --dt-surface: #161d18;
+    --dt-sunken:  #1c2520;
+    --dt-line:    #26312a;
+    --dt-ink:     #e5ece7;
+    --dt-muted:   #a2b0a7;
+    --dt-faint:   #78877e;
+    --dt-accent:  #74c397;
+    --dt-success: #74c397;
+    --dt-warning: #d6a75c;
+    --dt-danger:  #dd8b80;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--bg); color: var(--tx);
+    margin: 0; background: var(--dt-bg); color: var(--dt-ink);
     font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif;
     padding: 16px 14px 28px;
   }
@@ -26,66 +61,66 @@
 
   header { display: flex; align-items: center; gap: 9px; margin-bottom: 3px; }
   h1 { font-size: 16px; margin: 0; letter-spacing: -.3px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
-  .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
-  .dot.warn { background: var(--warn); }
-  .dot.bad { background: var(--bad); }
-  .sub { color: var(--dim); font-size: 11.5px; margin-bottom: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dt-faint); flex: none; }
+  .dot.ok { background: var(--dt-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dt-success) 20%, transparent); }
+  .dot.warn { background: var(--dt-warning); }
+  .dot.bad { background: var(--dt-danger); }
+  .sub { color: var(--dt-faint); font-size: 11.5px; margin-bottom: 12px; }
   .spacer { flex: 1; }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 9px; }
   .card {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: var(--r); padding: 12px 13px; display: flex; flex-direction: column;
+    background: var(--dt-surface); border: 1px solid var(--dt-line);
+    border-radius: var(--dt-r); padding: 12px 13px; display: flex; flex-direction: column;
   }
-  .card h2 { font-size: 11px; font-weight: 600; color: var(--dim);
+  .card h2 { font-size: 11px; font-weight: 600; color: var(--dt-faint);
              margin: 0 0 7px; letter-spacing: .3px; }
   .big { font-size: 23px; font-weight: 650; letter-spacing: -.8px; line-height: 1.05;
          display: inline-block; }
-  .unit { font-size: 11.5px; color: var(--dim); font-weight: 400; margin-left: 3px; }
+  .unit { font-size: 11.5px; color: var(--dt-faint); font-weight: 400; margin-left: 3px; }
   .rows { margin-bottom: 6px; }
-  .meta { color: var(--dim); font-size: 11px; margin-top: auto; padding-top: 7px; }
+  .meta { color: var(--dt-faint); font-size: 11px; margin-top: auto; padding-top: 7px; }
 
   .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   button {
     font: inherit; font-size: 12px; padding: 5px 10px; border-radius: 7px;
-    border: 1px solid var(--line); background: var(--card2); color: var(--tx);
+    border: 1px solid var(--dt-line); background: var(--dt-sunken); color: var(--dt-ink);
     cursor: pointer; transition: .12s;
   }
-  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:hover:not(:disabled) { border-color: var(--dt-accent); color: var(--dt-accent); }
   button:disabled { opacity: .45; cursor: progress; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary { background: var(--dt-accent); border-color: var(--dt-accent); color: #fff; }
   button.primary:hover:not(:disabled) { opacity: .88; color: #fff; }
 
   /* eqMac 스타일 토글 */
   .toggle { display: flex; align-items: center; justify-content: space-between;
-            padding: 5px 0; border-top: 1px solid var(--line); }
+            padding: 5px 0; border-top: 1px solid var(--dt-line); }
   .toggle:first-of-type { border-top: none; }
   .toggle span { font-size: 12px; }
-  .sw { width: 32px; height: 18px; border-radius: 999px; background: var(--line);
+  .sw { width: 32px; height: 18px; border-radius: 999px; background: var(--dt-line);
         border: none; padding: 0; position: relative; cursor: pointer;
         transition: .18s; flex: none; }
   .sw::after { content: ""; position: absolute; top: 2.5px; left: 2.5px;
                width: 13px; height: 13px; border-radius: 50%; background: #fff;
                transition: .18s; }
-  .sw[aria-checked="true"] { background: var(--ok); }
+  .sw[aria-checked="true"] { background: var(--dt-success); }
   .sw[aria-checked="true"]::after { transform: translateX(14px); }
   /* 값을 모르는 상태. 꺼짐과 반드시 달라 보여야 한다. */
   .sw[aria-checked="mixed"] { background: repeating-linear-gradient(
-      -45deg, var(--line) 0 3px, transparent 3px 6px); }
+      -45deg, var(--dt-line) 0 3px, transparent 3px 6px); }
   .sw[aria-checked="mixed"]::after { transform: translateX(7px); opacity: .45; }
   .sw:disabled { cursor: not-allowed; opacity: .8; }
   /* space-between 이라 auto 마진이 없으면 라벨과 스위치 사이에 뜬다 */
-  .unknown { font-size: 10.5px; color: var(--warn);
+  .unknown { font-size: 10.5px; color: var(--dt-warning);
              margin-left: auto; margin-right: 7px; }
   .sw:disabled { opacity: .5; cursor: progress; }
 
-  pre { background: var(--card2); border: 1px solid var(--line); border-radius: 8px;
+  pre { background: var(--dt-sunken); border: 1px solid var(--dt-line); border-radius: 8px;
         padding: 10px; overflow: auto; font-size: 11.5px; line-height: 1.45;
         max-height: 260px; margin: 0; white-space: pre-wrap; }
   .full { grid-column: 1 / -1; }
   #toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
-           background: var(--card); border: 1px solid var(--line); color: var(--tx);
+           background: var(--dt-surface); border: 1px solid var(--dt-line); color: var(--dt-ink);
            padding: 7px 14px; border-radius: 999px; font-size: 12px;
            opacity: 0; transition: .2s; pointer-events: none; }
   #toast.on { opacity: 1; }

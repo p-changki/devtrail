@@ -252,7 +252,7 @@ struct MenuView: View {
             if unknown {
                 Text("값 불명")
                     .font(.system(size: 10))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.dtWarning)
                     .help("설정을 읽지 못했습니다 — devtrail init 또는 doctor 를 확인하세요")
             } else {
                 Toggle("", isOn: isOn)
@@ -287,9 +287,9 @@ struct MenuView: View {
 
     private var healthColor: Color {
         switch status.health {
-        case .ok: return .green
-        case .warn: return .orange
-        case .bad: return .red
+        case .ok: return .dtSuccess
+        case .warn: return .dtWarning
+        case .bad: return .dtDanger
         case .unknown: return .secondary
         }
     }

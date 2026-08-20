@@ -19,19 +19,34 @@ DEVTRAIL_HOME="${DEVTRAIL_HOME:-$HOME/.devtrail}"
 CONFIG_FILE="${DEVTRAIL_CONFIG:-$DEVTRAIL_HOME/devtrail.config.json}"
 
 # ── Output ───────────────────────────────────────────────────────────────────
+#
+# 색은 의미로 부른다. docs/design-tokens.md 가 단일 출처다.
+#
+# ⚠️ 16색만 쓴다. 24비트(\033[38;2;r;g;bm)는 SSH · tmux · 구형 터미널에서 깨진다.
+# ⚠️ 색만으로 정보를 전달하지 않는다. 아래 함수들이 기호를 함께 낸다 —
+#    색맹 사용자와 NO_COLOR 환경에서도 구분돼야 한다.
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
-  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_BLUE=$'\033[34m'
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'
+  C_MUTED=$'\033[2m'                       # ink-muted
+  C_SUCCESS=$'\033[32m'                    # accent · success
+  C_WARNING=$'\033[33m'                    # warning
+  C_DANGER=$'\033[31m'                     # danger
+  C_INFO=$'\033[34m'                       # info
 else
-  C_RESET=''; C_BOLD=''; C_DIM=''; C_RED=''; C_GREEN=''; C_YELLOW=''; C_BLUE=''
+  C_RESET=''; C_BOLD=''
+  C_MUTED=''; C_SUCCESS=''; C_WARNING=''; C_DANGER=''; C_INFO=''
 fi
 
+# 이전 이름. 외부 스크립트가 참조할 수 있어 남겨두지만 새로 쓰지 않는다.
+C_DIM="$C_MUTED"; C_GREEN="$C_SUCCESS"; C_YELLOW="$C_WARNING"
+C_RED="$C_DANGER"; C_BLUE="$C_INFO"
+
 info()  { printf '%s\n' "$*"; }
-step()  { printf '%s▶%s %s\n' "$C_BLUE" "$C_RESET" "$*"; }
-ok()    { printf '%s✅%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
-warn()  { printf '%s⚠️ %s %s\n' "$C_YELLOW" "$C_RESET" "$*"; }
-fail()  { printf '%s❌%s %s\n' "$C_RED" "$C_RESET" "$*"; }
-dim()   { printf '%s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
+step()  { printf '%s▶%s %s\n' "$C_INFO" "$C_RESET" "$*"; }
+ok()    { printf '%s✅%s %s\n' "$C_SUCCESS" "$C_RESET" "$*"; }
+warn()  { printf '%s⚠️ %s %s\n' "$C_WARNING" "$C_RESET" "$*"; }
+fail()  { printf '%s❌%s %s\n' "$C_DANGER" "$C_RESET" "$*"; }
+dim()   { printf '%s%s%s\n' "$C_MUTED" "$*" "$C_RESET"; }
 die()   { fail "$*"; exit 1; }
 
 # ── Config access ────────────────────────────────────────────────────────────
