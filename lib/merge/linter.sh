@@ -35,7 +35,7 @@ _ob_linter() {
     "$([ -f "$data" ] && printf '%s' "$data" || echo /dev/null)" "$src" > "$out" 2>/dev/null \
     || jq 'del(._comment)' "$src" > "$out"
 
-  [ -f "$data" ] && cp "$data" "$data.bak.$(date +%Y%m%d%H%M%S)"
+  jr_backup "$data" >/dev/null || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
   mv "$out" "$data"
   ok "저장 시 정리 켬 · updated 자동 갱신"
 }

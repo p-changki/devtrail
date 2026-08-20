@@ -36,8 +36,8 @@ _ob_shellcommands() {
 
   # 백업 실패를 확인하지 않으면, 백업 없이 원본을 교체하고도
   # 사용자에게는 "백업했다"고 말하게 된다. README의 안전 계약이 거짓이 된다.
-  local backup="$data.bak.$(date +%Y%m%d%H%M%S)"
-  cp "$data" "$backup" || { rm -f "$rendered"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
+  local backup
+  backup=$(jr_backup "$data") || { rm -f "$rendered"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
 
   local merged; merged=$(mktemp)
   # 같은 id는 교체, 없는 id는 뒤에 추가. 기존 커맨드의 순서는 그대로 둔다.

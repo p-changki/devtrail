@@ -150,3 +150,8 @@ confirm() {
   read -r -p "$prompt [y/N] " reply
   [[ "$reply" =~ ^[Yy]$ ]]
 }
+
+# 변경 저널. 모든 명령이 쓸 수 있어야 하므로 여기서 읽어들인다.
+# common.sh 의 die/warn/dim/vault_path 를 쓰므로 반드시 파일 끝에서 부른다.
+# shellcheck source=lib/journal.sh
+. "$DEVTRAIL_ROOT/lib/journal.sh"

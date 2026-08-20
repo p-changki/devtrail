@@ -58,7 +58,7 @@ _sched_render() {
 
   local plist="$dest/$label.plist"
   if [ -f "$plist" ]; then
-    cp "$plist" "$plist.bak.$(date +%Y%m%d%H%M%S)" \
+    jr_backup "$plist" >/dev/null \
       || die "plist 백업 실패 — 기존 스케줄을 건드리지 않습니다: $plist"
     launchctl unload -w "$plist" 2>/dev/null || true
   fi

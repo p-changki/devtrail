@@ -43,8 +43,8 @@ _ob_automove() {
     rm -f "$out"; warn "생성된 규칙이 비어 있습니다 — 원본 유지"; return 0; }
 
   if [ -f "$data" ]; then
-    local backup="$data.bak.$(date +%Y%m%d%H%M%S)"
-    cp "$data" "$backup" || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
+    local backup
+    backup=$(jr_backup "$data") || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
     dim "     백업: $backup"
   fi
   mv "$out" "$data"

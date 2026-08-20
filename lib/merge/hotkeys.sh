@@ -28,7 +28,7 @@ _ob_hotkeys() {
      python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" hotkeys \
       "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$hk" ] && printf '%s' "$hk")" "$ids" > "$out"; then
-    [ -f "$hk" ] && cp "$hk" "$hk.bak.$(date +%Y%m%d%H%M%S)"
+    jr_backup "$hk" >/dev/null || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $hk"; }
     mv "$out" "$hk"
     ok "단축키 $(jq 'length' "$hk")개 등록"
     dim "     Obsidian 을 재시작해야 적용됩니다"

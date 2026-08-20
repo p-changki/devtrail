@@ -46,6 +46,9 @@ augment_cmd() {
   modules=$(_aug_modules "$want")
   [ -n "$modules" ] || die "설치할 모듈이 없습니다.  목록: devtrail augment --list"
 
+  # 실제로 쓸 때만 저널을 연다. dry-run 은 아무것도 안 바꾼다.
+  [ "$apply" = 1 ] && jr_begin augment
+
   step "대상 모듈: $(printf '%s' "$modules" | tr '\n' ' ')"
   [ "$apply" = 1 ] || dim "   (dry-run — 실제로 만들려면 --apply)"
   echo
@@ -62,7 +65,7 @@ augment_cmd() {
     else
       made=$((made + 1))
       ok "생성  $rel"
-      [ "$apply" = 1 ] && mkdir -p "$abs"
+      [ "$apply" = 1 ] && jr_mkdir "$abs"
     fi
     if [ "$hub" = "true" ]; then
       _aug_hub "$key" "$rel" "$abs" "$apply" && hubs=$((hubs + 1))
@@ -79,6 +82,7 @@ EOF
   echo
   if [ "$apply" = 1 ]; then
     ok "폴더 ${made}개 생성 · ${kept}개 유지 · 허브 ${hubs}개"
+    jr_end
   else
     info "생성 예정 ${made}개 · 유지 ${kept}개 · 허브 ${hubs}개"
     dim "   적용: devtrail augment --apply"
@@ -105,14 +109,27 @@ _aug_check_modules() {
   return 0
 }
 
-# 설치할 모듈 목록. 인자가 없으면 required + 기본 켬.
+# 설치할 모듈 목록. 우선순위:
+#   1) 인자        devtrail augment pkm
+#   2) 설정        install.modules  — init 에서 사용자가 고른 것
+#   3) tree.json   기본 켬
+#
+# ⚠️ 2) 를 빼먹으면 사용자가 init 에서 거절한 모듈이 되살아난다.
+#    init 은 install.modules 를 저장하는데 여기서 읽지 않아 실제로 그랬다.
+#
 # 이 함수는 조회만 한다 — 서브셸에서 불리므로 여기서 죽어도 소용이 없다.
 _aug_modules() {
-  local want="$1" m
+  local want="$1" m chosen
   if [ -n "$(printf '%s' "$want" | tr -d ' ')" ]; then
     for m in $want; do printf '%s\n' "$m"; done
     return 0
   fi
+
+  if config_exists; then
+    chosen=$(jq -r '(.install.modules // []) | .[]' "$CONFIG_FILE" 2>/dev/null)
+    if [ -n "$chosen" ]; then printf '%s\n' "$chosen"; return 0; fi
+  fi
+
   jq -r '.modules | to_entries[] | select(.value.default != false) | .key' "$DT_TREE"
 }
 
@@ -151,7 +168,7 @@ _aug_folders() {
 #  루트명을 바꾸면 템플릿 전체가 죽는 구조였다.)
 _aug_paths_note() {
   local tdir; tdir="$(vault_root)/$(dt_dir templates)"
-  mkdir -p "$tdir"
+  jr_mkdir "$tdir"
   local out="$tdir/_devtrail-paths.md"
 
   {
@@ -163,6 +180,7 @@ _aug_paths_note() {
     _aug_paths_json
     printf '\n```\n'
   } > "$out"
+  jr_created "$out"
   ok "경로 맵  $(dt_dir templates)/_devtrail-paths.md"
 }
 
@@ -221,12 +239,12 @@ _aug_guides() {
   local src="$DEVTRAIL_ROOT/preset/guides"
   local dest; dest="$(vault_root)/$(dt_dir guides)"
   [ -d "$src" ] || return 0
-  mkdir -p "$dest"
+  jr_mkdir "$dest"
   local n=0 f
   for f in "$src"/*.md; do
     [ -e "$f" ] || continue
     [ -f "$dest/$(basename "$f")" ] && continue
-    cp "$f" "$dest/" && n=$((n + 1))
+    cp "$f" "$dest/" && { jr_created "$dest/$(basename "$f")"; n=$((n + 1)); }
   done
   [ "$n" -gt 0 ] && ok "가이드 ${n}개  $(dt_dir guides)/"
   return 0
@@ -252,6 +270,12 @@ _aug_l1_hubs() {
   [ -n "$n" ] || n=0
   if [ "$n" -gt 0 ] 2>/dev/null; then
     ok "L1 허브 ${n}개  $(tr '\n' ' ' < "$out")"
+    # 되돌릴 수 있게 기록한다. hubs.py 는 파일명만 낼 수도 있어 루트를 붙인다.
+    local line
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      case "$line" in /*) jr_created "$line" ;; *) jr_created "$(vault_root)/$line" ;; esac
+    done < "$out"
   fi
   rm -f "$paths" "$out"
 }
@@ -281,6 +305,7 @@ _aug_hub() {
   DT_HUB_DATE="$(date +%Y-%m-%d)" \
     python3 "$DEVTRAIL_ROOT/lib/gen/hub.py" > "$hub" || {
       rm -f "$hub"; warn "허브 생성 실패: $rel"; return 1; }
+  jr_created "$hub"
   return 0
 }
 

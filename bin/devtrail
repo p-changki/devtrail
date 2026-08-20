@@ -32,6 +32,8 @@ ${C_BOLD}설치${C_RESET}
   devtrail app <sub>         메뉴바 앱 (install|start|stop|status)
   devtrail dashboard         웹 대시보드 (상태·실행·설정)
   devtrail install-schedule  launchd 자동 실행 등록
+  devtrail update            DevTrail 자체를 최신으로 (기본 dry-run)
+  devtrail undo [ID]         마지막 변경 되돌리기 (인자 없으면 이력)
   devtrail uninstall         자동화 제거 (볼트 데이터는 건드리지 않음)
 
 ${C_BOLD}실행${C_RESET}
@@ -90,6 +92,10 @@ case "$cmd" in
   skills)
     . "$DEVTRAIL_ROOT/lib/doctor.sh"   # _d_section 재사용
     . "$DEVTRAIL_ROOT/lib/skillcmd.sh"; skills_cmd "$@" ;;
+  update)
+    . "$DEVTRAIL_ROOT/lib/updatecmd.sh"; update_cmd "$@" ;;
+  undo)
+    jr_undo "$@" ;;
   version|--version|-v)
     printf 'devtrail %s\n' "$VERSION" ;;
   help|--help|-h|"")

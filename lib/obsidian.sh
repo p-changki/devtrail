@@ -32,6 +32,9 @@ obsidian_apply() {
    Obsidian에서 이 볼트를 한 번 연 뒤 다시 실행하세요."
   fi
 
+  # 한 번의 실행을 하나로 묶는다 — devtrail undo 가 되돌릴 단위다.
+  jr_begin obsidian
+
   local m
   for m in $DT_MERGERS; do
     local f="$DEVTRAIL_ROOT/lib/merge/$m.sh"
@@ -42,6 +45,7 @@ obsidian_apply() {
   done
 
   _ob_advice "$dot"
+  jr_end
 }
 
 # ── 나머지는 안내만 ──────────────────────────────────────────────────────────

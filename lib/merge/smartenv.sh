@@ -39,7 +39,7 @@ _ob_smartenv() {
       rm -f "$out"; warn "제외 설정 생성 실패 — 건드리지 않습니다"; return 0; }
 
   if [ -f "$data" ]; then
-    cp "$data" "$data.bak.$(date +%Y%m%d%H%M%S)" \
+    jr_backup "$data" >/dev/null \
       || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
   fi
   mv "$out" "$data"

@@ -29,7 +29,7 @@ init_run() {
   if config_exists; then
     warn "설정이 이미 있습니다: $CONFIG_FILE"
     confirm "다시 설정할까요? (기존 설정은 .bak으로 백업)" || { info "취소했습니다."; return 0; }
-    cp "$CONFIG_FILE" "$CONFIG_FILE.bak.$(date +%Y%m%d%H%M%S)" \
+    jr_backup "$CONFIG_FILE" >/dev/null \
       || die "설정 백업 실패 — 중단합니다: $CONFIG_FILE"
   fi
 

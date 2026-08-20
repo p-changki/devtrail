@@ -139,6 +139,26 @@ check_version() {
   echo "  버전 $v · 단일 출처 · CHANGELOG 있음"
 }
 
+check_migrations() {
+  # DT_SCHEMA 를 올려놓고 마이그레이션 파일을 안 만들면,
+  # 사용자에게 "올려야 한다"고 말해놓고 아무것도 하지 않는다.
+  local want n f
+  want=$(grep -E '^DT_SCHEMA=' lib/migrate.sh | head -1 | cut -d= -f2)
+  case "$want" in ''|*[!0-9]*) echo "  ❌ DT_SCHEMA 를 읽을 수 없다"; return 1 ;; esac
+
+  n=2   # v1 은 최초 스키마라 마이그레이션이 없다
+  while [ "$n" -le "$want" ]; do
+    f=$(ls lib/migrations/$(printf '%03d' "$n")-*.sh 2>/dev/null | head -1)
+    [ -n "$f" ] || { echo "  ❌ v${n} 마이그레이션 파일이 없다"; return 1; }
+    grep -q "^_mg_$(printf '%03d' "$n")()" "$f" \
+      || { echo "  ❌ $f 에 _mg_$(printf '%03d' "$n")() 가 없다"; return 1; }
+    grep -q "^_mg_$(printf '%03d' "$n")_why=" "$f" \
+      || { echo "  ❌ $f 에 설명(_why)이 없다"; return 1; }
+    n=$((n + 1))
+  done
+  echo "  스키마 v${want} · 마이그레이션 짝 맞음"
+}
+
 # ── 실행 ─────────────────────────────────────────────────────────────────────
 run "셸 문법"        check_shell
 run "파이썬"         check_python
@@ -147,11 +167,13 @@ run "bash 3.2"      check_bash32
 run "경로 하드코딩"   check_no_hardcoded_paths
 run "파일 길이"      check_file_size
 run "버전"          check_version
+run "마이그레이션"   check_migrations
 run "시크릿"         ./tests/scan-secrets.sh
 run "스킬 규약"      ./tests/check-skills.sh
 run "path"          ./tests/test-path.sh
 run "augment"       ./tests/test-augment.sh
 run "scan"          ./tests/test-scan.sh
+run "undo·마이그레이션" ./tests/test-undo.sh
 
 if [ "$FAST" = 0 ] && command -v swift >/dev/null 2>&1; then
   run "swift 빌드" sh -c 'cd app && swift build -c release 2>&1 | tail -1'

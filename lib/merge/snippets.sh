@@ -40,7 +40,7 @@ _ob_snippets() {
   ' "$([ -f "$app" ] && printf '%s' "$app" || echo /dev/null)" > "$out" 2>/dev/null \
     || printf '{"enabledCssSnippets":["devtrail"]}' > "$out"
 
-  [ -f "$app" ] && cp "$app" "$app.bak.$(date +%Y%m%d%H%M%S)"
+  jr_backup "$app" >/dev/null || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $app"; }
   mv "$out" "$app"
   ok "스니펫 ${n}개 설치 · 활성화 등록"
 }

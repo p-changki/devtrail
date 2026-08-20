@@ -52,7 +52,13 @@ config_cmd() {
     keys)
       echo "boolean: $DT_SETTABLE_BOOL"
       echo "number:  $DT_SETTABLE_NUM" ;;
-    *) die "알 수 없는 하위 명령: $1  (show|get|set|keys)" ;;
+    migrate)
+      # 스키마만 따로 올린다. devtrail update 도 같은 함수를 부른다.
+      . "$DEVTRAIL_ROOT/lib/migrate.sh"
+      if mg_status; then ok "설정 스키마 v${DT_SCHEMA} — 최신입니다"; return 0; fi
+      shift
+      mg_run "$@" ;;
+    *) die "알 수 없는 하위 명령: $1  (show|get|set|keys|migrate)" ;;
   esac
 }
 
@@ -76,8 +82,8 @@ _config_set() {
   fi
 
   # 백업 실패 시 진행하지 않는다 — 원본이 유일본이면 잃는다.
-  local backup="$CONFIG_FILE.bak.$(date +%Y%m%d%H%M%S)"
-  cp "$CONFIG_FILE" "$backup" || die "백업 실패 — 설정을 건드리지 않습니다"
+  local backup
+  backup=$(jr_backup "$CONFIG_FILE") || die "백업 실패 — 설정을 건드리지 않습니다"
 
   local tmp; tmp=$(mktemp "$(dirname "$CONFIG_FILE")/.devtrail-cfg.XXXXXX")
   if ! jq --argjson v "$typed" "setpath([$(_dt_jq_path "$key")]; \$v)" \

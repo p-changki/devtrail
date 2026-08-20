@@ -44,7 +44,7 @@ _ob_app() {
   jq -s '.[0] * .[1]' "$([ -f "$app" ] && printf '%s' "$app" || echo /dev/null)" "$want" > "$out" 2>/dev/null \
     || jq '.' "$want" > "$out"
 
-  [ -f "$app" ] && cp "$app" "$app.bak.$(date +%Y%m%d%H%M%S)"
+  jr_backup "$app" >/dev/null || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $app"; }
   mv "$out" "$app"; rm -f "$want"
 
   ok "$(jq -r 'keys | length' "$app")개 키 · alwaysUpdateLinks=$(jq -r '.alwaysUpdateLinks' "$app")"

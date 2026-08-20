@@ -33,7 +33,7 @@ _ob_templater() {
      python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" templater \
       "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$data" ] && printf '%s' "$data")" > "$out"; then
-    [ -f "$data" ] && cp "$data" "$data.bak.$(date +%Y%m%d%H%M%S)"
+    jr_backup "$data" >/dev/null || { rm -f "$out"; die "백업 실패 — 원본을 건드리지 않습니다: $data"; }
     mv "$out" "$data"
     ok "매핑 $(jq '.folder_templates|length' "$data")개 · 새 파일 생성 시 자동 삽입 켬"
   else
@@ -56,7 +56,7 @@ _ob_templater() {
   if python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" daily \
       "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$dn" ] && printf '%s' "$dn")" > "$out2"; then
-    [ -f "$dn" ] && cp "$dn" "$dn.bak.$(date +%Y%m%d%H%M%S)"
+    jr_backup "$dn" >/dev/null || { rm -f "$out2"; die "백업 실패 — 원본을 건드리지 않습니다: $dn"; }
     mv "$out2" "$dn"
     ok "데일리노트 → $(jq -r '.folder' "$dn")"
   else
