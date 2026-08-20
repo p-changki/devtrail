@@ -34,7 +34,7 @@ config_cmd() {
   case "${1:-show}" in
     show|"") jq . "$CONFIG_FILE" ;;
     get)
-      [ -n "${2:-}" ] || die "사용법: devtrail config get <key>"
+      [ -n "${2:-}" ] || die "$(L "사용법" "Usage"): devtrail config get <key>"
       # 설정에 없으면 기본값을 돌려준다 — 실제 동작과 같은 값이어야 한다.
       cfg ".$2" "$(printf '%s' "$DT_DEFAULTS" | jq -r --arg k "$2" '.[$k] // empty')" ;;
     effective)
@@ -49,7 +49,7 @@ config_cmd() {
               | if $v == null then $d[$k] else $v end
             )})' ;;
     set)
-      [ -n "${2:-}" ] && [ $# -ge 3 ] || die "사용법: devtrail config set <key> <value>"
+      [ -n "${2:-}" ] && [ $# -ge 3 ] || die "$(L "사용법" "Usage"): devtrail config set <key> <value>"
       _config_set "$2" "$3" ;;
     keys)
       echo "boolean: $DT_SETTABLE_BOOL"
@@ -58,10 +58,10 @@ config_cmd() {
     migrate)
       # 스키마만 따로 올린다. devtrail update 도 같은 함수를 부른다.
       . "$DEVTRAIL_ROOT/lib/migrate.sh"
-      if mg_status; then ok "설정 스키마 v${DT_SCHEMA} — 최신입니다"; return 0; fi
+      if mg_status; then ok "$(L "설정 스키마" "Config schema") v${DT_SCHEMA} — $(L "최신입니다" "up to date")"; return 0; fi
       shift
       mg_run "$@" ;;
-    *) die "알 수 없는 하위 명령: $1  (show|get|set|keys|migrate)" ;;
+    *) die "$(L "알 수 없는 하위 명령" "Unknown subcommand"): $1  (show|get|set|keys|migrate)" ;;
   esac
 }
 
@@ -71,38 +71,39 @@ _config_set() {
   if _dt_in_list "$key" "$DT_SETTABLE_BOOL"; then
     case "$val" in
       true|false) typed="$val" ;;
-      *) die "boolean 키에는 true/false 만 허용합니다: $key=$val" ;;
+      *) die "$(L "boolean 키에는 true/false 만 허용합니다" "Boolean keys take true or false"): $key=$val" ;;
     esac
   elif _dt_in_list "$key" "$DT_SETTABLE_NUM"; then
     case "$val" in
-      ''|*[!0-9]*) die "숫자 키에는 정수만 허용합니다: $key=$val" ;;
+      ''|*[!0-9]*) die "$(L "숫자 키에는 정수만 허용합니다" "Numeric keys take integers"): $key=$val" ;;
       *) typed="$val" ;;
     esac
   elif _config_enum_values "$key" >/dev/null; then
     local allowed; allowed=$(_config_enum_values "$key")
     case ",$allowed," in
       *",$val,"*) typed="\"$val\"" ;;
-      *) die "허용되지 않는 값입니다: $key=$val
-   가능한 값: $(printf '%s' "$allowed" | tr ',' ' ')" ;;
+      *) die "$(L "허용되지 않는 값입니다" "Not an allowed value"): $key=$val
+   $(L "가능한 값" "Allowed"): $(printf '%s' "$allowed" | tr ',' ' ')" ;;
     esac
     [ "$key" = "lang" ] && { _config_lang_guard "$val" || return 1; }
   else
-    die "변경할 수 없는 키입니다: $key
-   변경 가능: devtrail config keys
-   경로·계정 등은 'devtrail init' 으로 다시 설정하세요."
+    die "$(L "변경할 수 없는 키입니다" "That key cannot be changed here"): $key
+   $(L "변경 가능" "Changeable"): devtrail config keys
+   $(L "경로·계정 등은 'devtrail init' 으로 다시 설정하세요." \
+       "Paths and accounts are set again with 'devtrail init'.")"
   fi
 
   # 백업 실패 시 진행하지 않는다 — 원본이 유일본이면 잃는다.
   local backup
-  backup=$(jr_backup "$CONFIG_FILE") || die "백업 실패 — 설정을 건드리지 않습니다"
+  backup=$(jr_backup "$CONFIG_FILE") || die "$(L "백업 실패 — 설정을 건드리지 않습니다" "Backup failed — leaving the config alone")"
 
   local tmp; tmp=$(mktemp "$(dirname "$CONFIG_FILE")/.devtrail-cfg.XXXXXX")
   if ! jq --argjson v "$typed" "setpath([$(_dt_jq_path "$key")]; \$v)" \
         "$CONFIG_FILE" > "$tmp" 2>/dev/null; then
-    rm -f "$tmp"; die "설정 변경 실패 — 원본 유지"
+    rm -f "$tmp"; die "$(L "설정 변경 실패 — 원본 유지" "Could not change the config — original kept")"
   fi
   if ! jq -e . "$tmp" >/dev/null 2>&1; then
-    rm -f "$tmp"; die "결과가 유효한 JSON이 아님 — 원본 유지"
+    rm -f "$tmp"; die "$(L "결과가 유효한 JSON 이 아님 — 원본 유지" "The result is not valid JSON — original kept")"
   fi
 
   mv "$tmp" "$CONFIG_FILE"
@@ -146,17 +147,20 @@ _config_lang_guard() {
     existing=$(find "$root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
   fi
 
-  warn "언어를 ${cur} → ${new} 로 바꿉니다"
+  warn "$(L "언어를 ${cur} → ${new} 로 바꿉니다" "Changing the language ${cur} → ${new}")"
   if [ "${existing:-0}" -gt 0 ]; then
     echo
-    dim "   이미 만들어진 폴더 ${existing}개는 이름이 바뀌지 않습니다."
-    dim "   그대로 두면 DevTrail 이 새 이름의 폴더를 따로 만듭니다(평행 구조)."
+    dim "   $(L "이미 만들어진 폴더 ${existing}개는 이름이 바뀌지 않습니다." \
+            "The ${existing} folders that already exist keep their names.")"
+    dim "   $(L "그대로 두면 DevTrail 이 새 이름의 폴더를 따로 만듭니다(평행 구조)." \
+            "Left as is, DevTrail creates a second set under the new names.")"
     echo
-    dim "   기존 폴더를 계속 쓰려면 매핑하세요:"
-    dim "     devtrail scan          — 지금 구조를 봅니다"
-    dim "     devtrail init          — 기존 폴더에 매핑합니다 (노트는 움직이지 않습니다)"
+    dim "   $(L "기존 폴더를 계속 쓰려면 매핑하세요:" "To keep using your folders, map them:")"
+    dim "     devtrail scan          — $(L "지금 구조를 봅니다" "see the current structure")"
+    dim "     devtrail init          — $(L "기존 폴더에 매핑합니다 (노트는 움직이지 않습니다)" \
+                                          "map onto your folders (nothing is moved)")"
     echo
   fi
-  confirm "계속할까요?" || { info "취소했습니다."; return 1; }
+  confirm "$(L "계속할까요?" "Continue?")" || { info "$(L "취소했습니다." "Cancelled.")"; return 1; }
   return 0
 }

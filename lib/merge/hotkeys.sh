@@ -31,7 +31,8 @@ _ob_hotkeys() {
       "$([ -f "$hk" ] && printf '%s' "$hk")" "$ids" > "$out"; then
     jr_backup "$hk" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $hk"; }
     mv "$out" "$hk"
-    ok "$(L "단축키 $(jq 'length' "$hk")개 등록" "$(jq 'length' "$hk") hotkeys registered")"
+    local nhk; nhk=$(jq 'length' "$hk")
+    ok "$(L "단축키 ${nhk}개 등록" "${nhk} hotkeys registered")"
     dim "     $(L "Obsidian 을 재시작해야 적용됩니다" "Restart Obsidian for these to take effect")"
   else
     rm -f "$out"; warn "$(L "단축키 생성 실패 — 건드리지 않습니다" "Could not build hotkeys — leaving them alone")"

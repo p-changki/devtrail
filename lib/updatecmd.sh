@@ -21,23 +21,24 @@ update_cmd() {
       --apply) apply=1 ;;
       --check) check=1 ;;
       --dry-run) apply=0 ;;
-      -*) die "알 수 없는 옵션: $1" ;;
-      *)  die "인자를 받지 않습니다: $1" ;;
+      -*) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
+      *)  die "$(L "인자를 받지 않습니다" "This takes no arguments"): $1" ;;
     esac
     shift
   done
 
   [ -d "$DEVTRAIL_ROOT/.git" ] || {
     [ "$check" = 1 ] && return 0
-    die "git 설치가 아닙니다: $DEVTRAIL_ROOT
-   설치 스크립트로 다시 받으세요:
+    die "$(L "git 설치가 아닙니다" "This is not a git install"): $DEVTRAIL_ROOT
+   $(L "설치 스크립트로 다시 받으세요:" "Reinstall with the install script:")
    curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash"
   }
 
   local br; br=$(git -C "$DEVTRAIL_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null)
   git -C "$DEVTRAIL_ROOT" fetch --quiet origin "$br" 2>/dev/null || {
     [ "$check" = 1 ] && return 0
-    die "원격에서 가져오지 못했습니다 (네트워크 또는 원격 설정 확인)"
+    die "$(L "원격에서 가져오지 못했습니다 (네트워크 또는 원격 설정 확인)" \
+          "Could not fetch from the remote (check your network or remote config)")"
   }
 
   local local_sha remote_sha
@@ -46,7 +47,7 @@ update_cmd() {
 
   if [ "$local_sha" = "$remote_sha" ]; then
     [ "$check" = 1 ] && return 0
-    ok "이미 최신입니다 — v$(cat "$DEVTRAIL_ROOT/VERSION" 2>/dev/null) ($br)"
+    ok "$(L "이미 최신입니다" "Already up to date") — v$(cat "$DEVTRAIL_ROOT/VERSION" 2>/dev/null) ($br)"
     _up_schema "$apply"
     return 0
   fi
@@ -58,9 +59,11 @@ update_cmd() {
     [ "$check" = 1 ] && return 0
     local ahead
     ahead=$(git -C "$DEVTRAIL_ROOT" rev-list --count "origin/$br..HEAD" 2>/dev/null)
-    warn "로컬이 원격보다 앞서 있습니다 — 커밋 ${ahead}개 (${br})"
-    dim "   개발용 체크아웃으로 보입니다. 갱신하지 않습니다."
-    dim "   원격 것으로 맞추려면 직접: git -C '$DEVTRAIL_ROOT' reset --hard origin/$br"
+    warn "$(L "로컬이 원격보다 앞서 있습니다 — 커밋 ${ahead}개" \
+            "Your checkout is ahead of the remote by ${ahead} commits") (${br})"
+    dim "   $(L "개발용 체크아웃으로 보입니다. 갱신하지 않습니다." \
+            "This looks like a development checkout. Not updating.")"
+    dim "   $(L "원격 것으로 맞추려면 직접" "To match the remote yourself"): git -C '$DEVTRAIL_ROOT' reset --hard origin/$br"
     # 코드를 안 올려도 설정 스키마는 뒤쳐질 수 있다. 여기서 빠뜨리면
     # 개발 체크아웃 사용자만 조용히 낡은 설정을 쓰게 된다.
     _up_schema "$apply"
@@ -72,7 +75,7 @@ update_cmd() {
   _up_preview "$br" "$local_sha" "$remote_sha"
   [ "$apply" = 1 ] || {
     echo
-    dim "   적용: devtrail update --apply"
+    dim "   $(L "적용" "Apply"): devtrail update --apply"
     return 0
   }
 
@@ -87,16 +90,17 @@ _up_preview() {
   new=$(git -C "$DEVTRAIL_ROOT" show "origin/$br:VERSION" 2>/dev/null | tr -d ' \n')
   n=$(git -C "$DEVTRAIL_ROOT" rev-list --count "$from..$to" 2>/dev/null)
 
-  step "업데이트 있음 — v${cur} → v${new:-?}  (커밋 ${n}개 · $br)"
+  step "$(L "업데이트 있음" "Update available") — v${cur} → v${new:-?}  ($(L "커밋 ${n}개" "${n} commits") · $br)"
   echo
   git -C "$DEVTRAIL_ROOT" log --no-merges --format='   %s' "$from..$to" 2>/dev/null | head -12
-  [ "${n:-0}" -gt 12 ] && dim "   … 그 밖에 $((n - 12))개"
+  [ "${n:-0}" -gt 12 ] && dim "   … $(L "그 밖에 $((n - 12))개" "and $((n - 12)) more")"
 
   # 사용자 볼트에 손이 가는 변경인지 알린다. 이게 이 도구에서 가장 중요한 정보다.
   if [ "${new%%.*}" != "${cur%%.*}" ]; then
     echo
-    warn "메이저 버전이 올라갑니다 — 기존 볼트에 수동 조치가 필요할 수 있습니다"
-    dim "   CHANGELOG 를 먼저 읽으세요: $DEVTRAIL_ROOT/CHANGELOG.md"
+    warn "$(L "메이저 버전이 올라갑니다 — 기존 볼트에 수동 조치가 필요할 수 있습니다" \
+            "Major version bump — your vault may need manual changes")"
+    dim "   $(L "CHANGELOG 를 먼저 읽으세요" "Read the CHANGELOG first"): $DEVTRAIL_ROOT/CHANGELOG.md"
   fi
 }
 
@@ -105,15 +109,15 @@ _up_apply() {
 
   # 더러운 작업 트리는 건드리지 않는다.
   if [ -n "$(git -C "$DEVTRAIL_ROOT" status --porcelain 2>/dev/null)" ]; then
-    die "로컬에 수정된 파일이 있습니다: $DEVTRAIL_ROOT
-   커밋하거나 되돌린 뒤 다시 실행하세요 (git -C '$DEVTRAIL_ROOT' status)"
+    die "$(L "로컬에 수정된 파일이 있습니다" "You have local changes"): $DEVTRAIL_ROOT
+   $(L "커밋하거나 되돌린 뒤 다시 실행하세요" "Commit or revert them, then run this again") (git -C '$DEVTRAIL_ROOT' status)"
   fi
 
   echo
-  step "갱신 중…"
-  git -C "$DEVTRAIL_ROOT" reset --quiet --hard "origin/$br" || die "갱신 실패"
+  step "$(L "갱신 중…" "Updating…")"
+  git -C "$DEVTRAIL_ROOT" reset --quiet --hard "origin/$br" || die "$(L "갱신 실패" "Update failed")"
   chmod +x "$DEVTRAIL_ROOT/bin/devtrail" 2>/dev/null || true
-  ok "코드 v$(cat "$DEVTRAIL_ROOT/VERSION" 2>/dev/null)"
+  ok "$(L "코드" "Code") v$(cat "$DEVTRAIL_ROOT/VERSION" 2>/dev/null)"
 
   _up_schema 1
   _up_next
@@ -131,8 +135,9 @@ _up_schema() {
 
 _up_next() {
   echo
-  dim "   설정과 노트는 그대로입니다. 새 폴더·템플릿을 받으려면:"
-  dim "     devtrail augment            없는 것만 생성 (dry-run)"
-  dim "     devtrail obsidian           플러그인 설정 재병합"
-  dim "     devtrail skills sync        AI 스킬 갱신"
+  dim "   $(L "설정과 노트는 그대로입니다. 새 폴더·템플릿을 받으려면:" \
+            "Your config and notes are untouched. To pick up new folders and templates:")"
+  dim "     devtrail augment            $(L "없는 것만 생성 (dry-run)" "create only what is missing (dry run)")"
+  dim "     devtrail obsidian           $(L "플러그인 설정 재병합" "re-merge plugin settings")"
+  dim "     devtrail skills sync        $(L "AI 스킬 갱신" "refresh AI skills")"
 }

@@ -22,7 +22,7 @@ skills_cmd() {
     sync)    shift; _sk_install --force "$@" ;;
     list)    _sk_list ;;
     remove)  _sk_remove ;;
-    *) die "사용법: devtrail skills <install|sync|list|remove>" ;;
+    *) die "$(L "사용법" "Usage"): devtrail skills <install|sync|list|remove>" ;;
   esac
 }
 
@@ -32,28 +32,28 @@ _sk_available() {
 }
 
 _sk_list() {
-  step "DevTrail 스킬"
+  step "$(L "DevTrail 스킬" "DevTrail skills")"
   local d name installed n=0
   while IFS= read -r d; do
     [ -n "$d" ] || continue
     name=$(basename "$d")
     n=$((n + 1))
     if [ -d "$DT_SKILL_DEST/${DT_SKILL_PREFIX}${name}" ]; then
-      installed="✅ 설치됨"
+      installed="✅ $(L "설치됨" "installed")"
     else
-      installed="—  미설치"
+      installed="—  $(L "미설치" "not installed")"
     fi
     printf '  %s  %-16s %s\n' "$installed" "$name" \
       "$(_sk_desc "$d/SKILL.md")"
   done <<EOF
 $(_sk_available)
 EOF
-  [ "$n" = 0 ] && dim "   배포된 스킬이 없습니다"
+  [ "$n" = 0 ] && dim "   $(L "배포된 스킬이 없습니다" "No skills shipped")"
   echo
   if [ -d "$(dirname "$DT_SKILL_DEST")" ]; then
-    dim "   설치 위치: $DT_SKILL_DEST/${DT_SKILL_PREFIX}*"
+    dim "   $(L "설치 위치" "Installed at"): $DT_SKILL_DEST/${DT_SKILL_PREFIX}*"
   else
-    dim "   Claude Code 가 없습니다 — 스킬은 선택 기능입니다"
+    dim "   $(L "Claude Code 가 없습니다 — 스킬은 선택 기능입니다" "No Claude Code — skills are optional")"
   fi
 }
 
@@ -67,14 +67,15 @@ _sk_install() {
   [ "${1:-}" = "--force" ] && { force=1; shift; }
 
   if [ ! -d "$(dirname "$DT_SKILL_DEST")" ]; then
-    warn "Claude Code 를 찾을 수 없습니다 ($HOME/.claude)"
-    dim "   스킬은 선택 기능입니다. DevTrail 의 나머지는 그대로 동작합니다."
+    warn "$(L "Claude Code 를 찾을 수 없습니다" "Cannot find Claude Code") ($HOME/.claude)"
+    dim "   $(L "스킬은 선택 기능입니다. DevTrail 의 나머지는 그대로 동작합니다." \
+            "Skills are optional. Everything else in DevTrail still works.")"
     return 0
   fi
-  _sk_available >/dev/null || { warn "배포할 스킬이 없습니다: $DT_SKILL_SRC"; return 0; }
+  _sk_available >/dev/null || { warn "$(L "배포할 스킬이 없습니다" "No skills to install"): $DT_SKILL_SRC"; return 0; }
 
   mkdir -p "$DT_SKILL_DEST"
-  step "스킬 설치"
+  step "$(L "스킬 설치" "Installing skills")"
 
   local d name dest n=0 kept=0
   while IFS= read -r d; do
@@ -83,37 +84,39 @@ _sk_install() {
     dest="$DT_SKILL_DEST/${DT_SKILL_PREFIX}${name}"
 
     if [ -d "$dest" ] && [ "$force" = 0 ]; then
-      kept=$((kept + 1)); dim "   유지  ${DT_SKILL_PREFIX}${name}"; continue
+      kept=$((kept + 1)); dim "   $(L "유지" "keep  ")  ${DT_SKILL_PREFIX}${name}"; continue
     fi
     # 우리 네임스페이스 밖은 절대 건드리지 않는다.
     case "$(basename "$dest")" in
       "${DT_SKILL_PREFIX}"*) ;;
-      *) warn "네임스페이스 밖 — 건너뜀: $dest"; continue ;;
+      *) warn "$(L "네임스페이스 밖 — 건너뜀" "Outside our namespace — skipping"): $dest"; continue ;;
     esac
-    rm -rf "$dest" && cp -R "$d" "$dest" || { warn "설치 실패: $name"; continue; }
-    n=$((n + 1)); ok "설치  ${DT_SKILL_PREFIX}${name}"
+    rm -rf "$dest" && cp -R "$d" "$dest" || { warn "$(L "설치 실패" "Install failed"): $name"; continue; }
+    n=$((n + 1)); ok "$(L "설치" "install")  ${DT_SKILL_PREFIX}${name}"
   done <<EOF
 $(_sk_available)
 EOF
 
   echo
-  ok "${n}개 설치 · ${kept}개 유지"
-  dim "   Claude Code 에서 /${DT_SKILL_PREFIX}<이름> 으로 실행합니다"
-  dim "   경로는 실행 시점에 devtrail path 로 조회합니다 — 설정을 바꿔도 재설치 불필요"
+  ok "$(L "${n}개 설치 · ${kept}개 유지" "${n} installed · ${kept} kept")"
+  dim "   $(L "Claude Code 에서 /${DT_SKILL_PREFIX}<이름> 으로 실행합니다" \
+            "Run them in Claude Code as /${DT_SKILL_PREFIX}<name>")"
+  dim "   $(L "경로는 실행 시점에 devtrail path 로 조회합니다 — 설정을 바꿔도 재설치 불필요" \
+            "Paths are resolved at run time via devtrail path — no reinstall after a config change")"
 }
 
 _sk_remove() {
-  step "스킬 제거"
+  step "$(L "스킬 제거" "Removing skills")"
   local d name n=0
   for d in "$DT_SKILL_DEST/${DT_SKILL_PREFIX}"*; do
     [ -d "$d" ] || continue
     name=$(basename "$d")
     # 접두사 확인을 한 번 더 한다 — 글롭이 빗나가면 남의 스킬을 지운다.
     case "$name" in
-      "${DT_SKILL_PREFIX}"*) rm -rf "$d" && { n=$((n + 1)); ok "제거  $name"; } ;;
-      *) warn "접두사가 다릅니다 — 건너뜀: $name" ;;
+      "${DT_SKILL_PREFIX}"*) rm -rf "$d" && { n=$((n + 1)); ok "$(L "제거" "remove ")  $name"; } ;;
+      *) warn "$(L "접두사가 다릅니다 — 건너뜀" "Different prefix — skipping"): $name" ;;
     esac
   done
-  [ "$n" = 0 ] && dim "   제거할 것이 없습니다"
+  [ "$n" = 0 ] && dim "   $(L "제거할 것이 없습니다" "Nothing to remove")"
   return 0
 }

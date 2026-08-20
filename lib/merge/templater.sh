@@ -36,7 +36,8 @@ _ob_templater() {
       "$([ -f "$data" ] && printf '%s' "$data")" > "$out"; then
     jr_backup "$data" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $data"; }
     mv "$out" "$data"
-    ok "$(L "매핑 $(jq '.folder_templates|length' "$data")개" "$(jq '.folder_templates|length' "$data") mappings") · $(L "새 파일 생성 시 자동 삽입 켬" "auto-insert on new file is on")"
+    local nmap; nmap=$(jq '.folder_templates|length' "$data")
+    ok "$(L "매핑 ${nmap}개" "${nmap} mappings") · $(L "새 파일 생성 시 자동 삽입 켬" "auto-insert on new file is on")"
   else
     rm -f "$out"; warn "$(L "매핑 생성 실패 — 건드리지 않습니다" "Could not build the mapping — leaving it alone")"
   fi

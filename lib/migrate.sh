@@ -63,18 +63,19 @@ mg_run() {
   mg_status
   case $? in
     0) return 0 ;;
-    2) die "설정이 이 버전보다 새롭습니다 (설정 v$(mg_current) · 코드 v$DT_SCHEMA)
-   devtrail update 로 코드를 올리세요. 설정을 강제로 낮추지 않습니다." ;;
+    2) die "$(L "설정이 이 버전보다 새롭습니다" "Your config is newer than this code") ($(L "설정" "config") v$(mg_current) · $(L "코드" "code") v$DT_SCHEMA)
+   $(L "devtrail update 로 코드를 올리세요. 설정을 강제로 낮추지 않습니다." \
+       "Update with devtrail update. We will not downgrade your config.")" ;;
   esac
 
-  step "설정 스키마 $(mg_current) → $DT_SCHEMA"
+  step "$(L "설정 스키마" "Config schema") $(mg_current) → $DT_SCHEMA"
   mg_pending | while IFS=$'\t' read -r n why; do
     printf '   v%-3s %s\n' "$n" "$why"
   done
   echo
 
   if [ "$apply" = 0 ]; then
-    dim "   적용: devtrail update --apply   (또는 devtrail config migrate --apply)"
+    dim "   $(L "적용" "Apply"): devtrail update --apply   ($(L "또는" "or") devtrail config migrate --apply)"
     return 0
   fi
 
@@ -83,30 +84,33 @@ mg_run() {
   local own=0
   if ! _jr_active; then jr_begin migrate; own=1; fi
 
-  jr_backup "$CONFIG_FILE" >/dev/null || die "설정을 백업할 수 없습니다 — 중단합니다"
+  jr_backup "$CONFIG_FILE" >/dev/null || die "$(L "설정을 백업할 수 없습니다 — 중단합니다" "Cannot back up the config — stopping")"
 
   local n f tmp
   n=$(( $(mg_current) + 1 ))
   while [ "$n" -le "$DT_SCHEMA" ]; do
     f=$(_mg_file "$n")
-    [ -n "$f" ] || die "마이그레이션 파일이 없습니다: v${n}
-   코드가 잘못 배포됐습니다. 설정을 건드리지 않았습니다."
+    [ -n "$f" ] || die "$(L "마이그레이션 파일이 없습니다" "No migration file"): v${n}
+   $(L "코드가 잘못 배포됐습니다. 설정을 건드리지 않았습니다." \
+       "This build is broken. Your config was not touched.")"
     . "$f"
 
     tmp=$(mktemp)
     if ! "_mg_$(printf '%03d' "$n")" "$CONFIG_FILE" > "$tmp"; then
-      rm -f "$tmp"; die "마이그레이션 v${n} 실패 — 설정은 그대로입니다"
+      rm -f "$tmp"; die "$(L "마이그레이션 v${n} 실패 — 설정은 그대로입니다" \
+          "Migration v${n} failed — your config is unchanged")"
     fi
     # 결과가 JSON 이 아니면 절대 덮어쓰지 않는다.
-    jq -e . "$tmp" >/dev/null 2>&1 || { rm -f "$tmp"; die "마이그레이션 v${n} 이 깨진 JSON 을 냈습니다 — 설정은 그대로입니다"; }
+    jq -e . "$tmp" >/dev/null 2>&1 || { rm -f "$tmp"; die "$(L "마이그레이션 v${n} 이 깨진 JSON 을 냈습니다 — 설정은 그대로입니다" \
+          "Migration v${n} produced invalid JSON — your config is unchanged")"; }
 
     jq --argjson v "$n" '.version = $v' "$tmp" > "$CONFIG_FILE"
     rm -f "$tmp"
-    ok "v${n} 적용"
+    ok "v${n} $(L "적용" "applied")"
     n=$((n + 1))
   done
 
-  ok "설정 스키마 v${DT_SCHEMA}"
+  ok "$(L "설정 스키마" "Config schema") v${DT_SCHEMA}"
   [ "$own" = 1 ] && jr_end
   return 0
 }

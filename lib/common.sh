@@ -75,7 +75,8 @@ cfg_array() {
 config_exists() { [ -f "$CONFIG_FILE" ]; }
 
 require_config() {
-  config_exists || die "설정이 없습니다. 먼저 'devtrail init'을 실행하세요. ($CONFIG_FILE)"
+  config_exists || die "$(L "설정이 없습니다. 먼저 'devtrail init' 을 실행하세요." \
+          "No config yet. Run 'devtrail init' first.") ($CONFIG_FILE)"
 }
 
 # ── Vault path resolution ────────────────────────────────────────────────────
@@ -137,7 +138,7 @@ require_bins() {
   local missing=()
   for b in "$@"; do has "$b" || missing+=("$b"); done
   if [ ${#missing[@]} -gt 0 ]; then
-    die "필수 도구 없음: ${missing[*]}  ('devtrail doctor' 로 확인)"
+    die "$(L "필수 도구 없음" "Missing required tools"): ${missing[*]}  ('devtrail doctor')"
   fi
 }
 

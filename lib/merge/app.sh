@@ -48,7 +48,9 @@ _ob_app() {
   jr_backup "$app" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $app"; }
   mv "$out" "$app"; rm -f "$want"
 
-  ok "$(L "키 $(jq -r 'keys | length' "$app")개" "$(jq -r 'keys | length' "$app") keys") · alwaysUpdateLinks=$(jq -r '.alwaysUpdateLinks' "$app")"
+  # jq 를 한 번만 부른다. L 인자 안에 $( ) 를 중첩하면 읽기도 어렵다.
+  local nkeys; nkeys=$(jq -r 'keys | length' "$app")
+  ok "$(L "키 ${nkeys}개" "${nkeys} keys") · alwaysUpdateLinks=$(jq -r '.alwaysUpdateLinks' "$app")"
   [ "$(jq -r '.alwaysUpdateLinks' "$app")" = "true" ] \
     || warn "     $(L "alwaysUpdateLinks 가 꺼져 있습니다 — 노트를 옮기면 링크가 끊깁니다" \
                  "alwaysUpdateLinks is off — moving a note will break its links")"

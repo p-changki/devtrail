@@ -14,7 +14,7 @@ dashboard_run() {
   require_bins python3
 
   local src="$DEVTRAIL_ROOT/templates/dashboard"
-  [ -f "$src/server.py" ] || die "대시보드 파일 없음: $src/server.py"
+  [ -f "$src/server.py" ] || die "$(L "대시보드 파일 없음" "Dashboard files missing"): $src/server.py"
 
   local port="${DEVTRAIL_PORT:-7823}"
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
