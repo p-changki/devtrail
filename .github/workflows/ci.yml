@@ -1,0 +1,104 @@
+# DevTrail CI
+#
+# 잡을 나눈 기준은 '어디서 깨지는가' 다.
+#
+#   lint    ubuntu   문법·JSON·파이썬        OS 와 무관한 답. 빠르고 싸다.
+#   guard   ubuntu   이 저장소 고유의 함정    시크릿·경로·버전·스키마
+#   behav   macos    실제로 실행해 보는 것    ← 여기가 핵심
+#   app     macos    swift build             태그에서만
+#
+# ⚠️ behav 를 ubuntu 에서 돌리면 안 된다.
+#    ubuntu 의 bash 는 5.x 라, macOS 기본 bash 3.2 가 한글 첫 바이트를
+#    변수명에 흡수해 죽는 이 프로젝트 고유의 함정을 통과시켜 버린다.
+#    실제로 세 번 사고가 났고, 세 번 다 3.2 에서만 재현됐다.
+#
+# ⚠️ macOS 러너는 무료 한도를 10배로 소모한다. 그래서 behav 는 한 잡만,
+#    app 은 태그에서만 돈다.
+
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+    tags: ['v*']
+  pull_request:
+    branches: [main, dev]
+
+# 같은 브랜치에 연달아 푸시하면 앞의 실행을 취소한다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# ⚠️ 한글 정규식([가-힣])이 로케일을 탄다. ubuntu 러너 기본값에서
+#    이 범위가 안 맞으면 bash 3.2 검사가 '통과'로 보이면서 실제로는
+#    아무것도 안 본다. run.sh 에 자체 검증이 있지만, 여기서 먼저 막는다.
+env:
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8
+
+jobs:
+  lint:
+    name: 문법 · JSON · 파이썬
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 의존성 확인
+        run: jq --version && python3 --version && bash --version | head -1
+      - run: ./tests/run.sh lint
+
+  guard:
+    name: 시크릿 · 경로 · 버전 · 스키마
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 시크릿 스캔과 버전 검사가 git grep 을 쓴다.
+          # 얕은 클론이어도 워킹트리 전체를 보므로 depth 1 로 충분하다.
+          fetch-depth: 1
+      - run: ./tests/run.sh guard
+
+  behav:
+    name: 동작 (macOS · bash 3.2)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash 버전 확인
+        # 여기가 3.2 가 아니면 이 잡의 존재 이유가 사라진다.
+        # 조용히 5.x 로 돌면 함정을 통과시키므로 명시적으로 실패시킨다.
+        run: |
+          v=$(/bin/bash --version | head -1)
+          echo "$v"
+          case "$v" in
+            *"version 3."*) echo "✅ bash 3.x — 함정 재현 가능" ;;
+            *) echo "❌ /bin/bash 가 3.x 가 아닙니다. 이 잡의 전제가 깨졌습니다."; exit 1 ;;
+          esac
+      - name: 전체 검사
+        # 시스템 bash 3.2 로 명시해서 부른다. runner 의 PATH 에 있는
+        # 최신 bash 가 잡히면 이 잡이 아무것도 지키지 못한다.
+        run: /bin/bash ./tests/run.sh fast
+
+  app:
+    name: 메뉴바 앱 빌드
+    # 태그를 밀 때만 돈다. 매 PR 마다 swift build 를 돌리면
+    # macOS 러너 한도를 그것만으로 다 쓴다.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [lint, guard, behav]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 태그와 VERSION 이 같은가
+        # v0.3.0 을 밀었는데 VERSION 이 0.2.0 이면 잘못된 릴리스다.
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          file=$(tr -d ' \n' < VERSION)
+          echo "태그 $tag · VERSION $file"
+          [ "$tag" = "$file" ] || { echo "❌ 태그와 VERSION 이 다릅니다"; exit 1; }
+      - name: 빌드
+        run: ./app/build.sh
+      - name: 번들 확인
+        run: |
+          plutil -lint app/build/DevTrail.app/Contents/Info.plist
+          plutil -p app/build/DevTrail.app/Contents/Info.plist | grep CFBundleShortVersionString

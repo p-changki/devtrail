@@ -1,5 +1,7 @@
 # DevTrail
 
+[![CI](https://github.com/p-changki/devtrail/actions/workflows/ci.yml/badge.svg)](https://github.com/p-changki/devtrail/actions/workflows/ci.yml)
+
 > 개발 기록을 **자동으로 남기는** 환경을 한 번에 셋업하는 CLI.
 > GitHub 활동 → Obsidian 개발일지 → 주간리뷰까지, 손으로 쓰지 않아도 쌓입니다.
 
