@@ -5,7 +5,7 @@
 # 지원한다고 말하지 않는다 — 어설픈 3플랫폼 지원보다 명시적 미지원이 낫다.
 
 _sched_guard() {
-  [ "$(uname -s)" = "Darwin" ] || die "현재 macOS만 지원합니다 (감지: $(uname -s))"
+  [ "$(uname -s)" = "Darwin" ] || die "$(L "현재 macOS 만 지원합니다" "macOS only for now") ($(uname -s))"
 }
 
 schedule_install() {
@@ -27,9 +27,9 @@ schedule_install() {
     "INTERVAL=$interval"
 
   echo
-  ok "스케줄 등록 완료"
-  dim "   확인: devtrail doctor"
-  dim "   로그: $DEVTRAIL_HOME/logs/"
+  ok "$(L "스케줄 등록 완료" "Schedule registered")"
+  dim "   $(L "확인" "Check"): devtrail doctor"
+  dim "   $(L "로그" "Logs"): $DEVTRAIL_HOME/logs/"
 }
 
 schedule_uninstall() {
@@ -40,26 +40,27 @@ schedule_uninstall() {
     if [ -f "$plist" ]; then
       launchctl unload -w "$plist" 2>/dev/null || true
       rm -f "$plist"
-      ok "제거: $label"
+      ok "$(L "제거" "Removed"): $label"
     else
-      dim "   없음: $label"
+      dim "   $(L "없음" "Not present"): $label"
     fi
   done
   echo
-  ok "자동화를 제거했습니다"
-  dim "   볼트 데이터와 설정($CONFIG_FILE)은 그대로 둡니다."
-  dim "   완전 삭제하려면: rm -rf $DEVTRAIL_HOME"
+  ok "$(L "자동화를 제거했습니다" "Automation removed")"
+  dim "   $(L "볼트 데이터와 설정은 그대로 둡니다." "Your notes and config are left alone.") ($CONFIG_FILE)"
+  dim "   $(L "완전 삭제하려면" "To remove everything"): rm -rf $DEVTRAIL_HOME"
 }
 
 # _sched_render <label> <template> <dest-dir> [KEY=VAL ...]
 _sched_render() {
   local label="$1" tmpl="$2" dest="$3"; shift 3
-  [ -f "$tmpl" ] || { warn "템플릿 없음: $tmpl — 건너뜀"; return 0; }
+  [ -f "$tmpl" ] || { warn "$(L "템플릿 없음" "Template missing"): $tmpl — $(L "건너뜀" "skipped")"; return 0; }
 
   local plist="$dest/$label.plist"
   if [ -f "$plist" ]; then
     jr_backup "$plist" >/dev/null \
-      || die "plist 백업 실패 — 기존 스케줄을 건드리지 않습니다: $plist"
+      || die "$(L "plist 백업 실패 — 기존 스케줄을 건드리지 않습니다" \
+          "plist backup failed — leaving your schedule alone"): $plist"
     launchctl unload -w "$plist" 2>/dev/null || true
   fi
 
@@ -73,10 +74,10 @@ _sched_render() {
 
   if ! plutil -lint "$plist" >/dev/null 2>&1; then
     rm -f "$plist"
-    die "생성된 plist가 유효하지 않습니다: $label (템플릿 확인 필요)"
+    die "$(L "생성된 plist 가 유효하지 않습니다" "The generated plist is not valid"): $label"
   fi
 
   launchctl load -w "$plist" 2>/dev/null \
-    && ok "$label 등록" \
-    || { fail "$label 로드 실패 — 수동: launchctl load -w '$plist'"; return 1; }
+    && ok "$label $(L "등록" "registered")" \
+    || { fail "$label $(L "로드 실패 — 수동" "failed to load — do it manually"): launchctl load -w '$plist'"; return 1; }
 }
