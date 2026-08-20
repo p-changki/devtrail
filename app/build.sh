@@ -15,7 +15,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 APP_NAME="DevTrail"
 BUNDLE_ID="com.devtrail.menubar"
-VERSION="0.1.0"
+# cd 를 이미 했으므로 여기서는 상대경로가 app/ 기준이다.
+VERSION=$(cat ../VERSION 2>/dev/null || echo "0.0.0-dev")
 OUT="build/$APP_NAME.app"
 
 command -v swift >/dev/null 2>&1 || { echo "❌ swift 없음 — Xcode 또는 Command Line Tools 필요"; exit 1; }

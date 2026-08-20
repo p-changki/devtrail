@@ -110,6 +110,35 @@ check_file_size() {
   [ -z "$over" ]
 }
 
+check_version() {
+  # 버전은 VERSION 파일 하나에만 있어야 한다.
+  # 두 곳에 박아두면 릴리스할 때 한쪽을 빠뜨린다 — 실제로 그랬다.
+  [ -f VERSION ] || { echo "  ❌ VERSION 파일이 없다"; return 1; }
+
+  local v; v=$(tr -d ' \n' < VERSION)
+  case "$v" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *) echo "  ❌ 유의적 버전이 아니다: $v"; return 1 ;;
+  esac
+
+  local hard
+  hard=$(git grep -nE 'VERSION="[0-9]+\.[0-9]+' -- 'bin' 'lib' 'app' 2>/dev/null)
+  if [ -n "$hard" ]; then
+    printf '%s\n' "$hard" | sed 's/^/  ❌ 하드코딩: /'
+    return 1
+  fi
+
+  # CLI 가 내는 값과 파일이 같아야 한다
+  local cli; cli=$(./bin/devtrail version 2>/dev/null | awk '{print $2}')
+  [ "$cli" = "$v" ] || { echo "  ❌ devtrail version=$cli · VERSION=$v"; return 1; }
+
+  # CHANGELOG 에 이 버전이 있어야 한다
+  grep -q "^## \[$v\]" CHANGELOG.md 2>/dev/null \
+    || { echo "  ❌ CHANGELOG 에 [$v] 항목이 없다"; return 1; }
+
+  echo "  버전 $v · 단일 출처 · CHANGELOG 있음"
+}
+
 # ── 실행 ─────────────────────────────────────────────────────────────────────
 run "셸 문법"        check_shell
 run "파이썬"         check_python
@@ -117,6 +146,7 @@ run "JSON"          check_json
 run "bash 3.2"      check_bash32
 run "경로 하드코딩"   check_no_hardcoded_paths
 run "파일 길이"      check_file_size
+run "버전"          check_version
 run "시크릿"         ./tests/scan-secrets.sh
 run "스킬 규약"      ./tests/check-skills.sh
 run "path"          ./tests/test-path.sh

@@ -14,7 +14,9 @@ export DEVTRAIL_ROOT
 # shellcheck source=lib/common.sh
 . "$DEVTRAIL_ROOT/lib/common.sh"
 
-VERSION="0.1.0"
+# 버전의 단일 출처는 VERSION 파일이다.
+# 두 곳에 박아두면 릴리스할 때 한쪽을 빠뜨린다 — 실제로 그랬다.
+VERSION=$(cat "$DEVTRAIL_ROOT/VERSION" 2>/dev/null || echo "0.0.0-dev")
 
 usage() {
   cat <<EOF
