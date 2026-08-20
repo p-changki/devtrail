@@ -23,6 +23,8 @@ obsidian_apply() {
   _ob_shellcommands "$dot"
   _ob_automove "$dot"
   _ob_note_templates
+  _ob_templater "$dot"
+  _ob_hotkeys "$dot"
   _ob_smartenv
   _ob_advice "$dot"
 }
@@ -178,6 +180,98 @@ _ob_note_templates() {
     warn "     project_groups 가 비어 있어 PR 요약이 넣을 자리를 못 찾습니다"
     dim "     devtrail init 을 다시 돌리거나 설정의 github.project_groups 를 채우세요."
   fi
+}
+
+# ── Templater 폴더매핑 · 데일리노트 ─────────────────────────────────────────
+#
+# 이 둘이 있어야 "노트를 만들면 양식이 채워진다"가 성립한다.
+# trigger_on_file_creation 이 꺼져 있으면 아무 일도 일어나지 않는다.
+_ob_templater() {
+  local dot="$1"
+  local data="$dot/plugins/templater-obsidian/data.json"
+  local mode; mode=$(cfg '.install.mode' 'existing')
+  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
+  local paths; paths=$(_ob_paths_json)
+
+  step "Templater 폴더 매핑"
+  if [ ! -d "$(dirname "$data")" ]; then
+    _d_note "Templater 플러그인이 설치/활성화되지 않았습니다."
+    dim "     이게 없으면 노트를 만들어도 양식이 채워지지 않습니다."
+    return 0
+  fi
+
+  local out; out=$(mktemp)
+  if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates" \
+     python3 "$DEVTRAIL_ROOT/lib/hotkeys.py" templater \
+      "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
+      "$([ -f "$data" ] && printf '%s' "$data")" > "$out"; then
+    [ -f "$data" ] && cp "$data" "$data.bak.$(date +%Y%m%d%H%M%S)"
+    mv "$out" "$data"
+    ok "매핑 $(jq '.folder_templates|length' "$data")개 · 새 파일 생성 시 자동 삽입 켬"
+  else
+    rm -f "$out"; warn "매핑 생성 실패 — 건드리지 않습니다"
+  fi
+
+  # 데일리노트: 프로파일이 허용할 때만
+  local dn="$dot/daily-notes.json"
+  local allow; allow=$(jq -r '.merge.daily_notes // false' "$profile" 2>/dev/null)
+  if [ "$allow" = "false" ]; then
+    dim "     데일리노트 설정은 이 모드에서 건드리지 않습니다"
+    return 0
+  fi
+  if [ "$allow" = "confirm" ] && [ -f "$dn" ]; then
+    dim "     기존 데일리노트 설정이 있습니다 — 유지합니다"
+    dim "     바꾸려면 설정 → 데일리 노트 → 폴더: $(vault_rel "$(dt_dir devlog)")"
+    return 0
+  fi
+  local out2; out2=$(mktemp)
+  if python3 "$DEVTRAIL_ROOT/lib/hotkeys.py" daily \
+      "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
+      "$([ -f "$dn" ] && printf '%s' "$dn")" > "$out2"; then
+    [ -f "$dn" ] && cp "$dn" "$dn.bak.$(date +%Y%m%d%H%M%S)"
+    mv "$out2" "$dn"
+    ok "데일리노트 → $(jq -r '.folder' "$dn")"
+  else
+    rm -f "$out2"
+  fi
+}
+
+# ── 단축키 ───────────────────────────────────────────────────────────────────
+#
+# ⚠️ Templater 커맨드 ID 안에 볼트 경로가 들어간다. 정적 파일을 복사하면
+#    루트명이 다른 사용자에게서 단축키가 조용히 죽는다. 조립해서 만든다.
+_ob_hotkeys() {
+  local dot="$1" hk="$dot/hotkeys.json"
+  local paths; paths=$(_ob_paths_json)
+
+  step "단축키"
+  local ids; ids=$(mktemp)
+  jq -r '[.[] | {key: .id, value: .id}] | from_entries' \
+    "$DEVTRAIL_ROOT/templates/obsidian/shellcommands.json" > "$ids" 2>/dev/null || echo '{}' > "$ids"
+
+  local out; out=$(mktemp)
+  if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates" \
+     python3 "$DEVTRAIL_ROOT/lib/hotkeys.py" hotkeys \
+      "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
+      "$([ -f "$hk" ] && printf '%s' "$hk")" "$ids" > "$out"; then
+    [ -f "$hk" ] && cp "$hk" "$hk.bak.$(date +%Y%m%d%H%M%S)"
+    mv "$out" "$hk"
+    ok "단축키 $(jq 'length' "$hk")개 등록"
+    dim "     Obsidian 을 재시작해야 적용됩니다"
+  else
+    rm -f "$out"; warn "단축키 생성 실패 — 건드리지 않습니다"
+  fi
+  rm -f "$ids"
+}
+
+# 경로 맵을 임시 JSON 으로 낸다 (파이썬 쪽 입력용)
+_ob_paths_json() {
+  local f; f=$(mktemp)
+  . "$DEVTRAIL_ROOT/lib/pathcmd.sh"
+  path_cmd --json > "$f" 2>/dev/null \
+    && jq -n --slurpfile p "$f" '{paths: ($p[0] | with_entries(.value = .value.rel))}' > "$f.2" \
+    && mv "$f.2" "$f"
+  printf '%s' "$f"
 }
 
 # ── RAG 제외 설정 ────────────────────────────────────────────────────────────
