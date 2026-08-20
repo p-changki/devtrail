@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# DevTrail runtime library — 렌더링된 스크립트들이 공통으로 source 한다.
+#
+# 이 파일에서 치환되는 값은 {{CONFIG_FILE}} 하나뿐이다.
+# 나머지 설정(볼트 경로·GitHub 계정·헤딩 문자열 등)은 실행 시점에 읽는다.
+# 그래야 설정을 바꿨을 때 재설치 없이 즉시 반영된다.
+
+CONFIG_FILE="${DEVTRAIL_CONFIG:-{{CONFIG_FILE}}}"
+DEVTRAIL_HOME_DIR="${DEVTRAIL_HOME:-{{DEVTRAIL_HOME}}}"
+
+# GUI 앱(Obsidian Shell Commands)이나 launchd에서 실행될 때는 PATH가 최소
+# 상태라 gh/jq를 못 찾고 "활동 없음"으로 조용히 실패한다. 명시적으로 붙인다.
+_brew=$(jq -r '.bin.brew_prefix // "/opt/homebrew"' "$CONFIG_FILE" 2>/dev/null)
+export PATH="${_brew}/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+[ -f "$CONFIG_FILE" ] || { echo "설정 없음: $CONFIG_FILE (devtrail init 필요)" >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "jq 없음 — brew install jq" >&2; exit 1; }
+
+# ⚠️ jq의 `//` 를 쓰면 안 된다. jq에서 false 는 falsy라 `false // empty` 가
+#    빈값을 반환해 기본값으로 폴백한다. 그러면 사용자가 false 로 끈 설정
+#    (ai.summary_enabled, backup.enabled 등)이 전부 무시된다.
+#    null 인지만 검사하고, false 는 "false" 문자열로 그대로 넘긴다.
+cfg() {
+  local v
+  v=$(jq -r "($1) | if . == null then empty else tostring end" "$CONFIG_FILE" 2>/dev/null)
+  [ -n "$v" ] && printf '%s' "$v" || printf '%s' "${2-}"
+}
+
+# ── 자주 쓰는 파생값 ─────────────────────────────────────────────────────────
+VAULT="$(cfg '.vault.path')"
+VROOT="$VAULT/$(cfg '.vault.root')"
+DEVLOG_DIR="$VROOT/$(cfg '.dirs.devlog')"
+WEEKLY_DIR="$VROOT/$(cfg '.dirs.weekly')"
+GH_USER="$(cfg '.github.user')"
+
+[ -d "$VAULT" ] || { echo "볼트 경로 없음: $VAULT" >&2; exit 1; }
+
+# devlog_path <YYYY-MM-DD> — 설정된 파일명 규칙으로 개발일지 경로 생성
+devlog_path() {
+  local d="$1" pat
+  pat="$(cfg '.naming.devlog_file' '{{DATE}} devlog.md')"
+  printf '%s/%s' "$DEVLOG_DIR" "${pat//\{\{DATE\}\}/$d}"
+}
+
+# ── 날짜 (macOS BSD date 기준) ───────────────────────────────────────────────
+date_shift() {  # date_shift <YYYY-MM-DD> <±N일>
+  date -j -v"$2"d -f "%Y-%m-%d" "$1" "+%Y-%m-%d"
+}
+epoch_of()      { date -j -f "%Y-%m-%d %H:%M:%S" "$1 00:00:00" "+%s"; }
+utc_of_epoch()  { date -u -r "$1" +"%Y-%m-%dT%H:%M:%S"; }
+
+validate_date() {
+  case "$1" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) return 0 ;;
+    *) echo "잘못된 날짜 형식: $1 (예: 2026-08-20)" >&2; return 1 ;;
+  esac
+}
+
+# ── AI 어댑터 ────────────────────────────────────────────────────────────────
+# ai_summarize <prompt>  → stdout 으로 요약 텍스트, 실패 시 non-zero
+#
+# ⚠️ 현재 실제로 검증된 provider는 claude 뿐이다.
+#    codex/gemini는 호출 형태만 맞춰뒀고 출력 형식까지 검증하지 않았다.
+#    검증 안 된 걸 "된다"고 하지 않기 위해, 미검증 provider는 경고를 남긴다.
+ai_summarize() {
+  local prompt="$1" provider
+  provider="$(cfg '.ai.provider' 'claude')"
+
+  command -v "$provider" >/dev/null 2>&1 || {
+    echo "AI CLI 없음: $provider" >&2; return 1; }
+
+  case "$provider" in
+    claude) claude -p "$prompt" </dev/null 2>/dev/null ;;
+    codex)
+      echo "⚠️ codex 어댑터는 미검증입니다 — 출력 형식이 다를 수 있습니다" >&2
+      codex exec --ephemeral -o - "$prompt" </dev/null 2>/dev/null ;;
+    gemini)
+      echo "⚠️ gemini 어댑터는 미검증입니다 — 출력 형식이 다를 수 있습니다" >&2
+      gemini -p "$prompt" </dev/null 2>/dev/null ;;
+    *) echo "지원하지 않는 ai.provider: $provider" >&2; return 1 ;;
+  esac
+}
+
+# ── 마커 기반 멱등 삽입 ──────────────────────────────────────────────────────
+# 같은 블록을 두 번 넣지 않고, 재실행하면 갱신한다.
+# insert_block <target-file> <block-file> <marker-start> <marker-end> <heading>
+insert_block() {
+  python3 - "$@" <<'PYEOF'
+import os, sys, tempfile
+target, block_path, m_start, m_end, heading = sys.argv[1:6]
+
+with open(target, encoding="utf-8") as f:
+    content = f.read()
+with open(block_path, encoding="utf-8") as f:
+    block = f.read().rstrip("\n")
+
+n_start = content.count(m_start)
+n_end   = content.count(m_end)
+
+if n_start or n_end:
+    # 마커가 정확히 한 쌍이고 순서가 맞을 때만 교체한다.
+    #
+    # 예전에는 split(m_end)[1] 로 '첫 번째' 종료 마커 뒤를 취했다. 종료 마커가
+    # 2개 있으면 그 사이의 모든 내용(사용자가 손으로 쓴 회고 등)이 통째로
+    # 사라졌다. 사용자 데이터가 소실되는 유일한 경로라 방어를 명시적으로 둔다.
+    if n_start != 1 or n_end != 1:
+        print(f"마커가 비정상입니다(start={n_start}, end={n_end}). "
+              f"안전을 위해 아무것도 바꾸지 않습니다: {target}", file=sys.stderr)
+        sys.exit(2)
+    if content.index(m_start) > content.index(m_end):
+        print(f"마커 순서가 뒤바뀌었습니다. 바꾸지 않습니다: {target}", file=sys.stderr)
+        sys.exit(2)
+    pre  = content.split(m_start, 1)[0]
+    post = content.split(m_end, 1)[1]
+    new = pre + block + post
+elif heading and heading in content:
+    out, inserted = [], False
+    for line in content.split("\n"):
+        out.append(line)
+        if not inserted and line.strip() == heading:
+            out.extend(["", block])
+            inserted = True
+    new = "\n".join(out)
+else:
+    print(f"헤딩을 찾지 못했습니다: {heading!r}", file=sys.stderr)
+    sys.exit(2)
+
+# 원자적 교체. 쓰는 도중 중단돼도 원본이 반쯤 잘린 상태로 남지 않는다.
+d = os.path.dirname(os.path.abspath(target))
+fd, tmp = tempfile.mkstemp(dir=d, prefix=".devtrail-", suffix=".tmp")
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(new)
+    os.replace(tmp, target)
+except BaseException:
+    if os.path.exists(tmp):
+        os.unlink(tmp)
+    raise
+PYEOF
+}

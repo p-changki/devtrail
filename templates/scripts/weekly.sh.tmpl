@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# DevTrail — 이번 주 주간리뷰 초안을 만든다.
+#
+#   weekly.sh [YYYY-MM-DD]   기준일이 속한 주(월~일). 생략 시 오늘
+#
+# 이미 파일이 있으면 건드리지 않는다(사용자가 쓴 내용을 덮어쓰면 안 된다).
+
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+REF="${1:-$(date +%Y-%m-%d)}"
+validate_date "$REF" || exit 1
+
+# ── 주 경계 (월요일 시작) ────────────────────────────────────────────────────
+DOW=$(date -j -f "%Y-%m-%d" "$REF" +%u)      # 1=월 … 7=일
+MON=$(date_shift "$REF" "-$((DOW - 1))")
+SUN=$(date_shift "$MON" "+6")
+NEXT=$(date_shift "$MON" "+7")               # Dataview 상한(미만 비교)용
+ISOWEEK=$(date -j -f "%Y-%m-%d" "$MON" "+%G-W%V")
+
+PAT="$(cfg '.naming.weekly_file' '{{ISOWEEK}} weekly.md')"
+TARGET="$WEEKLY_DIR/${PAT//\{\{ISOWEEK\}\}/$ISOWEEK}"
+
+mkdir -p "$WEEKLY_DIR"
+if [ -f "$TARGET" ]; then
+  echo "이미 있음 - 건너뜀: $TARGET"; exit 0
+fi
+
+# ── 이번 주 머지된 PR ────────────────────────────────────────────────────────
+PR_MD=""
+if [ -n "$GH_USER" ] && command -v gh >/dev/null 2>&1; then
+  PR_JSON=$(gh search prs --author="$GH_USER" --merged \
+    --merged-at="${MON}..${SUN}" --json number,title,url,repository \
+    --limit 50 2>/dev/null || echo '[]')
+  PR_MD=$(echo "$PR_JSON" | jq -r '
+    if length == 0 then "_(머지된 PR 없음)_" else
+    map(. + {_proj: (.repository.name | sub("-(fe|be|admin|api|web|app)$"; ""))})
+    | group_by(._proj) | .[]
+    | "**\(.[0]._proj)** (\(length))",
+      (sort_by(.number)[] | "- [#\(.number)](\(.url)) \(.title)"),
+      ""
+    end')
+fi
+
+# ⚠️ Dataview 쿼리에는 날짜를 '문자열로 박아 넣는다'.
+#    this.period_start 같은 frontmatter 참조는 Dataview에서 null로 읽혀
+#    'No implementation found for null + duration' 으로 쿼리 전체가 실패한다.
+#    (2026-08-20 확인 — 기존 주간리뷰가 이 문제로 아무것도 못 잡고 있었다.)
+DEVLOG_REL="$(cfg '.vault.root')/$(cfg '.dirs.devlog')"
+VROOT_REL="$(cfg '.vault.root')"
+
+cat > "$TARGET" <<EOF
+---
+type: weekly-review
+period_start: $MON
+period_end: $SUN
+created: $(date +%Y-%m-%d)
+tags: [type/weekly-review]
+---
+
+# $ISOWEEK 주간리뷰 ($MON ~ $SUN)
+
+## ✅ 이번 주 머지된 PR
+
+$PR_MD
+
+## 📝 이번 주 개발일지
+
+\`\`\`dataview
+LIST
+FROM "$DEVLOG_REL"
+WHERE file.day >= date("$MON") AND file.day <= date("$SUN")
+SORT file.day ASC
+\`\`\`
+
+## 🆕 이번 주 만든 노트
+
+\`\`\`dataview
+TABLE WITHOUT ID file.link AS "노트", file.folder AS "위치"
+FROM "$VROOT_REL"
+WHERE file.ctime >= date("$MON") AND file.ctime < date("$NEXT")
+SORT file.ctime DESC
+\`\`\`
+
+## 🔄 이번 주 수정한 노트
+
+\`\`\`dataview
+TABLE WITHOUT ID file.link AS "노트", file.mtime AS "수정"
+FROM "$VROOT_REL"
+WHERE file.mtime >= date("$MON") AND file.mtime < date("$NEXT")
+  AND file.ctime < date("$MON")
+SORT file.mtime DESC
+LIMIT 30
+\`\`\`
+
+## 💭 회고
+
+### 잘된 것
+
+### 아쉬운 것
+
+### 다음 주에 할 것
+
+EOF
+
+echo "주간리뷰 생성: $TARGET"

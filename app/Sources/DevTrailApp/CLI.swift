@@ -1,0 +1,150 @@
+import Foundation
+
+/// devtrail CLI 호출 래퍼.
+///
+/// 앱은 셸을 거치지 않고 실행 파일을 직접 띄운다(`Process` + 인자 배열).
+/// 셸을 경유하면 경로에 공백·따옴표가 있을 때 인젝션 위험이 생긴다.
+enum CLI {
+
+    struct Result {
+        let ok: Bool
+        let code: Int32
+        let out: String
+        let err: String
+        var text: String { (out + err).trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    /// devtrail 실행 파일 위치.
+    /// 1) 환경변수 DEVTRAIL_BIN  2) 앱 번들 옆  3) 흔한 설치 경로
+    static var binary: String {
+        if let env = ProcessInfo.processInfo.environment["DEVTRAIL_BIN"],
+           FileManager.default.isExecutableFile(atPath: env) { return env }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let candidates = [
+            "\(home)/.local/bin/devtrail",
+            "\(home)/.devtrail/src/bin/devtrail",
+            "/opt/homebrew/bin/devtrail",
+            "/usr/local/bin/devtrail",
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+            ?? "\(home)/.local/bin/devtrail"
+    }
+
+    static var isInstalled: Bool {
+        FileManager.default.isExecutableFile(atPath: binary)
+    }
+
+    /// 프로세스 공통 설정. GUI 앱은 PATH가 최소 상태라 gh/jq/git 을 못 찾는다.
+    private static func configure(_ p: Process, _ args: [String]) {
+        p.executableURL = URL(fileURLWithPath: binary)
+        p.arguments = args
+
+        var env = ProcessInfo.processInfo.environment
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let extra = "/opt/homebrew/bin:/usr/local/bin:\(home)/.local/bin"
+        env["PATH"] = extra + ":" + (env["PATH"] ?? "/usr/bin:/bin")
+        env["NO_COLOR"] = "1"          // 메뉴에 ANSI 이스케이프가 섞이지 않게
+        p.environment = env
+    }
+
+    private static func launchFailure(_ error: Error) -> Result {
+        Result(ok: false, code: -1, out: "",
+               err: "devtrail 실행 실패: \(error.localizedDescription)\n경로: \(binary)")
+    }
+
+    /// 끝나는 명령을 실행하고 결과를 기다린다.
+    ///
+    /// ⚠️ 상주하는 명령(`dashboard` 등)에는 쓰지 않는다 — `start(_:onLine:)` 를 쓴다.
+    @discardableResult
+    static func run(_ args: [String], timeout: TimeInterval = 900) -> Result {
+        let p = Process()
+        configure(p, args)
+
+        let outPipe = Pipe(), errPipe = Pipe()
+        p.standardOutput = outPipe
+        p.standardError = errPipe
+
+        do { try p.run() } catch { return launchFailure(error) }
+
+        // 파이프는 별도 스레드에서 읽는다.
+        //
+        // 여기서 readDataToEndOfFile()을 직접 부르면 자식이 끝날 때까지 막힌다.
+        // 그러면 아래 타임아웃 대기에 영영 도달하지 못해 timeout 인자가 무의미해진다
+        // (끝나지 않는 명령을 부르면 앱이 그대로 멈춘다).
+        var outData = Data(), errData = Data()
+        let lock = NSLock()
+        let group = DispatchGroup()
+        for (pipe, isOut) in [(outPipe, true), (errPipe, false)] {
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let d = pipe.fileHandleForReading.readDataToEndOfFile()
+                lock.lock()
+                if isOut { outData = d } else { errData = d }
+                lock.unlock()
+                group.leave()
+            }
+        }
+
+        if group.wait(timeout: .now() + timeout) == .timedOut {
+            p.terminate()
+            if group.wait(timeout: .now() + 3) == .timedOut, p.isRunning {
+                kill(p.processIdentifier, SIGKILL)
+                _ = group.wait(timeout: .now() + 2)
+            }
+            return Result(ok: false, code: -1, out: "",
+                          err: "시간 초과(\(Int(timeout))초) — 중단했습니다")
+        }
+
+        p.waitUntilExit()
+        lock.lock()
+        let out = String(data: outData, encoding: .utf8) ?? ""
+        let err = String(data: errData, encoding: .utf8) ?? ""
+        lock.unlock()
+
+        return Result(ok: p.terminationStatus == 0, code: p.terminationStatus,
+                      out: out, err: err)
+    }
+
+    /// 끝나지 않는 명령(예: `dashboard` 서버)을 띄우고 기다리지 않는다.
+    ///
+    /// 출력은 줄 단위로 흘려보낸다 — 시작에 성공했는지(주소)와 실패 사유를
+    /// UI가 알 수 있어야 하기 때문이다. 반환한 Process는 호출자가 종료시킨다.
+    static func start(_ args: [String], onLine: @escaping (String) -> Void) -> Process? {
+        let p = Process()
+        configure(p, args)
+
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else {
+                handle.readabilityHandler = nil    // EOF — 자식이 끝났다
+                return
+            }
+            guard let text = String(data: data, encoding: .utf8) else { return }
+            for line in text.split(separator: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else { continue }
+                DispatchQueue.main.async { onLine(trimmed) }
+            }
+        }
+
+        do { try p.run() } catch {
+            pipe.fileHandleForReading.readabilityHandler = nil
+            let message = launchFailure(error).text
+            DispatchQueue.main.async { onLine(message) }
+            return nil
+        }
+        return p
+    }
+
+    /// 백그라운드에서 실행하고 메인 스레드로 결과를 넘긴다.
+    static func runAsync(_ args: [String], completion: @escaping (Result) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let r = run(args)
+            DispatchQueue.main.async { completion(r) }
+        }
+    }
+}

@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# DevTrail — shared helpers.
+# Sourced by every subcommand. No side effects beyond variable definitions.
+#
+# ⚠️ macOS 기본 bash는 3.2다. 지켜야 할 두 가지:
+#
+#   1) mapfile · declare -A 등 bash 4 기능 금지.
+#   2) 한글이 뒤따르는 변수는 반드시 중괄호로 감싼다.
+#        "${n}개"  (O)      "$n개"  (X)
+#      bash 3.2는 한글의 첫 바이트를 변수명에 흡수해 `n<0xEA>: unbound variable`
+#      로 죽는다. set -u 와 겹치면 그 자리에서 스크립트가 끝난다.
+#      실제로 doctor 의 요약 줄이 '문제를 발견했을 때만' 죽고 있었다.
+
+set -uo pipefail
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+DEVTRAIL_ROOT="${DEVTRAIL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+DEVTRAIL_HOME="${DEVTRAIL_HOME:-$HOME/.devtrail}"
+CONFIG_FILE="${DEVTRAIL_CONFIG:-$DEVTRAIL_HOME/devtrail.config.json}"
+
+# ── Output ───────────────────────────────────────────────────────────────────
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_BLUE=$'\033[34m'
+else
+  C_RESET=''; C_BOLD=''; C_DIM=''; C_RED=''; C_GREEN=''; C_YELLOW=''; C_BLUE=''
+fi
+
+info()  { printf '%s\n' "$*"; }
+step()  { printf '%s▶%s %s\n' "$C_BLUE" "$C_RESET" "$*"; }
+ok()    { printf '%s✅%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
+warn()  { printf '%s⚠️ %s %s\n' "$C_YELLOW" "$C_RESET" "$*"; }
+fail()  { printf '%s❌%s %s\n' "$C_RED" "$C_RESET" "$*"; }
+dim()   { printf '%s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
+die()   { fail "$*"; exit 1; }
+
+# ── Config access ────────────────────────────────────────────────────────────
+# cfg <jq-path> [default]
+#   cfg '.vault.path'
+#   cfg '.github.user' ''
+# ⚠️ jq의 `//` 를 쓰면 안 된다. jq에서 false 는 falsy라 `false // empty` 가
+#    빈값을 반환하고, 결국 기본값으로 폴백한다. 그러면 사용자가 false 로 끈
+#    설정(backup.enabled 등)이 전부 무시된다 — 2026-08-20 실사용 검증에서
+#    백업을 껐는데도 실행되는 것으로 발견.
+#    null 인지만 검사하고, false 는 "false" 문자열로 그대로 넘긴다.
+cfg() {
+  local path="$1" default="${2-}"
+  [ -f "$CONFIG_FILE" ] || { printf '%s' "$default"; return 0; }
+  local v
+  v=$(jq -r "($path) | if . == null then empty else tostring end" "$CONFIG_FILE" 2>/dev/null) || v=''
+  [ -n "$v" ] && printf '%s' "$v" || printf '%s' "$default"
+}
+
+# cfg_array <jq-path> — one item per line
+cfg_array() {
+  [ -f "$CONFIG_FILE" ] || return 0
+  jq -r "${1}[]? // empty" "$CONFIG_FILE" 2>/dev/null
+}
+
+config_exists() { [ -f "$CONFIG_FILE" ]; }
+
+require_config() {
+  config_exists || die "설정이 없습니다. 먼저 'devtrail init'을 실행하세요. ($CONFIG_FILE)"
+}
+
+# ── Vault path resolution ────────────────────────────────────────────────────
+# 볼트 경로는 설정에 절대경로로 저장된다. root는 볼트 안의 최상위 폴더명.
+vault_path()  { cfg '.vault.path'; }
+vault_root()  { local p r; p=$(vault_path); r=$(cfg '.vault.root'); printf '%s' "${p%/}/$r"; }
+dir_devlog()  { printf '%s/%s' "$(vault_root)" "$(cfg '.dirs.devlog')"; }
+dir_weekly()  { printf '%s/%s' "$(vault_root)" "$(cfg '.dirs.weekly')"; }
+dir_templates() { printf '%s/%s' "$(vault_root)" "$(cfg '.dirs.templates')"; }
+
+# ── Dependency checks ────────────────────────────────────────────────────────
+has() { command -v "$1" >/dev/null 2>&1; }
+
+require_bins() {
+  local missing=()
+  for b in "$@"; do has "$b" || missing+=("$b"); done
+  if [ ${#missing[@]} -gt 0 ]; then
+    die "필수 도구 없음: ${missing[*]}  ('devtrail doctor' 로 확인)"
+  fi
+}
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+# 날짜(BSD/GNU 양쪽 지원). today_offset -1 → 어제
+today_offset() {
+  local off="${1:-0}"
+  if date -v-1d >/dev/null 2>&1; then
+    if [ "$off" -lt 0 ]; then date -v"${off}d" +%Y-%m-%d; else date -v"+${off}d" +%Y-%m-%d; fi
+  else
+    date -d "$off days" +%Y-%m-%d
+  fi
+}
+
+confirm() {
+  local prompt="${1:-계속할까요?}" reply
+  read -r -p "$prompt [y/N] " reply
+  [[ "$reply" =~ ^[Yy]$ ]]
+}

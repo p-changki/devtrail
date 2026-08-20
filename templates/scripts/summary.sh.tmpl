@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# DevTrail — 머지된 PR을 AI로 쉬운말 요약해 개발일지에 삽입한다.
+#
+#   summary.sh [YYYY-MM-DD]
+#
+# PR 번호 기준으로 중복을 막고, 섹션 헤딩은 레벨(## ~ ######)과 무관하게 찾는다.
+# AI 호출은 시간·비용이 들므로 자주 돌리지 않는 것을 전제로 한다.
+
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+TODAY="${1:-$(date +%Y-%m-%d)}"
+validate_date "$TODAY" || exit 1
+TARGET_FILE=$(devlog_path "$TODAY")
+
+[ "$(cfg '.ai.summary_enabled' 'true')" = "true" ] || { echo "AI 요약 비활성(ai.summary_enabled=false)"; exit 0; }
+[ -n "$GH_USER" ] || { echo "github.user 미설정 — devtrail init" >&2; exit 1; }
+[ -f "$TARGET_FILE" ] || { echo "개발일지 없음 - 건너뜀: $TARGET_FILE"; exit 0; }
+
+T_EPOCH=$(epoch_of "$TODAY")
+T_START=$(utc_of_epoch "$T_EPOCH")
+TOM_START=$(utc_of_epoch $((T_EPOCH + 86400)))
+
+MERGED=$(gh search prs --author="$GH_USER" --merged \
+  --merged-at="${T_START}Z..${TOM_START}Z" \
+  --json number,title,url,repository,body --limit 20 2>/dev/null || echo '[]')
+
+COUNT=$(echo "$MERGED" | jq 'length')
+[ "$COUNT" -eq 0 ] && { echo "머지된 PR 없음"; exit 0; }
+
+# repo → 개발일지 섹션 매핑. 설정의 github.project_groups 를 쓴다.
+#   { "my-app": "myapp", "acme-*": "acme" }
+#   - 정확히 일치하는 키가 우선
+#   - "prefix-*" 형태는 접두사 일치 (fe/be 로 나뉜 레포를 한 섹션에 모을 때)
+# 매핑이 없으면 레포명을 그대로 섹션명으로 쓴다.
+# jq 주의: startswith() 안에서는 입력이 $r 로 바뀌므로 .key 를 직접 쓸 수 없다.
+# 엔트리를 $e 로 먼저 바인딩해야 한다. (예전 코드는 항상 에러가 나고 2>/dev/null
+# 에 삼켜져, 와일드카드 매핑이 조용히 무시됐다.)
+section_for() {
+  local repo="$1" mapped err
+  err=$(mktemp)
+  mapped=$(jq -r --arg r "$repo" '
+    (.github.project_groups // {}) as $g
+    | ($g[$r]
+       // ($g | to_entries
+             | map(. as $e
+                   | select($e.key | endswith("*"))
+                   | select($r | startswith($e.key[:-1]))
+                   | $e.value)
+             | (.[0] // empty)))
+    // empty' "$CONFIG_FILE" 2>"$err")
+  if [ -s "$err" ]; then
+    echo "  ⚠️ project_groups 해석 실패: $(head -1 "$err")" >&2
+  fi
+  rm -f "$err"
+  printf '%s' "${mapped:-$repo}"
+}
+
+LIST=$(mktemp); trap 'rm -f "$LIST"' EXIT
+echo "$MERGED" | jq -c '.[]' > "$LIST"
+
+DID=0
+while IFS= read -r pr; do
+  NUM=$(echo "$pr"  | jq -r '.number')
+  REPO=$(echo "$pr" | jq -r '.repository.name')
+  TITLE=$(echo "$pr"| jq -r '.title')
+  URL=$(echo "$pr"  | jq -r '.url')
+  BODY=$(echo "$pr" | jq -r '.body // ""')
+  SECTION=$(section_for "$REPO")
+
+  # 섹션 존재 여부 + 중복 여부를 python 한 번으로 판단한다.
+  # 헤딩 레벨을 고정("#### ")하면 옛 노트의 "##### xxx"를 못 찾아 실패했었다.
+  STATUS=$(python3 - "$TARGET_FILE" "$SECTION" "$NUM" <<'PYEOF'
+import re, sys
+target, section, num = sys.argv[1:4]
+with open(target, encoding="utf-8") as f:
+    lines = f.readlines()
+h = re.compile(r'^(#{2,6})\s*' + re.escape(section) + r'\s*$')
+start = level = None
+for i, line in enumerate(lines):
+    m = h.match(line.strip())
+    if m:
+        start, level = i, len(m.group(1)); break
+if start is None:
+    print("MISSING"); sys.exit(0)
+end = len(lines)
+for j in range(start + 1, len(lines)):
+    m2 = re.match(r'^(#{1,6})\s', lines[j].lstrip())
+    if m2 and len(m2.group(1)) <= level:
+        end = j; break
+print("DONE" if f"#{num}](" in "".join(lines[start:end]) else "NEW")
+PYEOF
+)
+  case "$STATUS" in
+    MISSING) echo "PR #$NUM: '$SECTION' 섹션 없음 - 건너뜀"; continue ;;
+    DONE)    echo "PR #$NUM: 이미 요약됨 - 건너뜀"; continue ;;
+  esac
+
+  PROMPT="다음은 GitHub PR의 제목과 본문입니다. 이 PR이 실제로 어떤 작업이었는지, 몇 달 후에 다시 봐도 바로 이해할 수 있도록 쉬운 한국어로 요약해주세요.
+
+반드시 아래 형식을 정확히 지켜서 4줄로만 출력하세요 (다른 설명, 인사말, 코드블록 없이 이 4줄만):
+
+제목: (쉬운 말로 된 한 줄 제목, 15자 내외)
+왜: (이 작업을 왜 했는지, 배경/문제 상황을 쉬운 말로 2~3문장)
+어떻게: (실제로 무엇을 어떻게 바꿨는지 쉬운 말로 2~3문장)
+결과: (테스트/검증 결과가 어땠는지 1~2문장)
+
+전문 용어는 최대한 풀어서 설명하되, 무엇을 확인/검증했는지는 구체적으로 남기세요.
+
+PR 제목: $TITLE
+
+PR 본문:
+$BODY"
+
+  OUT=$(mktemp)
+  if ! ai_summarize "$PROMPT" > "$OUT"; then
+    echo "PR #$NUM: AI 요약 실패 - 건너뜀"; rm -f "$OUT"; continue
+  fi
+
+  # '|| true' 필수: set -e + pipefail 에서 grep no-match(exit 1)는 대입문을
+  # 실패시켜 스크립트를 즉시 죽인다. 그러면 아래 '형식이 다름' 안내는 절대
+  # 출력되지 않고, 루프에 남은 나머지 PR도 통째로 처리되지 않는다.
+  PT=$(grep -m1 '^제목:'   "$OUT" | sed 's/^제목: *//'   || true)
+  WHY=$(grep -m1 '^왜:'    "$OUT" | sed 's/^왜: *//'    || true)
+  HOW=$(grep -m1 '^어떻게:' "$OUT" | sed 's/^어떻게: *//' || true)
+  RES=$(grep -m1 '^결과:'  "$OUT" | sed 's/^결과: *//'  || true)
+  rm -f "$OUT"
+
+  if [ -z "$PT" ] || [ -z "$WHY" ]; then
+    echo "PR #$NUM: AI 출력 형식이 예상과 다름 - 건너뜀"; continue
+  fi
+
+  BLOCK=$(mktemp)
+  {
+    # '-' 접미사 = 기본 접힘. 필요한 것만 펼쳐 보게 한다.
+    printf -- '> [!abstract]- [%s #%s](%s) — %s\n' "$REPO" "$NUM" "$URL" "$PT"
+    printf -- '> **🤔 왜**\n> %s\n>\n' "$WHY"
+    printf -- '> **🛠 어떻게**\n> %s\n>\n' "$HOW"
+    printf -- '> **✅ 결과**\n> %s\n\n' "$RES"
+  } > "$BLOCK"
+
+  python3 - "$TARGET_FILE" "$BLOCK" "$SECTION" <<'PYEOF'
+import re, sys
+target, block_path, section = sys.argv[1:4]
+with open(target, encoding="utf-8") as f: lines = f.readlines()
+with open(block_path, encoding="utf-8") as f: block = f.readlines()
+h = re.compile(r'^(#{2,6})\s*' + re.escape(section) + r'\s*$')
+start = level = None
+for i, line in enumerate(lines):
+    m = h.match(line.strip())
+    if m:
+        start, level = i, len(m.group(1)); break
+if start is None:
+    print(f"섹션 '{section}' 없음", file=sys.stderr); sys.exit(1)
+end = len(lines)
+for j in range(start + 1, len(lines)):
+    m2 = re.match(r'^(#{1,6})\s', lines[j].lstrip())
+    if m2 and len(m2.group(1)) <= level:
+        end = j; break
+with open(target, "w", encoding="utf-8") as f:
+    f.writelines(lines[:end] + block + lines[end:])
+PYEOF
+  rm -f "$BLOCK"
+  echo "PR #$NUM ($SECTION) 요약 삽입 완료"
+  DID=1
+done < "$LIST"
+
+[ "$DID" -eq 0 ] && echo "새로 요약할 PR 없음"
+exit 0

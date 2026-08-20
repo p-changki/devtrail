@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# DevTrail — 하루 한 번 도는 오케스트레이터 (launchd가 호출).
+#
+# 한 단계가 실패해도 나머지는 계속 진행한다.
+# 각 단계는 스스로 멱등해야 한다(여러 번 돌아도 결과가 같아야 한다).
+
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/_lib.sh"
+
+LOG_DIR="$(dirname "$HERE")/logs"
+mkdir -p "$LOG_DIR"
+
+run_step() {
+  local label="$1"; shift
+  echo ""
+  echo "▶ $label"
+  if "$@"; then
+    return 0
+  else
+    echo "  ⚠️ 실패(계속 진행): $label" >&2
+    return 0
+  fi
+}
+
+echo "=== DevTrail daily — $(date '+%Y-%m-%d %H:%M:%S') ==="
+
+run_step "[1/4] 레포 docs 동기화"      "$HERE/repodocs.sh"
+run_step "[2/4] 어제 활동 보강"        "$HERE/activity.sh" "$(date_shift "$(date +%Y-%m-%d)" -1)"
+run_step "[3/4] 어제 PR 요약 보강"     "$HERE/summary.sh"  "$(date_shift "$(date +%Y-%m-%d)" -1)"
+run_step "[4/4] 이번 주 주간리뷰 초안" "$HERE/weekly.sh"
+
+# ── 볼트 백업 ────────────────────────────────────────────────────────────────
+# iCloud 볼트에서는 git 바이너리가 직접 접근하지 못한다(TCC).
+# python을 경유해 git을 자식 프로세스로 띄우면 통과한다. 우회가 아니라 필수다.
+if [ "$(cfg '.backup.enabled' 'true')" = "true" ]; then
+  echo ""
+  echo "▶ [백업] 볼트 git 커밋"
+  BACKUP_REPO="$(cfg '.backup.repo_path' "$HOME/.devtrail/vault-backup")"
+  "$(cfg '.bin.python' 'python3')" - "$VAULT" "$BACKUP_REPO" <<'PYEOF'
+import subprocess, sys, os, datetime
+vault, repo = sys.argv[1:3]
+env = dict(os.environ, GIT_DIR=os.path.join(repo, ".git"), GIT_WORK_TREE=vault)
+def git(*a):
+    return subprocess.run(["git", *a], env=env, capture_output=True, text=True)
+if not os.path.isdir(os.path.join(repo, ".git")):
+    os.makedirs(repo, exist_ok=True)
+    print(git("init", "-q").stderr or "  저장소 초기화")
+git("add", "-A")
+st = git("status", "--porcelain")
+if not st.stdout.strip():
+    print("  변경 없음"); sys.exit(0)
+msg = "backup: " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+r = git("commit", "-q", "-m", msg)
+n = len(st.stdout.strip().split("\n"))
+print(f"  커밋 완료 ({n}개 변경)" if r.returncode == 0 else f"  커밋 실패: {r.stderr.strip()}")
+PYEOF
+fi
+
+echo ""
+echo "=== 완료 — $(date '+%H:%M:%S') ==="

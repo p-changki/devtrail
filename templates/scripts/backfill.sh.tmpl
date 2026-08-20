@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# DevTrail — 지난 날짜의 활동/요약을 채워 넣는다.
+#
+#   backfill.sh 2026-08-19        지정한 날짜
+#   backfill.sh                   날짜 입력창을 띄운다(macOS)
+#
+# Obsidian이 꺼져 있었거나 자동 트리거를 놓친 날을 되메울 때 쓴다.
+
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/_lib.sh"
+
+DATE="${1:-}"
+
+if [ -z "$DATE" ]; then
+  if ! command -v osascript >/dev/null 2>&1; then
+    echo "날짜를 인자로 주세요: backfill.sh YYYY-MM-DD" >&2; exit 1
+  fi
+  DATE=$(osascript -e 'try
+    text returned of (display dialog "채워 넣을 날짜 (YYYY-MM-DD)" default answer "'"$(date_shift "$(date +%Y-%m-%d)" -1)"'" with title "DevTrail 백필")
+  on error
+    ""
+  end try' 2>/dev/null)
+  [ -n "$DATE" ] || { echo "취소됨"; exit 0; }
+fi
+
+validate_date "$DATE" || exit 1
+echo "▶ $DATE 백필"
+
+# 이미 삽입돼 있어도 다시 가져온다 — 백필은 '고쳐 넣는' 작업이다.
+FORCE_REFRESH=1 "$HERE/activity.sh" "$DATE" || echo "  ⚠️ activity 실패(계속)"
+"$HERE/summary.sh" "$DATE"                  || echo "  ⚠️ summary 실패(계속)"
+
+echo "완료: $DATE"

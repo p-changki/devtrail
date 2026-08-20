@@ -1,0 +1,102 @@
+[
+  {
+    "id": "devtrail-activity",
+    "platform_specific_commands": {
+      "default": "{{DEVTRAIL_HOME}}/scripts/activity.sh"
+    },
+    "alias": "DevTrail: 오늘 이슈/PR 삽입 (자동)",
+    "confirm_execution": false,
+    "ignore_error_codes": [],
+    "input_contents": { "stdin": null },
+    "output_handlers": {
+      "stdout": { "handler": "notification", "convert_ansi_code": true },
+      "stderr": { "handler": "notification", "convert_ansi_code": true }
+    },
+    "events": { "file-created": { "enabled": true } },
+    "debounce": null,
+    "command_palette_availability": "enabled",
+    "preactions": [],
+    "variable_default_values": {},
+    "execution_notification_mode": "quick",
+    "icon": null,
+    "shells": {},
+    "output_wrappers": { "stdout": null, "stderr": null },
+    "output_channel_order": "stdout-first",
+    "output_handling_mode": "buffered"
+  },
+  {
+    "id": "devtrail-activity-force",
+    "platform_specific_commands": {
+      "default": "FORCE_REFRESH=1 {{DEVTRAIL_HOME}}/scripts/activity.sh"
+    },
+    "alias": "DevTrail: 이슈/PR 강제 새로고침",
+    "confirm_execution": false,
+    "ignore_error_codes": [],
+    "input_contents": { "stdin": null },
+    "output_handlers": {
+      "stdout": { "handler": "notification", "convert_ansi_code": true },
+      "stderr": { "handler": "notification", "convert_ansi_code": true }
+    },
+    "events": {},
+    "debounce": null,
+    "command_palette_availability": "enabled",
+    "preactions": [],
+    "variable_default_values": {},
+    "execution_notification_mode": "quick",
+    "icon": null,
+    "shells": {},
+    "output_wrappers": { "stdout": null, "stderr": null },
+    "output_channel_order": "stdout-first",
+    "output_handling_mode": "buffered"
+  },
+  {
+    "id": "devtrail-summary",
+    "platform_specific_commands": {
+      "default": "{{DEVTRAIL_HOME}}/scripts/summary.sh"
+    },
+    "alias": "DevTrail: 머지된 PR 쉬운말 요약",
+    "confirm_execution": false,
+    "ignore_error_codes": [],
+    "input_contents": { "stdin": null },
+    "output_handlers": {
+      "stdout": { "handler": "notification", "convert_ansi_code": true },
+      "stderr": { "handler": "notification", "convert_ansi_code": true }
+    },
+    "events": {},
+    "debounce": null,
+    "command_palette_availability": "enabled",
+    "preactions": [],
+    "variable_default_values": {},
+    "execution_notification_mode": "quick",
+    "icon": null,
+    "shells": {},
+    "output_wrappers": { "stdout": null, "stderr": null },
+    "output_channel_order": "stdout-first",
+    "output_handling_mode": "buffered"
+  },
+  {
+    "id": "devtrail-backfill",
+    "platform_specific_commands": {
+      "default": "{{DEVTRAIL_HOME}}/scripts/backfill.sh"
+    },
+    "alias": "DevTrail: 날짜 지정 백필",
+    "confirm_execution": false,
+    "ignore_error_codes": [],
+    "input_contents": { "stdin": null },
+    "output_handlers": {
+      "stdout": { "handler": "notification", "convert_ansi_code": true },
+      "stderr": { "handler": "notification", "convert_ansi_code": true }
+    },
+    "events": {},
+    "debounce": null,
+    "command_palette_availability": "enabled",
+    "preactions": [],
+    "variable_default_values": {},
+    "execution_notification_mode": "quick",
+    "icon": null,
+    "shells": {},
+    "output_wrappers": { "stdout": null, "stderr": null },
+    "output_channel_order": "stdout-first",
+    "output_handling_mode": "buffered"
+  }
+]

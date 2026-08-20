@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# DevTrail — GitHub PR/Issue (+ Linear) 활동을 개발일지에 삽입한다.
+#
+#   activity.sh [YYYY-MM-DD]     날짜 생략 시 오늘
+#   FORCE_REFRESH=1 activity.sh  이미 삽입돼 있어도 다시 가져옴
+#
+# 마커 사이를 통째로 교체하므로 여러 번 실행해도 중복되지 않는다.
+
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+TODAY="${1:-$(date +%Y-%m-%d)}"
+validate_date "$TODAY" || exit 1
+YESTERDAY=$(date_shift "$TODAY" -1)
+
+TARGET_FILE=$(devlog_path "$TODAY")
+HEADING="$(cfg '.headings.issues_pr' '## Issues / PRs')"
+MARKER_START="<!-- devtrail:activity:start -->"
+MARKER_END="<!-- devtrail:activity:end -->"
+
+[ -n "$GH_USER" ] || { echo "github.user 미설정 — devtrail init" >&2; exit 1; }
+
+if [ ! -f "$TARGET_FILE" ]; then
+  echo "개발일지 없음 - 건너뜀: $TARGET_FILE"; exit 0
+fi
+
+# 파일은 있는데 헤딩이 아직 없으면 템플릿 엔진이 비동기로 쓰는 중일 수 있다.
+for _ in 1 2 3; do
+  grep -qF "$HEADING" "$TARGET_FILE" && break
+  sleep 0.5
+done
+grep -qF "$HEADING" "$TARGET_FILE" || { echo "헤딩 없음 - 건너뜀: $HEADING"; exit 0; }
+
+if [ "${FORCE_REFRESH:-0}" != "1" ] && grep -qF "$MARKER_START" "$TARGET_FILE"; then
+  if sed -n "/$MARKER_START/,/$MARKER_END/p" "$TARGET_FILE" | grep -qF "($TODAY)"; then
+    echo "이미 삽입됨 - 건너뜀"; exit 0
+  fi
+fi
+
+# ── 로컬 자정 → UTC 경계 ─────────────────────────────────────────────────────
+# gh search의 날짜 범위는 UTC 캘린더 day로 해석된다. bare date로 검색하면
+# 자정~오전9시(KST) 활동이 하루 전으로 잘못 분류돼 누락된다.
+T_EPOCH=$(epoch_of "$TODAY"); Y_EPOCH=$(epoch_of "$YESTERDAY")
+T_START=$(utc_of_epoch "$T_EPOCH")
+Y_START=$(utc_of_epoch "$Y_EPOCH")
+TOM_START=$(utc_of_epoch $((T_EPOCH + 86400)))
+
+# ── GitHub ───────────────────────────────────────────────────────────────────
+# "updated"는 CI 재실행·메타데이터 변경만으로도 몇 주 전 PR이 걸려 노이즈가 심하다.
+# created(새로 연 것) + merged(그 기간에 머지된 것)를 합쳐 진짜 활동만 잡는다.
+gh_prs() {
+  local created merged
+  created=$(gh search prs --author="$GH_USER" --created="${1}Z..${2}Z" \
+            --json number,title,url,repository,state --limit 20 2>/dev/null || echo '[]')
+  merged=$(gh search prs --author="$GH_USER" --merged --merged-at="${1}Z..${2}Z" \
+            --json number,title,url,repository,state --limit 20 2>/dev/null || echo '[]')
+  jq -s 'add | unique_by(.number)' <(echo "$merged") <(echo "$created") 2>/dev/null || echo '[]'
+}
+
+gh_issues() {
+  local created closed
+  created=$(gh search issues --author="$GH_USER" --created="${1}Z..${2}Z" \
+            --json number,title,url,repository,state --limit 20 2>/dev/null || echo '[]')
+  closed=$(gh search issues --author="$GH_USER" --state=closed --closed="${1}Z..${2}Z" \
+            --json number,title,url,repository,state --limit 20 2>/dev/null || echo '[]')
+  jq -s 'add | unique_by(.number)' <(echo "$closed") <(echo "$created") 2>/dev/null || echo '[]'
+}
+
+# 같은 프로젝트의 -fe/-be/-admin 등은 하나로 묶고 행에 태그로 구분한다.
+SUFFIX_RE="-(fe|be|admin|api|web|app)$"
+gh_grouped() {
+  echo "$2" | jq -r --arg kind "$1" --arg sfx "$SUFFIX_RE" '
+    if length == 0 then empty else
+    map(. + {
+      _proj: (.repository.name | sub($sfx; "")),
+      _tag:  (if (.repository.name | test($sfx))
+              then (.repository.name | sub(".*-"; "")) else "" end)
+    })
+    | group_by(._proj) | .[]
+    | "##### \(.[0]._proj) · \($kind) (\(length))",
+      "| # | 내용 | 상태 |", "|---|---|---|",
+      (sort_by(._tag, .number)[]
+       | "| [\(if ._tag == "" then "" else ._tag + " " end)#\(.number)](\(.url)) | \(.title) | `\(.state)` |"),
+      ""
+    end'
+}
+
+# ── Linear (선택) ────────────────────────────────────────────────────────────
+linear_fetch() {
+  [ "$(cfg '.linear.enabled' 'false')" = "true" ] || { echo '{}'; return; }
+  local svc key
+  svc="$(cfg '.linear.keychain_service' 'devtrail-linear-api-key')"
+  security find-generic-password -a "$USER" -s "$svc" >/dev/null 2>&1 || { echo '{}'; return; }
+  key=$(security find-generic-password -a "$USER" -s "$svc" -w)
+  # createdAt 또는 completedAt 기준. updatedAt은 상태값만 바뀌어도 걸려 노이즈가 된다.
+  local q
+  q="{\"query\":\"query { issues(filter: { assignee: { isMe: { eq: true } }, or: [ { createdAt: { gte: \\\"$1.000Z\\\", lt: \\\"$2.000Z\\\" } }, { completedAt: { gte: \\\"$1.000Z\\\", lt: \\\"$2.000Z\\\" } } ] }, orderBy: updatedAt) { nodes { identifier title url state { name } } } }\"}"
+  curl -s -X POST https://api.linear.app/graphql \
+    -H "Content-Type: application/json" -H "Authorization: $key" \
+    -d "$q" 2>/dev/null || echo '{}'
+}
+
+linear_grouped() {
+  echo "$1" | jq -r '
+    (.data.issues.nodes // [])
+    | if length == 0 then empty else
+      "##### Linear (\(length))",
+      "| 이슈 | 내용 | 상태 |", "|---|---|---|",
+      (.[] | "| [\(.identifier)](\(.url)) | \(.title) | `\(.state.name)` |"),
+      ""
+    end'
+}
+
+# ── 조립 ─────────────────────────────────────────────────────────────────────
+BLOCK=$(mktemp); R_Y=$(mktemp); R_T=$(mktemp)
+trap 'rm -f "$BLOCK" "$R_Y" "$R_T"' EXIT
+
+{ gh_grouped "PR" "$(gh_prs "$Y_START" "$T_START")"
+  gh_grouped "Issue" "$(gh_issues "$Y_START" "$T_START")"
+  linear_grouped "$(linear_fetch "$Y_START" "$T_START")"; } > "$R_Y"
+
+{ gh_grouped "PR" "$(gh_prs "$T_START" "$TOM_START")"
+  gh_grouped "Issue" "$(gh_issues "$T_START" "$TOM_START")"
+  linear_grouped "$(linear_fetch "$T_START" "$TOM_START")"; } > "$R_T"
+
+{
+  echo "$MARKER_START"
+  echo "#### 📌 어제 ($YESTERDAY)"
+  echo ""
+  if [ -s "$R_Y" ]; then cat "$R_Y"; else echo "_(활동 없음)_"; echo ""; fi
+  echo "#### 오늘 ($TODAY)"
+  echo ""
+  if [ -s "$R_T" ]; then cat "$R_T"; else echo "_(활동 없음)_"; echo ""; fi
+  echo "$MARKER_END"
+} > "$BLOCK"
+
+insert_block "$TARGET_FILE" "$BLOCK" "$MARKER_START" "$MARKER_END" "$HEADING"
+echo "활동 삽입 완료: $TARGET_FILE"

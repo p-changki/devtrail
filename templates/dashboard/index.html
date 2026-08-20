@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>DevTrail</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #181b22; --card2: #1f232c;
+    --line: #2a2f3a; --tx: #e6e9ef; --dim: #8b93a3;
+    --ok: #3fb950; --warn: #d29922; --bad: #f85149; --accent: #4d9fff;
+    --r: 11px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f5f6f8; --card:#fff; --card2:#f0f2f5; --line:#e2e5ea;
+            --tx:#1a1d23; --dim:#6b7280; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--tx);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif;
+    padding: 16px 14px 28px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  header { display: flex; align-items: center; gap: 9px; margin-bottom: 3px; }
+  h1 { font-size: 16px; margin: 0; letter-spacing: -.3px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+  .dot.warn { background: var(--warn); }
+  .dot.bad { background: var(--bad); }
+  .sub { color: var(--dim); font-size: 11.5px; margin-bottom: 12px; }
+  .spacer { flex: 1; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 9px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--r); padding: 12px 13px; display: flex; flex-direction: column;
+  }
+  .card h2 { font-size: 11px; font-weight: 600; color: var(--dim);
+             margin: 0 0 7px; letter-spacing: .3px; }
+  .big { font-size: 23px; font-weight: 650; letter-spacing: -.8px; line-height: 1.05;
+         display: inline-block; }
+  .unit { font-size: 11.5px; color: var(--dim); font-weight: 400; margin-left: 3px; }
+  .rows { margin-bottom: 6px; }
+  .meta { color: var(--dim); font-size: 11px; margin-top: auto; padding-top: 7px; }
+
+  .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: 12px; padding: 5px 10px; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--card2); color: var(--tx);
+    cursor: pointer; transition: .12s;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .45; cursor: progress; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { opacity: .88; color: #fff; }
+
+  /* eqMac 스타일 토글 */
+  .toggle { display: flex; align-items: center; justify-content: space-between;
+            padding: 5px 0; border-top: 1px solid var(--line); }
+  .toggle:first-of-type { border-top: none; }
+  .toggle span { font-size: 12px; }
+  .sw { width: 32px; height: 18px; border-radius: 999px; background: var(--line);
+        border: none; padding: 0; position: relative; cursor: pointer;
+        transition: .18s; flex: none; }
+  .sw::after { content: ""; position: absolute; top: 2.5px; left: 2.5px;
+               width: 13px; height: 13px; border-radius: 50%; background: #fff;
+               transition: .18s; }
+  .sw[aria-checked="true"] { background: var(--ok); }
+  .sw[aria-checked="true"]::after { transform: translateX(14px); }
+  /* 값을 모르는 상태. 꺼짐과 반드시 달라 보여야 한다. */
+  .sw[aria-checked="mixed"] { background: repeating-linear-gradient(
+      -45deg, var(--line) 0 3px, transparent 3px 6px); }
+  .sw[aria-checked="mixed"]::after { transform: translateX(7px); opacity: .45; }
+  .sw:disabled { cursor: not-allowed; opacity: .8; }
+  /* space-between 이라 auto 마진이 없으면 라벨과 스위치 사이에 뜬다 */
+  .unknown { font-size: 10.5px; color: var(--warn);
+             margin-left: auto; margin-right: 7px; }
+  .sw:disabled { opacity: .5; cursor: progress; }
+
+  pre { background: var(--card2); border: 1px solid var(--line); border-radius: 8px;
+        padding: 10px; overflow: auto; font-size: 11.5px; line-height: 1.45;
+        max-height: 260px; margin: 0; white-space: pre-wrap; }
+  .full { grid-column: 1 / -1; }
+  #toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+           background: var(--card); border: 1px solid var(--line); color: var(--tx);
+           padding: 7px 14px; border-radius: 999px; font-size: 12px;
+           opacity: 0; transition: .2s; pointer-events: none; }
+  #toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="dot" id="health"></span>
+    <h1>DevTrail</h1>
+    <span class="spacer"></span>
+    <button onclick="doctor()">진단</button>
+    <button onclick="load()">새로고침</button>
+  </header>
+  <div class="sub" id="sub">불러오는 중…</div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>오늘의 활동</h2>
+      <div class="rows">
+        <div><div class="big" id="prRows">–</div><span class="unit">개 항목</span></div>
+      </div>
+      <div class="meta" id="activityMeta">–</div>
+      <div class="actions">
+        <button class="primary" onclick="act('activity')">가져오기</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>PR 요약</h2>
+      <div class="rows">
+        <div><div class="big" id="summaries">–</div><span class="unit">건 요약됨</span></div>
+      </div>
+      <div class="meta" id="aiMeta">–</div>
+      <div class="actions">
+        <button class="primary" onclick="act('summary')">요약 실행</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>주간리뷰 · 동기화</h2>
+      <div class="meta" style="margin-top:0;padding-top:0">이번 주 노트 생성 · 레포 문서 가져오기</div>
+      <div class="actions" style="margin-top:auto">
+        <button onclick="act('weekly')">주간리뷰</button>
+        <button onclick="act('sync')">docs</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>자동화 설정</h2>
+      <div class="toggle"><span>AI 요약</span>
+        <button class="sw" role="switch" data-key="ai.summary_enabled" onclick="tog(this)"></button></div>
+      <div class="toggle"><span>볼트 백업</span>
+        <button class="sw" role="switch" data-key="backup.enabled" onclick="tog(this)"></button></div>
+      <div class="toggle"><span>Linear 연동</span>
+        <button class="sw" role="switch" data-key="linear.enabled" onclick="tog(this)"></button></div>
+      <div class="meta" id="schedMeta">–</div>
+    </div>
+
+    <div class="card full" id="outCard" style="display:none">
+      <h2>실행 결과</h2>
+      <pre id="out"></pre>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const T = "{{TOKEN}}";
+const api = (p) => `${p}${p.includes("?") ? "&" : "?"}token=${encodeURIComponent(T)}`;
+let busy = false;
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 2600);
+}
+function show(text) {
+  document.getElementById("outCard").style.display = "";
+  document.getElementById("out").textContent = text.trim() || "(출력 없음)";
+}
+function setBusy(v) {
+  busy = v;
+  // 값을 모르는 토글은 작업이 끝나도 계속 잠겨 있어야 한다.
+  document.querySelectorAll("button").forEach(b => {
+    b.disabled = v || b.dataset.unknown === "1";
+  });
+}
+
+async function load() {
+  try {
+    const s = await (await fetch(api("/api/status"))).json();
+    const d = s.devlog;
+    document.getElementById("prRows").textContent = d.pr_rows;
+    document.getElementById("summaries").textContent = d.summaries;
+    document.getElementById("sub").textContent =
+      `${s.date} · ${s.github_user || "GitHub 미설정"} · ${s.vault || "볼트 미설정"}`;
+    document.getElementById("activityMeta").textContent = d.exists
+      ? (d.has_activity ? "개발일지에 삽입됨" : "개발일지는 있으나 아직 삽입 전")
+      : "오늘 개발일지가 없습니다";
+    document.getElementById("aiMeta").textContent = `AI: ${s.ai_provider || "없음"}`;
+    document.getElementById("schedMeta").textContent =
+      s.schedule.loaded > 0
+        ? `자동 실행 ${s.schedule.loaded}개 등록됨 · 매일 ${s.schedule.daily_hour}시`
+        : "자동 실행 미등록 — devtrail install-schedule";
+
+    // null은 "꺼짐"이 아니라 "값을 읽지 못함"이다. 꺼진 것처럼 그리면
+    // 실제로는 백업·AI 요약이 돌고 있는데 꺼졌다고 믿게 된다.
+    for (const [k, v] of Object.entries(s.toggles)) {
+      const el = document.querySelector(`.sw[data-key="${k}"]`);
+      if (!el) continue;
+      const unknown = (v === null || v === undefined);
+      el.dataset.unknown = unknown ? "1" : "";
+      el.disabled = unknown || busy;
+      el.setAttribute("aria-checked", unknown ? "mixed" : String(v));
+      el.title = unknown ? "설정을 읽지 못했습니다 — 현재 값을 알 수 없습니다" : "";
+      const note = el.parentElement.querySelector(".unknown");
+      if (note) note.remove();
+      if (unknown) {
+        const n = document.createElement("span");
+        n.className = "unknown"; n.textContent = "값 불명";
+        el.parentElement.insertBefore(n, el);
+      }
+    }
+    const h = document.getElementById("health");
+    h.className = "dot " + (!d.exists ? "warn" : (s.schedule.loaded ? "ok" : "warn"));
+  } catch (e) {
+    document.getElementById("sub").textContent = "상태를 불러오지 못했습니다: " + e;
+    document.getElementById("health").className = "dot bad";
+  }
+}
+
+async function act(name) {
+  if (busy) return;
+  setBusy(true); toast(`${name} 실행 중…`);
+  try {
+    const r = await (await fetch(api("/api/action"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: name })
+    })).json();
+    show((r.out || "") + (r.err || ""));
+    toast(r.ok ? "완료" : `실패 (코드 ${r.code})`);
+  } catch (e) { toast("오류: " + e); }
+  setBusy(false); load();
+}
+
+async function tog(el) {
+  if (busy) return;
+  if (el.dataset.unknown === "1") {
+    toast("현재 값을 읽지 못해 변경할 수 없습니다");
+    return;
+  }
+  const key = el.dataset.key;
+  const next = el.getAttribute("aria-checked") !== "true";
+  setBusy(true);
+  try {
+    const r = await (await fetch(api("/api/toggle"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, value: next })
+    })).json();
+    if (r.ok) { el.setAttribute("aria-checked", String(next));
+                toast(`${key} → ${next ? "켬" : "끔"}`); }
+    else toast("실패: " + (r.err || r.error));
+  } catch (e) { toast("오류: " + e); }
+  setBusy(false);
+}
+
+async function doctor() {
+  if (busy) return;
+  setBusy(true); toast("진단 중…");
+  try { show((await (await fetch(api("/api/doctor"))).json()).text); }
+  catch (e) { toast("오류: " + e); }
+  setBusy(false);
+}
+
+load();
+setInterval(() => { if (!busy) load(); }, 15000);
+</script>
+</body>
+</html>

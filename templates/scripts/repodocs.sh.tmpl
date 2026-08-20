@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# DevTrail — 각 레포의 docs/ 를 볼트로 단방향 동기화한다.
+#
+#   repodocs.sh
+#
+# 설계 원칙:
+#  - 단방향(레포 → 볼트). 볼트에서 고친 내용이 레포로 돌아가지 않는다.
+#  - --delete 를 쓰지 않는다. 레포에서 지운 문서도 볼트에는 남는다(기록 보존).
+#  - 코드 파일은 가져오지 않는다. 볼트는 '문서' 저장소다.
+#
+# ⚠️ 목적지 폴더는 '레포의 거울'이다. 여기서 직접 편집하지 말 것.
+#    --update 로 볼트 쪽이 더 새로우면 건너뛰지만, 레포에서 같은 파일이
+#    나중에 수정되면 결국 덮어쓴다. 편집한 내용을 남기고 싶으면 볼트의
+#    다른 폴더로 복사해서 쓰거나, 레포 쪽 원본을 고쳐라.
+#    (예전엔 -rt 만 써서 볼트 편집분이 10분마다 말없이 사라졌다.)
+
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
+SRC_ROOT="$(cfg '.sync.source_root')"
+SRC_ROOT="${SRC_ROOT/#\~/$HOME}"
+DEST_ROOT="$VROOT/$(cfg '.dirs.repodocs' 'repodocs')"
+
+[ -n "$SRC_ROOT" ] || { echo "sync.source_root 미설정 — devtrail init" >&2; exit 1; }
+[ -d "$SRC_ROOT" ] || { echo "소스 루트 없음: $SRC_ROOT" >&2; exit 1; }
+
+REPOS=$(jq -r '.sync.repos[]? // empty' "$CONFIG_FILE")
+[ -n "$REPOS" ] || { echo "sync.repos 가 비어 있음 - 할 일 없음"; exit 0; }
+
+# 기본 제외: 코드·빌드 산출물. 설정으로 덮어쓸 수 있다.
+EXCLUDES=$(jq -r '(.sync.exclude // [
+  "node_modules","dist","build",".next",".git",".DS_Store",
+  "*.log","*.ts","*.tsx","*.js","*.jsx","*.mjs","*.py","*.pyc",
+  "__pycache__","*.sh"
+])[]' "$CONFIG_FILE")
+
+# --update  : 목적지가 더 새로우면 건드리지 않는다 (볼트에서 편집한 것 보호)
+# --backup  : 그래도 덮어써야 할 때는 이전 내용을 남긴다 (조용한 소실 방지)
+BACKUP_DIR="$(cfg '.sync.backup_dir' "$DEVTRAIL_HOME_DIR/repodocs-backup")/$(date +%Y%m%d)"
+RSYNC_ARGS=(-rt --update --prune-empty-dirs --backup --backup-dir="$BACKUP_DIR")
+while IFS= read -r e; do
+  [ -n "$e" ] && RSYNC_ARGS+=(--exclude="$e")
+done <<EOF
+$EXCLUDES
+EOF
+
+mkdir -p "$DEST_ROOT"
+total=0
+while IFS= read -r repo; do
+  [ -n "$repo" ] || continue
+  src="$SRC_ROOT/$repo/docs"
+  if [ ! -d "$src" ]; then
+    echo "  - $repo: docs/ 없음 - 건너뜀"
+    continue
+  fi
+  dest="$DEST_ROOT/$repo"
+  mkdir -p "$dest"
+  rsync "${RSYNC_ARGS[@]}" "$src/" "$dest/"
+  n=$(find "$dest" -name '*.md' -type f | wc -l | tr -d ' ')
+  echo "  ✓ $repo/docs → $(cfg '.dirs.repodocs' 'repodocs')/$repo (md ${n}개)"
+  total=$((total + 1))
+done <<EOF
+$REPOS
+EOF
+
+echo "동기화 완료: ${total}개 레포"

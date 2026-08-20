@@ -1,0 +1,34 @@
+# DevTrail — 공개 저장소이므로 개인 데이터가 절대 들어가면 안 된다.
+
+# 사용자 설정(볼트 경로·GitHub 계정 등 개인정보 포함)
+devtrail.config.json
+!templates/devtrail.config.json
+*.config.local.json
+
+# 시크릿
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# 렌더링 결과물(치환된 개인 경로 포함)
+/rendered/
+*.plist
+!templates/launchd/*.plist.tmpl
+
+# 로그·백업
+logs/
+*.log
+*.bak
+*.bak.*
+
+# 빌드 산출물
+__pycache__/
+*.pyc
+app/.build/
+app/build/
+
+# OS
+.DS_Store

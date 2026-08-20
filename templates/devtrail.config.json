@@ -1,0 +1,62 @@
+{
+  "$schema": "./devtrail.schema.json",
+  "version": 1,
+
+  "vault": {
+    "backend": "local",
+    "path": "",
+    "root": "notes"
+  },
+
+  "dirs": {
+    "devlog": "devlog",
+    "weekly": "weekly",
+    "templates": "templates",
+    "projects": "projects",
+    "repodocs": "repodocs"
+  },
+
+  "naming": {
+    "devlog_file": "{{DATE}} devlog.md",
+    "weekly_file": "{{ISOWEEK}} weekly.md",
+    "date_format": "%Y-%m-%d"
+  },
+
+  "headings": {
+    "issues_pr": "## Issues / PRs",
+    "worklog": "## Work log",
+    "morning": "### Morning",
+    "youtube": "## YouTube"
+  },
+
+  "github": {
+    "user": "",
+    "repos": [],
+    "project_groups": {}
+  },
+
+  "linear": {
+    "enabled": false,
+    "keychain_service": "devtrail-linear-api-key"
+  },
+
+  "ai": {
+    "provider": "claude",
+    "summary_enabled": true
+  },
+
+  "backup": {
+    "enabled": true,
+    "repo_path": ""
+  },
+
+  "schedule": {
+    "daily_hour": 10,
+    "repodocs_interval_sec": 600
+  },
+
+  "bin": {
+    "python": "",
+    "brew_prefix": ""
+  }
+}
