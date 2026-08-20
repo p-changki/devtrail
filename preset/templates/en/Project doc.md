@@ -83,8 +83,24 @@ if (!docType) { dtCancel(app.workspace.getActiveFile()); tR = ""; return; }
 const title = (await tp.system.prompt("📝 Document title"))?.trim();
 if (!title) { dtCancel(app.workspace.getActiveFile()); tR = ""; return; }
 
+// Document type -> skeleton folder. A deterministic mapping.
+//
+// ⚠️ This used to ask for the type and then save everything straight into
+//    docs/. Designs, ADRs, and requirements piled into one folder and the
+//    skeleton did nothing. The numbers are a reading order — with no order,
+//    the numbers mean nothing.
+const DOC_DIR = {
+  prd:          "01-product",
+  design:       "03-architecture",
+  architecture: "03-architecture",
+  tech:         "03-architecture",
+  decision:     "00-overview",
+  meeting:      "00-overview",
+};
+
 const today = tp.date.now("YYYY-MM-DD");
-const docs = `${root}/${project}/docs`;
+const sub  = DOC_DIR[docType] || "00-overview";
+const docs = `${root}/${project}/docs/${sub}`;
 if (!app.vault.getAbstractFileByPath(docs)) await app.vault.createFolder(docs);
 await tp.file.move(`${docs}/${dtUnique(docs, `${today} ${dtSafe(title)}`)}`);
 

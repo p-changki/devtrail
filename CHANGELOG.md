@@ -36,6 +36,21 @@ git push origin main --tags
 
 ## [Unreleased]
 
+### 수정
+
+- **설계 문서가 종류를 묻고도 전부 `docs/` 바로 아래에 저장됐다.**
+  프로젝트 생성은 `00-overview` ~ `07-delivery` 골격을 만들고 번호를
+  '읽는 순서'라고 정의하는데, 정작 문서는 그 순서를 타지 않았다.
+  설계안·ADR·요구사항이 한 폴더에 쌓여 골격이 아무 일도 하지 않았다.
+
+  `doc_type` → 폴더 매핑을 결정적으로 만든다:
+
+      prd                       → 01-product
+      design·architecture·tech  → 03-architecture
+      decision·meeting          → 00-overview
+
+  스킬 문서(`devtrail-docs`)가 말하는 규칙과 같다. 검사가 둘의 일치를 본다.
+
 ### 추가
 
 - **한국어 · 영어 양쪽 지원.** `init` 이 언어를 가장 먼저 묻고, 폴더 이름과

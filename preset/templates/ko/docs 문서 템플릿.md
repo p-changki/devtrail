@@ -82,8 +82,23 @@ if (!docType) { dtCancel(app.workspace.getActiveFile()); tR = ""; return; }
 const title = (await tp.system.prompt("📝 문서 제목"))?.trim();
 if (!title) { dtCancel(app.workspace.getActiveFile()); tR = ""; return; }
 
+// 문서 종류 → 골격 폴더. 결정적 매핑이다.
+//
+// ⚠️ 예전에는 종류를 묻고도 전부 docs/ 바로 아래에 저장했다.
+//    설계안·ADR·요구사항이 한 폴더에 쌓여 골격이 아무 일도 하지 않았다.
+//    번호는 '읽는 순서'인데, 순서가 없으면 번호도 의미가 없다.
+const DOC_DIR = {
+  prd:          "01-product",
+  design:       "03-architecture",
+  architecture: "03-architecture",
+  tech:         "03-architecture",
+  decision:     "00-overview",
+  meeting:      "00-overview",
+};
+
 const today = tp.date.now("YYYY-MM-DD");
-const docs = `${root}/${project}/docs`;
+const sub  = DOC_DIR[docType] || "00-overview";
+const docs = `${root}/${project}/docs/${sub}`;
 if (!app.vault.getAbstractFileByPath(docs)) await app.vault.createFolder(docs);
 await tp.file.move(`${docs}/${dtUnique(docs, `${today} ${dtSafe(title)}`)}`);
 

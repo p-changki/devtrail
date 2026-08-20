@@ -237,6 +237,30 @@ left=$(grep -rl '[가-힣]' "$T_VAULT" 2>/dev/null \
        | grep -v 'Folders and tags' || true)
 t_eq "한글 든 파일 없음" "" "$left"
 
+# ── 문서 종류 → 골격 폴더 매핑 ───────────────────────────────────────────────
+#
+# 종류를 묻고도 전부 docs/ 바로 아래에 저장하면, 설계안·ADR·요구사항이
+# 한 폴더에 쌓여 골격이 아무 일도 하지 않는다.
+t_start "문서 배치가 결정적이다"
+for f in "preset/templates/en/Project doc.md" "preset/templates/ko/docs 문서 템플릿.md"; do
+  name=$(basename "$f")
+  t_contains "$name — 매핑이 있다"   "DOC_DIR"                    "$(cat "$f")"
+  t_contains "$name — 하위로 저장"   'docs/${sub}'                "$(cat "$f")"
+  t_not_contains "$name — 바로 아래 저장 안 함" \
+    'const docs = `${root}/${project}/docs`;' "$(cat "$f")"
+  # 골격 8단계 중 실재하는 폴더만 가리켜야 한다
+  for d in $(grep -oE '"0[0-7]-[a-z]+"' "$f" | tr -d '"' | sort -u); do
+    grep -q "\"$d\"" "preset/templates/en/New project.md" \
+      || t_eq "$name — $d 가 골격에 있다" "있음" "없음"
+  done
+done
+
+# 스킬 문서가 말하는 배치와 템플릿이 같아야 한다
+t_start "스킬 문서와 템플릿이 일치"
+t_contains "prd → 01-product"       "01-product"      "$(cat 'preset/templates/en/Project doc.md')"
+t_contains "design → 03-architecture" "03-architecture" "$(cat 'preset/templates/en/Project doc.md')"
+t_contains "스킬도 같은 규칙"        "01-product"      "$(cat skills/en/docs/SKILL.md)"
+
 # ── 없는 언어는 기본값으로 ───────────────────────────────────────────────────
 t_start "알 수 없는 언어"
 t_vault fallback
