@@ -28,9 +28,12 @@ dt_lang() {
 # 로케일에서 제안값을 뽑는다. 판단이 아니라 '제안'이다 — init 이 물어본다.
 dt_lang_from_locale() {
   case "${LC_ALL:-${LANG:-}}" in
-    ko*|*_KR*) printf 'ko' ;;
-    '')        printf 'ko' ;;   # 로케일이 없으면 기본값
-    *)         printf 'en' ;;
+    ko*|*_KR*)          printf 'ko' ;;
+    # ⚠️ C · C.UTF-8 · POSIX 는 '영어'가 아니라 '로케일 정보 없음' 이다.
+    #    서버 · Docker · cron · CI 에서 흔한 값이고, 이걸 영어로 읽으면
+    #    한국어 사용자의 볼트에 영어 폴더가 생긴다. 실제로 CI 가 잡았다.
+    ''|C|C.*|POSIX)     printf 'ko' ;;
+    *)                  printf 'en' ;;
   esac
 }
 

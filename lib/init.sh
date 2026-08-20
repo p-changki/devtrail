@@ -20,9 +20,12 @@ done
 unset _dt_part
 
 init_run() {
-  printf '%s\n' "${C_BOLD}DevTrail $(L "셋업" "setup")${C_RESET}"
-  dim "$(L "언제든 Ctrl+C 로 중단할 수 있습니다. 기존 파일은 덮어쓰지 않습니다." \
-          "Ctrl+C to stop at any point. Nothing existing is overwritten.")"
+  # ⚠️ 이 두 줄은 언어를 묻기 '전'에 나온다. 그 시점의 dt_lang 은 설정도
+  #    사용자의 답도 없어 로케일로 떨어지므로, L 을 쓰면 환경에 따라 문구가
+  #    달라진다. 언어 선택 화면과 같은 원칙으로 양쪽을 병기한다.
+  printf '%s\n' "${C_BOLD}DevTrail setup / 셋업${C_RESET}"
+  dim "Ctrl+C to stop at any point. Nothing existing is overwritten."
+  dim "언제든 Ctrl+C 로 중단할 수 있습니다. 기존 파일은 덮어쓰지 않습니다."
   echo
 
   require_bins jq

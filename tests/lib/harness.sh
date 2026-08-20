@@ -151,7 +151,12 @@ t_vault() {
 t_config() {
   local root extra="${2:-.}"
   if [ $# -ge 1 ]; then root="$1"; else root="notes"; fi
+  # ⚠️ version 과 lang 을 반드시 넣는다. 실제 v3 설정과 같은 모양이어야 한다.
+  #    lang 이 없으면 dt_lang 이 로케일로 떨어져, CI 환경(LC_ALL=C.UTF-8)에서
+  #    한국어 단언이 통째로 실패한다 — 실제로 그랬다.
   jq -n --arg v "$T_VAULT" --arg r "$root" '{
+    version: 3,
+    lang: "ko",
     vault: { backend: "local", path: $v, root: $r },
     dirs: {},
     headings: { issues_pr: "## Issues / PRs", worklog: "## Work log" },
