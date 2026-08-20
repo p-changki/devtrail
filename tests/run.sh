@@ -236,11 +236,15 @@ check_docs() {
   fi
 
   # 문서·템플릿이 없는 명령을 안내하면, 그대로 따라한 사람이 거기서 막힌다.
+  #
+  # ⚠️ ADR(docs/decisions/)은 예외다. 아직 만들지 않은 것을 '만들기로 한다'
+  #    라고 적는 문서라, 여기서 없는 명령을 안내하는 것이 정상이다.
+  #    사용자가 따라 하는 문서가 아니다.
   local known cmd unknown=""
   known=$(sed -n '/^case "$cmd" in/,/^esac/p' bin/devtrail \
           | grep -oE '^  [a-z|_-]+\)' | tr -d ' )' | tr '|' '\n' | sort -u)
   for cmd in $(git grep --untracked -hoE '(\./bin/)?devtrail [a-z][a-z-]*' -- \
-                 '*.md' '.github' 2>/dev/null \
+                 '*.md' '.github' ':!docs/decisions' 2>/dev/null \
                | awk '{print $2}' | sort -u); do
     printf '%s\n' "$known" | grep -qx "$cmd" || unknown="$unknown$cmd
 "
