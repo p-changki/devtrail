@@ -14,20 +14,35 @@ DevTrail 은 **사용자의 볼트를 건드리는 도구**라서, 버전 규칙
 
 ## 릴리스 절차
 
+`main` 은 보호돼 있다 — 직접 밀 수 없고 PR 로만 들어간다(관리자도 예외 없음).
+그래서 릴리스도 브랜치와 PR 을 거친다.
+
 ```bash
-# 1. VERSION 을 올린다 (여기가 단일 출처다)
-echo "0.3.0" > VERSION
+# 1. dev 에서 릴리스 브랜치를 딴다
+git checkout -b release/v0.4.0 dev
 
-# 2. CHANGELOG 의 [Unreleased] 를 새 버전으로 바꾸고 날짜를 넣는다
+# 2. VERSION 을 올린다 (여기가 단일 출처다)
+echo "0.4.0" > VERSION
 
-# 3. 검사를 통과시킨다 — 버전 · CHANGELOG 정합성도 여기서 본다
+# 3. CHANGELOG 의 [Unreleased] 아래에 새 버전과 날짜를 넣는다
+
+# 4. 검사를 통과시킨다 — 버전 · CHANGELOG 정합성도 여기서 본다
 ./tests/run.sh
 
-# 4. 커밋하고 태그를 붙인다
-git commit -am "release: v0.3.0"
-git tag -a v0.3.0 -m "v0.3.0"
-git push origin main --tags
+# 5. 커밋하고 PR 을 두 번 연다
+git commit -am "release: v0.4.0"
+git push -u origin release/v0.4.0
+gh pr create --base main --title "release: v0.4.0"   # 배포
+gh pr create --base dev  --title "release: v0.4.0"   # dev 도 같은 지점으로
+
+# 6. main 머지 후 태그를 붙인다
+git checkout main && git pull
+git tag -a v0.4.0 -m "v0.4.0"
+git push origin v0.4.0
 ```
+
+⚠️ 태그는 **main 에 머지된 뒤에** 붙인다. 릴리스 브랜치에 붙이면 배포된
+커밋과 태그가 가리키는 커밋이 달라진다.
 
 태그는 `v` 접두사를 붙인다 — `v0.3.0`. CI 의 Swift 빌드가 이 형식에만 걸린다.
 평소 PR 에서는 macOS 러너를 쓰지 않는다(무료 한도를 10배 소모한다).
@@ -35,6 +50,116 @@ git push origin main --tags
 ---
 
 ## [Unreleased]
+
+## [0.4.0] — 2026-08-22 · One Command Setup
+
+**`devtrail init` 하나로 Obsidian 까지 준비된다.** 그리고 실제로 Obsidian 을
+열어 `⌘⇧D` 를 눌러보고서야 드러난 것들을 고쳤다 — **12건 중 5건은 화면에
+"성공했다"고 보고하고 있었다.**
+
+### ⚠️ 기존 사용자가 먼저 할 것
+
+    devtrail update --apply
+
+생성 스크립트(`~/.devtrail/scripts/`)가 다시 만들어져야 아래 수정이 닿는다.
+`update` 가 스크립트를 다시 만들지 않던 것도 이번에 함께 고쳤다.
+
+### 추가
+
+- **원클릭 셋업** — `devtrail init` 이 `.obsidian/` 을 만들고, 플러그인 4종을
+  **버전을 고정해** 내려받아 켜고, 볼트를 Obsidian 에 등록하고, 설정을 병합한
+  뒤 Obsidian 을 연다. 터미널과 GUI 를 오갈 일이 없다.
+
+  남는 수동 조작은 하나다 — Obsidian 이 커뮤니티 플러그인을 신뢰할지 묻는
+  보안 확인. 우회하지 않는다.
+
+      설치 전 무엇을 어디서 받는지 화면에 띄우고 동의를 받는다
+      이미 깔린 플러그인은 건드리지 않는다 (다운그레이드 금지)
+      Obsidian 실행 중이면 레지스트리를 쓰지 않는다
+      전부 저널에 남는다 — devtrail undo 로 되돌린다
+      devtrail init --no-bootstrap 으로 빠져나갈 수 있다
+
+- **볼트를 목록에서 고른다** — 절대경로를 손으로 치는 대신 Obsidian 이 아는
+  볼트를 노트 수와 함께 보여준다. 자기 iCloud 볼트의 절대경로를 외우는
+  사람은 없다.
+
+- **`devtrail plugins install|status`** — 플러그인만 따로 다룬다.
+
+- **`devtrail setup env|plan|apply|status`** — 앱·CI 가 대화 없이 쓰는 계약.
+
+      devtrail setup plan --input spec.json --json    # 무엇이 바뀌는지 먼저
+      devtrail setup apply --input spec.json --apply  # dry-run 이 기본
+
+  대화형 `init` 도 **같은 적용 함수**를 부른다. "같은 입력이면 같은 결과" 가
+  설계상 보장된다. 쓴 스펙은 `~/.devtrail/setup-spec.json` 에 남는다.
+
+- **메뉴바 앱에 「셋업 시작」** — 앱을 먼저 연 사람이 막다른 길에 있었다.
+  설정이 없는데도 "오늘 개발일지 없음" 이라고 말했다.
+
+### 고침
+
+**같은 것이 두 곳에 있어서 어긋난 것 — 5건.** 전부 단일 출처로 모았다.
+
+- **개발일지 경로가 통째로 깨져 있었다.** 생성 스크립트가 `.dirs.devlog` 를
+  직접 읽는데, 그 값은 *사용자가 고른 폴더*만 담아서 새 볼트에서는 비어
+  있다. 경로가 `<루트>/` 가 됐다.
+
+      activity · summary · backfill    개발일지를 영영 못 찾음
+      weekly                           볼트 루트에 파일을 만듦
+
+- **웹 대시보드**와 **메뉴바 앱**도 같은 실수를 하고 있었다. 노트가 멀쩡히
+  있는데 "개발일지 없음" 이라고 표시했다. 셋 다 `devtrail path` 로 모았다.
+
+- **단축키 13개가 전부 죽어 있었다.** Templater 는 `enabled_templates_hotkeys`
+  에 등록된 템플릿에만 명령을 만드는데 그 목록이 비어 있었다. 존재하지 않는
+  명령에 키를 걸고 "단축키 13개 등록" 이라고 보고했다.
+
+- **프로젝트 허브(README)가 만들어지지 않았다.** 개발일지·개발메모·트러블슈팅
+  템플릿이 전부 `<프로젝트>/README` 로 링크하는데, `devtrail project add` 로
+  만든 프로젝트에는 그 파일이 없어 **링크가 전부 깨져** 있었다. 본문을
+  `preset/hub/` 로 옮겨 CLI 와 Obsidian 템플릿이 같은 것을 렌더한다.
+
+**그 밖에**
+
+- **Templater 자동 삽입이 꺼져 있었다.** 2.x 는 우리가 쓰던 키를 로드할 때
+  삭제한다. 노트를 만들어도 양식이 하나도 안 들어왔다. 설치된 `main.js` 에서
+  스키마 버전을 읽어 맞는 키를 쓴다.
+
+- **개발일지가 프로젝트 폴더로 끌려갔다.** 라우팅 규칙 병합이 새 규칙만 앞에
+  붙여서, 프로젝트를 나중에 등록하면 `#project/*` 가 `#type/devlog` 를 이겼다.
+  Auto Note Mover 는 첫 매칭을 쓴다. 사용자 노트가 사라진 것처럼 보이는
+  종류의 사고다.
+
+- **`activity` 자동 삽입이 간헐적으로 실패했다.** `file-created` 는 빈 파일이
+  생기는 순간 오는데 Templater 는 그 뒤에 본문을 쓴다. debounce 와 이벤트
+  파일 필터를 넣었다. 무관한 노트를 만들 때 오류 알림이 뜨던 것도 함께
+  고쳤다.
+
+- **`devtrail install-schedule --help` 가 도움말 대신 launchd 작업을
+  등록했다.** 인자를 아예 보지 않았다.
+
+- **저널 작업이 중첩되면 부모를 빼앗겼다.** 안쪽 명령이 작업을 열면 바깥
+  명령이 기록한 백업이 미아가 됐다. 이제 한 번의 명령이 하나의 되돌림
+  단위다.
+
+- **오류 메시지가 명령 치환에 갇혀 사라졌다.** 스펙이 잘못돼도 화면에
+  아무것도 나오지 않았다.
+
+- `devtrail update` 가 생성 스크립트를 다시 만들지 않았다. 고쳐도 기존
+  사용자에게 닿지 않는 상태였다.
+
+### 바뀐 동작
+
+- **`devtrail install-schedule` 은 이제 dry-run 이 기본이다.** 등록하려면
+  `--apply` 를 붙인다. 자동화 스크립트에서 이 명령을 쓰고 있다면 고쳐야 한다.
+- `devtrail dashboard` 가 `--port` 를 받고 알 수 없는 옵션을 거절한다.
+
+### 안쪽
+
+- 테스트 하네스가 서브셸 안의 실패를 세지 못했다. 3건이 실패한 파일이
+  `exit 0` 을 냈다(33개 중 8개만 집계). 집계를 파일로 옮겼다.
+- 회귀 테스트 15묶음 추가 — 단언 471개. 고친 차단성 결함마다 변이를 주입해
+  빨간불이 되는지 확인했다.
 
 ## [0.3.0] — 2026-08-21 · Project Relations
 
