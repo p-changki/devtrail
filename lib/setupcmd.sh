@@ -17,6 +17,7 @@
 # ⚠️ 한글 앞 변수는 중괄호로: "${n}개"  (bash 3.2)
 
 . "$DEVTRAIL_ROOT/lib/setup/spec.sh"
+. "$DEVTRAIL_ROOT/lib/setup/plan.sh"
 
 # ── 적용 ─────────────────────────────────────────────────────────────────────
 # setup_apply <스펙 JSON 문자열>
@@ -114,10 +115,26 @@ setup_cmd() {
   local sub="${1:-status}"
   [ $# -gt 0 ] && shift
   case "$sub" in
+    plan)   _setup_plan_cmd "$@" ;;
     apply)  _setup_apply_cmd "$@" ;;
     status) setup_status "$@" ;;
-    *) die "$(L "알 수 없는 하위 명령" "Unknown subcommand"): $sub  (apply|status)" ;;
+    *) die "$(L "알 수 없는 하위 명령" "Unknown subcommand"): $sub  (plan|apply|status)" ;;
   esac
+}
+
+_setup_plan_cmd() {
+  require_bins jq
+  local input="" json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --input) shift; input="${1:-}" ;;
+      --json)  json=1 ;;
+      *) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
+    esac
+    shift
+  done
+  sp_validate "$input"
+  setup_plan "$(sp_normalize "$input")" "$json"
 }
 
 _setup_apply_cmd() {
@@ -144,19 +161,16 @@ _setup_apply_cmd() {
   mode=$(printf '%s' "$spec"  | jq -r '.vault.mode')
   root=$(printf '%s' "$spec"  | jq -r '.vault.root')
 
-  step "$(L "셋업 적용" "Apply setup")"
+  # ⚠️ dry-run 화면을 여기서 따로 만들지 않는다. plan 과 두 벌이 되면
+  #    "미리 본 것" 과 "실제로 되는 것" 이 갈린다.
   if [ "$apply" != 1 ]; then
-    dim "   $(L "(dry-run — 실제로 적용하려면 --apply)" "(dry run — pass --apply to apply)")"
-    echo
-    info "  $(L "볼트" "Vault"): $vault"
-    info "  $(L "루트" "Root"): ${root:-<$(L "볼트 최상위" "vault top")>}"
-    info "  $(L "설치 방식" "Mode"): $mode"
-    info "  $(L "모듈" "Modules"): $(printf '%s' "$spec" | jq -r '.modules | join(" ")')"
-    info "  $(L "설정 파일" "Config"): $CONFIG_FILE"
+    setup_plan "$spec" 0
     echo
     dim "   $(L "적용" "Apply"): devtrail setup apply --input <file> --apply"
     return 0
   fi
+
+  step "$(L "셋업 적용" "Apply setup")"
 
   # ⚠️ 기존 설정을 덮어쓰기 전에 반드시 백업한다. 비대화형이라 사용자에게
   #    물을 수 없으므로, 되돌릴 수 있게 만드는 것이 유일한 안전장치다.

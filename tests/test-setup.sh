@@ -93,8 +93,12 @@ V0="$T_TMP/v0"; H0="$T_TMP/h0"; mkdir -p "$V0" "$H0"
 _spec "$V0" > "$T_TMP/spec0.json"
 out=$(DEVTRAIL_HOME="$H0" DEVTRAIL_CONFIG="$H0/devtrail.config.json" \
       "$DT" setup apply --input "$T_TMP/spec0.json" 2>&1)
-t_contains "dry-run 이라고 밝힌다" "dry-run" "$out"
+# ⚠️ --apply 없이 부르면 plan 과 같은 화면을 낸다. dry-run 화면을 따로
+#    만들면 "미리 본 것" 과 "실제로 되는 것" 이 갈린다.
+t_contains "무엇이 바뀌는지 보여준다" "$(L "적용하면 이렇게 됩니다" "Here is what would change")" "$out"
+t_contains "적용 방법을 알려준다" "--apply" "$out"
 t_no_file "설정을 쓰지 않는다" "$H0/devtrail.config.json"
+t_no_file "볼트를 만들지 않는다" "$V0/notes"
 
 # ── 계약: init == setup apply ────────────────────────────────────────────────
 #
@@ -182,5 +186,104 @@ s2=$(DEVTRAIL_HOME="$T_TMP/none" DEVTRAIL_CONFIG="$T_TMP/none/x.json" \
      "$DT" setup status --json 2>/dev/null)
 t_eq "설정이 없으면 configured=false" "false" \
   "$(printf '%s' "$s2" | jq -r '.configured')"
+
+# ── plan ─────────────────────────────────────────────────────────────────────
+#
+# 앱은 "무엇이 바뀌는가" 를 사용자에게 보여준 뒤 동의를 받는다. 그 판단의
+# 근거가 이 출력이다.
+#
+# ⚠️ plan 은 아무것도 쓰지 않는다. 여기서 파일이 생기면 "먼저 보여준다" 는
+#    약속이 거짓이 된다.
+t_start "plan 은 아무것도 쓰지 않는다"
+VP="$T_TMP/vp"; HP="$T_TMP/hp"; mkdir -p "$HP"
+jq -n --arg v "$VP" '{spec_version:1, lang:"ko",
+  vault:{backend:"local", path:$v, root:"notes", mode:"new"},
+  modules:["devlog"], github:{user:"t"}, ai:{provider:"none"},
+  bootstrap_plugins:false}' > "$T_TMP/plan-spec.json"
+
+out=$(DEVTRAIL_HOME="$HP" DEVTRAIL_CONFIG="$HP/devtrail.config.json" \
+      "$DT" setup plan --input "$T_TMP/plan-spec.json" --json 2>/dev/null)
+printf '%s' "$out" > "$T_TMP/plan.json"
+t_json "유효한 JSON" "$T_TMP/plan.json"
+t_no_file "설정을 쓰지 않는다" "$HP/devtrail.config.json"
+t_no_file "볼트를 만들지 않는다" "$VP/notes"
+t_no_file "스크립트를 만들지 않는다" "$HP/scripts"
+
+t_start "plan 이 무엇이 바뀌는지 말한다"
+t_eq "valid"           "true"  "$(jq -r '.valid' "$T_TMP/plan.json")"
+t_eq "undo_available"  "true"  "$(jq -r '.undo_available' "$T_TMP/plan.json")"
+t_eq "설치 방식"       "new"   "$(jq -r '.mode' "$T_TMP/plan.json")"
+
+# 빈 볼트에 새로 설치하면 만들 폴더가 있어야 한다.
+t_eq "폴더를 만들 계획이 있다" "true" \
+  "$(jq '(.changes.folders_create | length) > 0' "$T_TMP/plan.json")"
+t_contains "개발일지 폴더가 들어 있다" "개발일지" \
+  "$(jq -r '.changes.folders_create | join(",")' "$T_TMP/plan.json")"
+t_eq "템플릿을 깔 계획이 있다" "true" \
+  "$(jq '(.changes.templates_create | length) > 0' "$T_TMP/plan.json")"
+# 프로파일이 병합하는 대상이 그대로 나와야 한다.
+t_contains "app.json 병합" "app.json" \
+  "$(jq -r '.changes.settings_merge | join(",")' "$T_TMP/plan.json")"
+# ⚠️ 자동 이동은 새로 만든 노트에만 적용된다. 기존 노트를 옮기지 않는다.
+t_eq "노트를 옮기지 않는다" "0" \
+  "$(jq '.changes.notes_move | length' "$T_TMP/plan.json")"
+# bootstrap_plugins:false 면 받을 것이 없다.
+t_eq "플러그인을 받지 않는다" "0" \
+  "$(jq '.changes.plugins_install | length' "$T_TMP/plan.json")"
+
+# ⚠️ 이미 있는 것을 '만들 것' 으로 세면 계획이 규모를 부풀린다. 사용자는
+#    멀쩡한 볼트를 보고 "이게 다 새로 생긴다고?" 하며 겁을 먹는다.
+t_start "plan 은 이미 있는 것을 세지 않는다"
+VQ="$T_TMP/vq"; mkdir -p "$VQ/notes"
+jq --arg v "$VQ" '.vault.path = $v' "$T_TMP/plan-spec.json" > "$T_TMP/plan-q.json"
+
+# 먼저 계획을 받아 '만들 폴더' 하나를 고른다.
+q1=$(DEVTRAIL_HOME="$HP" DEVTRAIL_CONFIG="$HP/devtrail.config.json" \
+     "$DT" setup plan --input "$T_TMP/plan-q.json" --json 2>/dev/null)
+printf '%s' "$q1" > "$T_TMP/q1.json"
+first=$(jq -r '.changes.folders_create[0]' "$T_TMP/q1.json")
+n1=$(jq '.changes.folders_create | length' "$T_TMP/q1.json")
+t_ne "만들 폴더가 있다" "" "$first"
+
+# 그 폴더를 미리 만들어 두고 다시 계획을 받는다.
+mkdir -p "$VQ/$first"
+q2=$(DEVTRAIL_HOME="$HP" DEVTRAIL_CONFIG="$HP/devtrail.config.json" \
+     "$DT" setup plan --input "$T_TMP/plan-q.json" --json 2>/dev/null)
+printf '%s' "$q2" > "$T_TMP/q2.json"
+n2=$(jq '.changes.folders_create | length' "$T_TMP/q2.json")
+
+t_eq "하나 줄어든다" "$((n1 - 1))" "$n2"
+t_not_contains "이미 있는 폴더는 빠진다" "$first" \
+  "$(jq -r '.changes.folders_create | join("\n")' "$T_TMP/q2.json")"
+
+# 템플릿도 같다.
+tdir=$(jq -r '.changes.templates_create[0]' "$T_TMP/q1.json")
+if [ -n "$tdir" ] && [ "$tdir" != "null" ]; then
+  mkdir -p "$VQ/$(dirname "$tdir")"; printf 'x' > "$VQ/$tdir"
+  q3=$(DEVTRAIL_HOME="$HP" DEVTRAIL_CONFIG="$HP/devtrail.config.json" \
+       "$DT" setup plan --input "$T_TMP/plan-q.json" --json 2>/dev/null)
+  printf '%s' "$q3" > "$T_TMP/q3.json"
+  t_not_contains "이미 있는 템플릿은 빠진다" "$tdir" \
+    "$(jq -r '.changes.templates_create | join("\n")' "$T_TMP/q3.json")"
+fi
+
+t_start "plan 이 위험을 말한다"
+# 새로 시작 = 자동 이동 Automatic. 사용자가 알아야 한다.
+t_eq "위험을 하나 이상 말한다" "true" \
+  "$(jq '(.risks | length) > 0' "$T_TMP/plan.json")"
+
+# 기존 볼트에 얹으면 자동 이동이 Manual 로 시작한다 — 다른 위험이다.
+jq '.vault.mode = "existing"' "$T_TMP/plan-spec.json" > "$T_TMP/plan-ex.json"
+ex=$(DEVTRAIL_HOME="$HP" DEVTRAIL_CONFIG="$HP/devtrail.config.json" \
+     "$DT" setup plan --input "$T_TMP/plan-ex.json" --json 2>/dev/null)
+printf '%s' "$ex" > "$T_TMP/plan-ex-out.json"
+t_eq "얹기 모드로 읽힌다" "existing" "$(jq -r '.mode' "$T_TMP/plan-ex-out.json")"
+t_contains "Manual 이라고 밝힌다" "Manual" \
+  "$(jq -r '.risks | join(" ")' "$T_TMP/plan-ex-out.json")"
+
+t_start "plan 이 잘못된 스펙을 거절한다"
+t_exit "spec_version 이 틀리면 실패" 1 \
+  env DEVTRAIL_HOME="$HP" DEVTRAIL_CONFIG="$HP/devtrail.config.json" \
+  "$DT" setup plan --input "$BAD"
 
 t_end

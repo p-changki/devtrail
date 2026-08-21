@@ -4,18 +4,6 @@
 # ⚠️ 한글 앞 변수는 중괄호로: "${n}개"  (bash 3.2)
 
 # ── write ────────────────────────────────────────────────────────────────────
-# 개행 목록 → JSON 배열. 빈 입력은 [] 가 된다.
-_dt_json_array() {
-  printf '%s' "${1-}" | jq -R -s 'split("\n") | map(select(length > 0))'
-}
-
-# 개행 목록 → { "이름": "이름", ... } 항등 매핑.
-# project_groups 는 '레포명 → 개발일지 섹션명' 이다. 기본은 레포명 그대로 쓰고,
-# fe/be 로 나뉜 레포를 한 섹션에 모으고 싶으면 나중에 값만 바꾸면 된다.
-_dt_json_identity() {
-  printf '%s' "${1-}" \
-    | jq -R -s 'split("\n") | map(select(length > 0)) | map({key: ., value: .}) | from_entries'
-}
 
 
 _init_write_config() {
