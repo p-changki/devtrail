@@ -61,9 +61,22 @@ _ob_templates() {
   local hub="$DEVTRAIL_ROOT/preset/hub/project-readme.$(dt_lang).md"
   [ -f "$hub" ] || hub="$DEVTRAIL_ROOT/preset/hub/project-readme.ko.md"
   if [ -f "$hub" ]; then
-    jr_backup "$dest/_devtrail-project-readme.md" >/dev/null 2>&1 || true
-    cp "$hub" "$dest/_devtrail-project-readme.md" \
-      || warn "$(L "프로젝트 허브 원본 복사 실패" "Could not copy the project hub source")"
+    local hubdst="$dest/_devtrail-project-readme.md"
+    local existed=0
+    [ -f "$hubdst" ] && existed=1
+    # ⚠️ 백업 실패를 삼키면 "백업했다"고 말하면서 원본을 덮어쓰게 된다.
+    if [ "$existed" = 1 ]; then
+      jr_backup "$hubdst" >/dev/null \
+        || die "$(L "백업 실패 — 원본을 건드리지 않습니다" \
+                   "Backup failed — leaving the original alone"): $hubdst"
+    fi
+    if cp "$hub" "$hubdst"; then
+      # ⚠️ 새로 만든 것은 저널에 남겨야 undo 가 지운다. 안 남기면
+      #    되돌린 뒤에도 우리가 만든 파일이 볼트에 남는다.
+      [ "$existed" = 0 ] && jr_created "$hubdst"
+    else
+      warn "$(L "프로젝트 허브 원본 복사 실패" "Could not copy the project hub source")"
+    fi
   fi
 
   ok "$(L "템플릿 ${n}개 설치 (기존 유지 ${skipped}개)" \
