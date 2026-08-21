@@ -140,6 +140,25 @@ enum CLI {
         return p
     }
 
+    /// `--json` 을 붙여 실행하고 딕셔너리로 돌려준다. 실패하면 nil.
+    ///
+    /// ⚠️ 앱은 설정 파일을 직접 파싱하지 않는다.
+    ///
+    ///    예전에는 그렇게 했고, 그래서 앱이 세 번째 경로 해석기가 됐다 —
+    ///    `dig("dirs.devlog") ?? "devlog"` 처럼 자기만의 기본값을 갖고 있었다.
+    ///    그런데 `dirs` 는 '사용자가 고른 폴더' 만 담아서 새로 설치한 볼트에서는
+    ///    비어 있다. 화면은 <루트>/devlog/ 를 가리키며 "개발일지 없음" 이라고
+    ///    말하는데 파일은 개발/개발일지 에 멀쩡히 있는 상태가 된다.
+    ///    같은 결함을 생성 스크립트와 웹 대시보드에서 이미 두 번 고쳤다
+    ///    (2026-08-22 실물 QA).
+    ///
+    ///    해석은 CLI 한 곳에서만 한다.
+    static func json(_ args: [String], timeout: TimeInterval = 30) -> [String: Any]? {
+        let r = run(args, timeout: timeout)
+        guard r.ok, let data = r.out.data(using: .utf8) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
     /// 백그라운드에서 실행하고 메인 스레드로 결과를 넘긴다.
     static func runAsync(_ args: [String], completion: @escaping (Result) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {

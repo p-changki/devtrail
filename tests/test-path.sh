@@ -189,4 +189,35 @@ print(m.devlog_path(cfg, "2026-08-22"))
 t_eq "개발일지 경로가 실제 폴더" "$T_VAULT/notes/개발/개발일지/2026-08-22 devlog.md" "$got"
 t_not_contains "루트 바로 밑이 아니다" "notes/devlog/" "$got"
 
+# ── 메뉴바 앱도 같은 해석기를 쓰는가 ────────────────────────────────────────
+#
+# ⚠️ 회귀: Status.swift 가 dig("dirs.devlog") ?? "devlog" 로 자기만의 기본값을
+#    갖고 있었다. 새로 설치한 볼트는 dirs 가 비어 있어 화면이 <루트>/devlog/ 를
+#    가리키며 "개발일지 없음" 이라고 말했다 — 파일은 개발/개발일지 에 멀쩡히
+#    있었다. 생성 스크립트·웹 대시보드에서 이미 두 번 고친 같은 결함이다.
+#
+#    앱은 세 번째 해석기가 되면 안 된다.
+t_start "메뉴바 앱의 경로 해석"
+SW="$ROOT/app/Sources/DevTrailApp/Status.swift"
+t_file "Status.swift" "$SW"
+t_contains "CLI 로 해석한다" 'CLI.json(["path", "--json"])' "$(cat "$SW")"
+t_eq "dirs 를 직접 읽지 않는다" "0" \
+  "$(grep -c 'dig("dirs' "$SW" | tr -d ' ')"
+# 자기만의 기본값 문자열이 남아 있으면 그게 곧 두 번째 출처다.
+t_not_contains "devlog 기본값을 품지 않는다" '?? "devlog"' "$(cat "$SW")"
+t_not_contains "weekly 기본값도 없다"       '?? "weekly"' "$(cat "$SW")"
+# JSON 헬퍼가 있어야 다른 화면도 같은 길을 쓴다.
+t_contains "CLI 에 JSON 헬퍼가 있다" "static func json(" \
+  "$(cat "$ROOT/app/Sources/DevTrailApp/CLI.swift")"
+
+# path --json 이 앱이 기대하는 모양인가 — 계약의 양쪽을 함께 본다.
+t_vault appjson
+t_config notes
+"$DT" path --json > "$T_TMP/appjson.json" 2>/dev/null
+t_json "path --json 이 유효" "$T_TMP/appjson.json"
+t_eq "devlog.rel 이 있다" "notes/개발/개발일지" \
+  "$(jq -r '.devlog.rel' "$T_TMP/appjson.json")"
+t_eq "weekly.rel 도 있다" "notes/개발/주간리뷰" \
+  "$(jq -r '.weekly.rel' "$T_TMP/appjson.json")"
+
 t_end
