@@ -64,6 +64,15 @@
         "Mod",
         "Shift"
       ]
+    },
+    {
+      "template": "워크로그 템플릿.md",
+      "template_en": "Worklog.md",
+      "key": "W",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ]
     }
   ],
   "shellcommands": [
@@ -124,7 +133,6 @@
     "O",
     "L",
     "E",
-    "W",
     "Q"
   ]
 }

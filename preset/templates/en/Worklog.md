@@ -76,76 +76,72 @@ const dtSections = (keys) => [...new Set((keys || []).map(dtSection))];
 const dtKeysOf = (keys, section) => (keys || []).filter(k => dtSection(k) === section);
 _%>
 <%*
+// One task = one folder.  <project>/worklogs/YYYY-MM-DD_task-name/worklog.md
+//
+// ⚠️ Never write outside the vault. These used to pile up in ~/Desktop/worklogs/,
+//    split from everything in the vault, and both halves were useless.
+// ⚠️ The project list comes from the path map. Hardcoding it here means editing
+//    the template every time a project is added.
+const initial = app.workspace.getActiveFile();
 const root = dtPath("projects");
-const raw = (await tp.system.prompt("New project name"))?.trim();
-if (!raw) { dtCancel(app.workspace.getActiveFile()); tR = ""; return; }
 
-let name = dtSafe(raw) || "new-project";
-let folder = `${root}/${name}`;
-let i = 1;
-while (app.vault.getAbstractFileByPath(folder)) folder = `${root}/${name}-${i++}`;
-name = folder.split("/").pop();
+const PROJECTS = dtProjects();
+let project = "";
+if (PROJECTS.length) {
+  project = await tp.system.suggester(PROJECTS, PROJECTS, false, "📁 Which project?") || "";
+}
+if (!project) {
+  project = ((await tp.system.prompt("Project name (register: devtrail project add)", "")) || "").trim();
+}
+if (!project) { dtCancel(initial); tR = ""; return; }
 
-// The docs skeleton is numbered to force a reading order.
-// The point is that you never wonder which document to write next.
-const DOCS = ["00-overview", "01-product", "02-domain", "03-architecture",
-              "04-data", "05-infra", "06-compliance", "07-delivery"];
-// ⚠️ worklogs must have the same name in every project.
-//    The original had one project's name baked in (eduops-fe-worklogs),
-//    so every new project inherited someone else's name.
-for (const d of [folder, `${folder}/docs`, `${folder}/worklogs`,
-                 ...DOCS.map(x => `${folder}/docs/${x}`)]) {
+const raw = (await tp.system.prompt("📝 Task name (e.g. login-token-fix)"))?.trim();
+if (!raw) { dtCancel(initial); tR = ""; return; }
+
+const today = tp.date.now("YYYY-MM-DD");
+// Short kebab-case. The date goes first so skimming the list shows the arc.
+const task = dtSafe(raw).toLowerCase().replace(/\s+/g, "-");
+const dir = `${root}/${project}/worklogs/${today}_${task}`;
+
+for (const d of [`${root}/${project}`, `${root}/${project}/worklogs`, dir]) {
   if (!app.vault.getAbstractFileByPath(d)) await app.vault.createFolder(d);
 }
-await tp.file.move(`${folder}/README`);
-const today = tp.date.now("YYYY-MM-DD");
-
-tR += `---
+await tp.file.move(`${dir}/worklog`);
+%>
+---
 tags:
-  - type/project
-  - project/${name}
+  - type/doc
+  - project/<% project %>
   - area/dev
-type: project-home
-status: active
-stage: planning
-created: ${today}
-updated: ${today}
-project: ${name}
-next_action:
-review_at:
+type: worklog
+status: done
+created: <% today %>
+updated: <% today %>
+project: <% project %>
 ---
 
-# ${name}
+# <% raw %>
 
-## Goal
+> 📁 [[<% root %>/<% project %>/README|<% project %>]] · 🗓 <% today %>
+
+## Background
+
+> **Do not leave this empty.** Someone reading this in a few months needs
+> *why it was done that way*, not *what was done*.
+
+1. Trigger — a request, a bug, or something you found
+2. State before — what was wrong
+3. The approach you chose and why — what the alternatives were
+
+## What I did
 
 - 
 
-## Where it stands
+## Verification
 
-- 
+- What you checked and how:
+- Result:
 
-## Document skeleton
-
-\`\`\`dataview
-LIST FROM "${folder}/docs"
-WHERE file.name != "README"
-SORT file.path ASC
-\`\`\`
-
-## Work log
-
-> One task = one folder. Press \`⌘⇧W\` to create one.
-
-\`\`\`dataview
-TABLE file.folder AS "Task", file.mtime AS "Modified"
-FROM "${folder}/worklogs"
-SORT file.mtime DESC
-LIMIT 20
-\`\`\`
-
-## Next action
+## Left over
 
 - [ ] 
-`;
-%>

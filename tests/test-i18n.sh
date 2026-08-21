@@ -148,7 +148,9 @@ DEVTRAIL_LANG=en "$DT" obsidian >/dev/null 2>&1
 tdir="$T_VAULT/MyVault/Templates"
 t_file "영어 템플릿" "$tdir/Devlog.md"
 t_no_file "한국어 이름은 없다" "$tdir/개발일지양식.md"
-t_eq "템플릿 21개" "21" \
+# ⚠️ 개수를 박지 않는다. 템플릿을 추가할 때마다 테스트가 깨지면
+#    고치는 김에 단언을 느슨하게 만들게 된다.
+t_eq "템플릿 개수" "$(ls preset/templates/en/*.md | wc -l | tr -d ' ')" \
   "$(ls "$tdir"/*.md 2>/dev/null | grep -vc '_devtrail-paths' | tr -d ' ')"
 t_eq "한글 든 템플릿 0개" "0" \
   "$(grep -l '[가-힣]' "$tdir"/*.md 2>/dev/null | grep -vc '_devtrail-paths' | tr -d ' ')"

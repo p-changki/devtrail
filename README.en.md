@@ -65,7 +65,7 @@ MyVault/
 │   ├── 10_Sources/        attachments · originals
 │   ├── 20_Zettel/         only what you promoted. MOC included
 │   └── 30_Archive/
-├── Templates/             21 note templates
+├── Templates/             22 note templates
 └── Guides/                getting started · folders and tags · hotkeys · extending
 ```
 
@@ -278,11 +278,11 @@ It reports what is wrong **and how to fix it**.
 ## Current state
 
 **Works** — vault structure · adding to an existing vault · 3 install modes ·
-21 note templates · per-folder hubs · auto-filing · GitHub activity and PR
+22 note templates · per-folder hubs · auto-filing · GitHub activity and PR
 summaries · weekly reviews · 12 AI skills · undo · menu bar app · web dashboard
 
 **English coverage** — complete. Folder names, folder hubs, the dashboard and
-daily check-in, all 21 note templates, the in-vault guides, every CLI message,
+daily check-in, all 22 note templates, the in-vault guides, every CLI message,
 and all 12 AI skills. Tags and frontmatter keys are identical in both
 languages, so auto-filing and Dataview queries do not care which you picked.
 

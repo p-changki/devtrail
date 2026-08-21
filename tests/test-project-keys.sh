@@ -278,4 +278,44 @@ job=$(ls -1 "$DEVTRAIL_HOME/journal" | tail -1)
 "$DT" undo "$job" --apply >/dev/null 2>&1
 t_contains "undo 로 복구된다" "내가 고친 것" "$(cat "$TPL")"
 
+# ── worklog — AI 없이도 만들 수 있다 ────────────────────────────────────────
+#
+# 지금까지 worklog 작성 규칙은 AI 스킬에만 있었다. "AI 없이도 동일하게
+# 쓸 수 있다"는 제품 철학과 어긋났다.
+t_start "worklog 템플릿"
+for f in "preset/templates/ko/워크로그 템플릿.md" "preset/templates/en/Worklog.md"; do
+  n=$(basename "$f")
+  t_file "$n 존재" "$f"
+  t_contains "$n — 프로젝트 목록을 조회" "dtProjects()"  "$(cat "$f")"
+  t_contains "$n — 작업 하나 = 폴더 하나" "worklogs/"     "$(cat "$f")"
+  t_contains "$n — 프로젝트 태그"        "project/"      "$(cat "$f")"
+  t_contains "$n — 프로젝트 README 링크" "/README|"      "$(cat "$f")"
+  # 볼트 밖에 쓰지 않는다
+  t_not_contains "$n — 볼트 밖 경로 없음" "Desktop/worklogs" \
+    "$(grep -v '⚠️\|used to\|예전' "$f")"
+done
+
+t_start "worklog 단축키"
+t_contains "tmpl.json 에 등록" "워크로그 템플릿.md" "$(cat preset/obsidian/hotkeys.tmpl.json)"
+t_contains "영어 이름도"       "Worklog.md"         "$(cat preset/obsidian/hotkeys.tmpl.json)"
+t_not_contains "fallback 에서 뺐다" '"W"' \
+  "$(jq -c '.fallback_keys' preset/obsidian/hotkeys.tmpl.json)"
+
+t_start "worklog 설치"
+t_vault wl
+t_config MyVault
+mkdir -p "$T_VAULT/.obsidian"
+"$DT" augment --apply >/dev/null 2>&1
+"$DT" obsidian >/dev/null 2>&1
+t_file "템플릿 설치됨" "$T_VAULT/MyVault/템플릿/워크로그 템플릿.md"
+t_contains "단축키 배정됨" "워크로그" \
+  "$(jq -r 'keys[]' "$T_VAULT/.obsidian/hotkeys.json" | grep 워크로그 || echo '')"
+
+# 문서가 AI 없는 경로를 안내해야 한다
+t_start "문서가 ⌘⇧W 를 안내한다"
+t_contains "가이드(ko)"  '⌘⇧W' "$(cat 'preset/guides/ko/3. 단축키.md')"
+t_contains "가이드(en)"  '⌘⇧W' "$(cat 'preset/guides/en/3. Hotkeys.md')"
+t_contains "스킬(ko)"    '⌘⇧W' "$(cat skills/ko/worklog/SKILL.md)"
+t_contains "스킬(en)"    '⌘⇧W' "$(cat skills/en/worklog/SKILL.md)"
+
 t_end

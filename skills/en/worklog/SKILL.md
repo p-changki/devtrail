@@ -13,6 +13,10 @@ user_invocable: true
 One task becomes one folder. The date and task name are in the folder name,
 so skimming the list later shows you the arc.
 
+> **This works without AI.** Press `⌘⇧W` in Obsidian and you get the same
+> worklog shape. What this skill adds is filling in "Background" and
+> "Verification" from the conversation.
+
 ## 🔑 Path
 
 ```bash

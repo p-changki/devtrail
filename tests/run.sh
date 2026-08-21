@@ -223,6 +223,21 @@ check_docs() {
   [ "$claim" = "$actual" ] || { echo "  ❌ 병합기: 문서 ${claim} · 실제 ${actual}"; return 1; }
 
   # ⚠️ 스킬은 언어별로 한 벌씩 있다. 합쳐 세면 문서와 안 맞는다.
+  # 템플릿 개수도 본다. 하나 추가하고 문서를 안 고치면 거짓말이 된다.
+  #
+  # ⚠️ ARCHITECTURE 뿐 아니라 README 양쪽도 본다. 개수는 여러 문서에 흩어져
+  #    있어서, 한 곳만 검사하면 나머지가 조용히 낡는다.
+  local actual d claim
+  actual=$(ls preset/templates/ko/*.md 2>/dev/null | wc -l | tr -d ' ')
+  for d in "$doc" README.md README.en.md; do
+    [ -f "$d" ] || continue
+    claim=$(grep -oE '(노트 템플릿|note templates) [0-9]+종|[0-9]+ note templates' "$d" \
+            | head -1 | grep -oE '[0-9]+')
+    [ -n "$claim" ] || continue
+    [ "$claim" = "$actual" ] \
+      || { echo "  ❌ 템플릿: $d 는 ${claim} · 실제 ${actual}"; return 1; }
+  done
+
   claim=$(grep -oE '스킬 [0-9]+종' "$doc" | head -1 | grep -oE '[0-9]+')
   actual=$(find skills/ko -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')
   [ "$claim" = "$actual" ] || { echo "  ❌ 스킬: 문서 ${claim} · 실제 ${actual}"; return 1; }
