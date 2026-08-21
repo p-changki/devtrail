@@ -27,6 +27,12 @@ final class Status: ObservableObject {
     @Published var busy: String? = nil          // 실행 중인 작업 이름
     @Published var lastOutput = ""
     @Published var cliMissing = false
+    /// 설정 파일이 없다 = 아직 셋업하지 않았다.
+    ///
+    /// ⚠️ 예전에는 이 상태를 구분하지 않아, 셋업조차 안 한 사용자에게
+    ///    "오늘 개발일지 없음" 이라고 말했다. 사실이 아닌 데다 다음에
+    ///    무엇을 해야 하는지도 알려주지 않는 막다른 길이었다.
+    @Published var needsSetup = false
     @Published var lastRun = ""                 // 마지막 자동 실행 시각
     @Published var backfillDate = ""
 
@@ -51,12 +57,58 @@ final class Status: ObservableObject {
             return
         }
         cliMissing = false
+
+        needsSetup = !FileManager.default.fileExists(atPath: configPath)
+        if needsSetup {
+            health = .warn
+            headline = "아직 셋업하지 않았습니다"
+            detail = "볼트와 Obsidian 을 한 번에 준비합니다"
+            return
+        }
+
         loadConfig()
         loadDevlog()
         loadSchedule()
         loadLastRun()
         computeHealth()
         if backfillDate.isEmpty { backfillDate = yesterday() }
+    }
+
+    // MARK: - 셋업
+
+    /// `devtrail init` 을 Terminal 에서 연다.
+    ///
+    /// 왜 앱 안에서 안 하나: init 은 대화형이다. 답을 받아야 하고, 그 답이
+    /// 사용자의 볼트를 바꾼다. 그 대화를 앱 안에 다시 만드는 것은 같은 것을
+    /// 두 벌 관리하는 일이고, 둘이 어긋나는 순간 사용자가 다친다.
+    /// 앱이 할 일은 사용자를 그 대화 앞에 데려다 놓는 것까지다.
+    ///
+    /// AppleScript 대신 실행 파일을 Terminal 로 여는 방식을 쓴다 —
+    /// 자동화 권한 대화상자를 띄우지 않는다.
+    func startSetup() {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("devtrail-setup", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let script = dir.appendingPathComponent("setup.command")
+
+        // 경로에 공백·따옴표가 있어도 안전하도록 작은따옴표로 감싸고,
+        // 안의 작은따옴표는 이스케이프한다.
+        let quoted = "'" + CLI.binary.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let body = """
+        #!/bin/sh
+        clear
+        exec \(quoted) init
+        """
+        guard (try? body.write(to: script, atomically: true, encoding: .utf8)) != nil else {
+            lastOutput = "셋업 스크립트를 만들지 못했습니다."
+            return
+        }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                               ofItemAtPath: script.path)
+        let open = Process()
+        open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        open.arguments = ["-a", "Terminal", script.path]
+        do { try open.run() } catch { lastOutput = "Terminal 을 열지 못했습니다." }
     }
 
     // MARK: - 경로
