@@ -28,18 +28,29 @@ rolls up into weekly reviews.
 ```bash
 curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash
 
-devtrail init        # interactive setup
+devtrail init        # this is the whole setup
                      #   1) language — English / 한국어
-                     #   2) vault path
+                     #   2) vault — pick one Obsidian already knows, or make a new one
                      #   3) how to install — add to this vault / start fresh / isolated
                      #   4) root folder name · modules · GitHub · AI
-                     # → open the vault in Obsidian, install 4 plugins, restart
-devtrail obsidian    # merge plugin config, templates, hotkeys
+                     # → installs the 4 plugins, merges settings, opens Obsidian
 devtrail doctor      # tells you exactly what is not working
 ```
 
+`init` downloads the four Obsidian plugins at **pinned versions**, merges the
+settings, and opens the vault for you. No round trip between the terminal and
+Obsidian. It shows you what it is downloading and from where, and asks first.
+
+> One thing is left to you: when Obsidian asks whether to trust the community
+> plugins, allow them. That is Obsidian's security check for third-party code,
+> and we do not work around it.
+>
+> Prefer to handle the vault yourself? `devtrail init --no-bootstrap` writes the
+> config only, and you can run `devtrail obsidian` whenever you like.
+
 Already have a vault? That works too. `init` scans it first and offers to
-**use your existing folders** rather than making new ones.
+**use your existing folders** rather than making new ones. Plugins you already
+have are left untouched.
 
 ---
 
@@ -170,6 +181,8 @@ devtrail init              interactive setup
 devtrail scan [path]       diagnose a vault — structure · meta · conflicts (read-only)
 devtrail doctor            dependencies · auth · permissions · automation
 devtrail obsidian          merge Obsidian settings
+devtrail plugins <sub>     Obsidian plugins (install|status)
+devtrail setup <sub>       non-interactive setup (env|plan|apply|status) — for the app and CI
 devtrail augment [module]  create only missing folders and hubs
 devtrail project <sub>     register projects (add|list)
 devtrail template <sub>    note templates (list|diff|update)
@@ -205,7 +218,7 @@ devtrail update            update DevTrail itself
 devtrail undo [ID]         revert
 devtrail config [get|set]  settings  (config set lang en)
 devtrail path [key]        resolve a vault path
-devtrail app <sub>         menu bar app (macOS)
+devtrail app <sub>         menu bar app (install|start|stop|status|uninstall)
 devtrail dashboard         web dashboard
 devtrail install-schedule  register automatic runs
 devtrail uninstall         remove automation (never touches your vault)
@@ -285,7 +298,8 @@ It reports what is wrong **and how to fix it**.
 | Change journal | `~/.devtrail/journal/` |
 | Vault | wherever you chose |
 
-`devtrail uninstall` removes automation only. **It never touches your notes.**
+`devtrail uninstall` removes automation (launchd) only. **It never touches your notes.**
+The menu bar app is removed separately with `devtrail app uninstall`.
 
 ---
 

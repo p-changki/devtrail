@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 메뉴바 패널.
 ///
@@ -20,6 +21,9 @@ struct MenuView: View {
             if status.cliMissing {
                 Divider().padding(.vertical, 8)
                 missing
+            } else if status.needsSetup {
+                Divider().padding(.vertical, 8)
+                setup
             } else if showSettings {
                 settingsBody
             } else {
@@ -273,17 +277,64 @@ struct MenuView: View {
         .frame(maxHeight: 120)
     }
 
+    /// 아직 셋업하지 않은 사용자.
+    ///
+    /// ⚠️ 여기가 앱을 먼저 연 사람이 처음 보는 화면이다. 예전에는 이 상태를
+    ///    구분하지 않아 "오늘 개발일지 없음" 이라고만 했다 — 무엇을 해야
+    ///    하는지 알 수 없는 막다른 길이었다.
+    private var setup: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("아직 셋업하지 않았습니다")
+                .font(.system(size: 12, weight: .medium))
+            Text("볼트 · Obsidian 플러그인 · 노트 템플릿을 한 번에 준비합니다.")
+                .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: { status.startSetup() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "wand.and.stars").font(.system(size: 11))
+                    Text("셋업 시작").font(.system(size: 12, weight: .medium))
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(Hover(radius: 6))
+            Text("터미널이 열리고 질문에 답하면 끝납니다.")
+                .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+        }
+    }
+
+    /// CLI 자체가 없다. 셋업 버튼을 줘도 실행할 것이 없으므로 설치 방법을 준다.
     private var missing: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 5) {
             Text("devtrail 명령을 찾을 수 없습니다")
                 .font(.system(size: 12, weight: .medium))
-            Text("설치 후 다시 열어주세요.")
+            Text("터미널에서 아래를 실행한 뒤 이 창을 새로고침하세요.")
                 .font(.system(size: 10.5)).foregroundStyle(.secondary)
-            Text(CLI.binary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(Self.installCommand)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(.secondary).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(Self.installCommand, forType: .string)
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.on.doc").font(.system(size: 10.5))
+                    Text("명령 복사").font(.system(size: 11.5))
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(Hover(radius: 5))
+            Text("찾아본 곳: \(CLI.binary)")
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(.tertiary).textSelection(.enabled)
         }
     }
+
+    private static let installCommand =
+        "curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash"
 
     private var healthColor: Color {
         switch status.health {

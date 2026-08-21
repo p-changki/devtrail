@@ -16,7 +16,8 @@ app_cmd() {
     stop)    _app_stop ;;
     restart) _app_stop; sleep 1; _app_start ;;
     status)  _app_status ;;
-    *) die "$(L "사용법" "Usage"): devtrail app <install|start|stop|restart|status|build>" ;;
+    uninstall) shift; _app_uninstall "$@" ;;
+    *) die "$(L "사용법" "Usage"): devtrail app <install|start|stop|restart|status|build|uninstall>" ;;
   esac
 }
 
@@ -46,6 +47,41 @@ _app_install() {
   ok "$(L "설치 완료" "Installed"): $APP_INSTALLED"
   dim "     $(L "'devtrail app start' 로 실행하거나 Spotlight 에서 DevTrail 검색" \
                 "Run 'devtrail app start', or find DevTrail in Spotlight")"
+}
+
+# 앱을 /Applications 에서 지운다.
+#
+# ⚠️ 설치는 되는데 제거할 방법이 없었다. devtrail uninstall 은 자동화(plist)만
+#    지우고 앱은 남긴다 — 남의 /Applications 에 우리 것을 두고 나가는 셈이다.
+# ⚠️ 볼트와 설정은 건드리지 않는다. 앱만 지운다.
+_app_uninstall() {
+  local apply=0
+  [ "${1:-}" = "--apply" ] && apply=1
+
+  step "$(L "메뉴바 앱 제거" "Remove menu bar app")"
+  if [ ! -d "$APP_INSTALLED" ]; then
+    dim "   $(L "설치되어 있지 않습니다" "Not installed"): $APP_INSTALLED"
+    return 0
+  fi
+
+  local v
+  v=$(plutil -p "$APP_INSTALLED/Contents/Info.plist" 2>/dev/null \
+      | sed -nE 's/.*CFBundleShortVersionString" => "([^"]*)".*/\1/p')
+  info "  $APP_INSTALLED  (v${v:-?})"
+
+  if [ "$apply" = 0 ]; then
+    dim "   $(L "볼트와 설정은 건드리지 않습니다. 앱만 지웁니다." \
+               "Your vault and config are untouched. Only the app is removed.")"
+    echo
+    dim "   $(L "적용" "Apply"): devtrail app uninstall --apply"
+    return 0
+  fi
+
+  _app_stop >/dev/null 2>&1 || true
+  rm -rf "$APP_INSTALLED" \
+    || die "$(L "삭제 실패 — /Applications 쓰기 권한을 확인하세요" \
+               "Removal failed — check write access to /Applications")"
+  ok "$(L "제거 완료" "Removed"): $APP_INSTALLED"
 }
 
 _app_start() {

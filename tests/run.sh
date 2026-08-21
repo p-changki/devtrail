@@ -231,7 +231,10 @@ check_docs() {
   actual=$(ls preset/templates/ko/*.md 2>/dev/null | wc -l | tr -d ' ')
   for d in "$doc" README.md README.en.md; do
     [ -f "$d" ] || continue
-    claim=$(grep -oE '(노트 템플릿|note templates) [0-9]+종|[0-9]+ note templates' "$d" \
+    # ⚠️ 줄바꿈을 넘어야 한다. "노트 템플릿\n21종" 처럼 나뉘어 있으면
+    #    한 줄만 보는 grep 이 못 잡는다 — 실제로 그랬다.
+    claim=$(tr '\n' ' ' < "$d" \
+            | grep -oE '(노트 템플릿|note templates) +[0-9]+종|[0-9]+ note templates' \
             | head -1 | grep -oE '[0-9]+')
     [ -n "$claim" ] || continue
     [ "$claim" = "$actual" ] \
@@ -298,6 +301,8 @@ run behav "scan"          ./tests/test-scan.sh
 run behav "undo·마이그레이션" ./tests/test-undo.sh
 run behav "한국어·영어"    ./tests/test-i18n.sh
 run behav "프로젝트 키"   ./tests/test-project-keys.sh
+run behav "부트스트랩"     ./tests/test-bootstrap.sh
+run behav "setup 계약"     ./tests/test-setup.sh
 
 [ "$GROUP" = all ] && run swift "swift 빌드" \
   sh -c 'cd app && swift build -c release 2>&1 | tail -1'

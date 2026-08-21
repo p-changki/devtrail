@@ -137,4 +137,41 @@ out=$("$DT" augment 2>&1)
 t_contains "고른 모듈은 대상" "devlog" "$out"
 t_not_contains "고르지 않은 모듈은 제외" "pkm" "$(printf '%s' "$out" | grep '대상 모듈')"
 
+# ── 중첩 ─────────────────────────────────────────────────────────────────────
+#
+# ⚠️ 회귀: 중첩은 실제로 일어난다 — setup apply 가 내부에서 augment 를 부르고
+#    augment 도 자기 작업을 연다. 예전에는 자식이 DT_JOB_DIR 을 덮어써서
+#    부모가 기록한 백업이 미아가 됐고, "되돌리기" 안내가 두 번 찍혔다.
+#    한 번의 명령은 하나의 되돌림 단위여야 한다.
+t_start "저널 작업은 중첩되지 않는다"
+t_vault nest
+t_config notes
+
+before=$(ls -1 "$(_jrdir)" 2>/dev/null | wc -l | tr -d ' ')
+(
+  . "$ROOT/lib/common.sh"
+  jr_begin parent
+  parent_dir="$DT_JOB_DIR"
+  jr_begin child            # 안쪽 명령이 자기 작업을 연다
+  printf '%s' "$DT_JOB_DIR" > "$T_TMP/child-dir"
+  jr_created "$T_VAULT/from-child"
+  jr_end                    # 자식이 끝나도 부모는 살아 있어야 한다
+  printf '%s' "$DT_JOB_DIR" > "$T_TMP/after-child"
+  jr_created "$T_VAULT/from-parent"
+  jr_end
+  printf '%s' "$parent_dir" > "$T_TMP/parent-dir"
+)
+t_eq "자식이 부모 작업을 빼앗지 않는다" \
+  "$(cat "$T_TMP/parent-dir")" "$(cat "$T_TMP/child-dir")"
+t_eq "자식이 끝나도 부모가 살아 있다" \
+  "$(cat "$T_TMP/parent-dir")" "$(cat "$T_TMP/after-child")"
+
+after=$(ls -1 "$(_jrdir)" 2>/dev/null | wc -l | tr -d ' ')
+t_eq "작업이 하나만 생긴다" "$((before + 1))" "$after"
+
+job=$(_last)
+t_eq "명령 이름은 부모 것" "parent" "$(jq -r '.command' "$(_jrdir)/$job/meta.json")"
+t_eq "양쪽 기록이 한 작업에" "2" \
+  "$(grep -c . "$(_jrdir)/$job/entries.tsv" | tr -d ' ')"
+
 t_end

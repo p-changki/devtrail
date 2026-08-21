@@ -10,16 +10,35 @@
 # 자세한 내용은 templates/dashboard/server.py 상단 주석 참고.
 
 dashboard_run() {
+  # ⚠️ 인자를 보지 않으면 `devtrail dashboard --help` 가 도움말 대신 서버를
+  #    띄운다. install-schedule 에서 같은 실수를 잡았다(2026-08-22 실물 QA).
+  local port="${DEVTRAIL_PORT:-7823}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -p|--port) shift; port="${1:-$port}" ;;
+      -h|--help)
+        info "$(L "사용법" "Usage"): devtrail dashboard [--port PORT]"
+        dim "   $(L "기본 포트" "Default port"): 7823"
+        dim "   $(L "환경변수로도 됩니다" "The environment variable works too"): DEVTRAIL_PORT"
+        return 0 ;;
+      *) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
+    esac
+    shift
+  done
+
   require_config
   require_bins python3
 
   local src="$DEVTRAIL_ROOT/templates/dashboard"
   [ -f "$src/server.py" ] || die "$(L "대시보드 파일 없음" "Dashboard files missing"): $src/server.py"
 
-  local port="${DEVTRAIL_PORT:-7823}"
+  case "$port" in ''|*[!0-9]*) die "$(L "포트는 숫자여야 합니다" "The port must be a number"): $port" ;; esac
+
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
-    die "$(L "포트 $port 를 이미 누가 쓰고 있습니다." "Port $port is already in use.")
-   다른 포트로: DEVTRAIL_PORT=7824 devtrail dashboard"
+    # ⚠️ 다음 포트를 제안한다. 예전에는 7824 를 문자열로 박아놔서, 사용자가
+    #    이미 --port 로 다른 값을 줬어도 엉뚱한 번호를 안내했다.
+    die "$(L "포트 ${port} 를 이미 누가 쓰고 있습니다." "Port ${port} is already in use.")
+   $(L "다른 포트로" "Try another port"): devtrail dashboard --port $((port + 1))"
   fi
 
   DEVTRAIL_CONFIG="$CONFIG_FILE" \

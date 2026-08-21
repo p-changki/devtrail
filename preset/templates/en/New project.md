@@ -101,99 +101,20 @@ await tp.file.move(`${folder}/README`);
 const today = tp.date.now("YYYY-MM-DD");
 const repodocs = dtPath("repodocs");
 
-tR += `---
-tags:
-  - type/project
-  - project/${name}
-  - area/dev
-type: project-home
-status: active
-stage: planning
-created: ${today}
-updated: ${today}
-project: ${name}
-next_action:
-review_at:
----
-
-# ${name}
-
-## Goal
-
-- 
-
-## Where it stands
-
-- 
-
-## Documents
-
-\`\`\`dataview
-TABLE WITHOUT ID file.link AS "Doc", doc_type AS "Kind",
-  dateformat(file.mtime, "MM-dd") AS "Modified"
-FROM "${folder}/docs"
-WHERE file.name != "README"
-SORT doc_type ASC, file.mtime DESC
-\`\`\`
-
-## Work log
-
-> One task = one folder. Press \`⌘⇧W\` to create one.
-
-\`\`\`dataview
-TABLE WITHOUT ID file.folder AS "Task",
-  dateformat(file.mtime, "MM-dd") AS "Modified"
-FROM "${folder}/worklogs"
-SORT file.mtime DESC
-LIMIT 20
-\`\`\`
-
-## Devlogs that touched this project
-
-> Tagged when you pick the project with \`⌘⇧D\`.
-
-\`\`\`dataview
-LIST
-FROM #project/${name}
-WHERE type = "devlog"
-SORT file.day DESC
-LIMIT 15
-\`\`\`
-
-## Notes and troubleshooting
-
-\`\`\`dataview
-TABLE WITHOUT ID file.link AS "Note", type AS "Type",
-  dateformat(file.mtime, "MM-dd") AS "Modified"
-FROM #project/${name}
-WHERE type != "devlog" AND type != "worklog" AND type != "project-home"
-SORT file.mtime DESC
-LIMIT 20
-\`\`\`
-
-## Repo docs
-
-> Synced by \`devtrail sync\`. A mirror — do not edit here.
-> Only appears when the repo name matches this project key exactly.
-
-\`\`\`dataview
-LIST
-FROM "${repodocs}/${name}"
-SORT file.mtime DESC
-LIMIT 10
-\`\`\`
-
-## Needs a second look
-
-\`\`\`dataview
-TABLE WITHOUT ID file.link AS "Note", review_at AS "Review"
-FROM #project/${name}
-WHERE review_at != null AND review_at <= date(today)
-SORT review_at ASC
-\`\`\`
-
-## Next action
-
-- [ ] 
-`;
+// The hub body comes from _devtrail-project-readme.md and nowhere else.
+//
+// ⚠️ Copying the body here means it drifts from what `devtrail project add`
+//    writes. Three of the six defects found in the 2026-08-22 QA came from
+//    the same thing living in two places.
+const hubFile = app.vault.getFiles().find(x => x.name === "_devtrail-project-readme.md");
+if (!hubFile) {
+  tR += `# ${name}\n\n> Could not find the hub source. Run \`devtrail obsidian\` once in a terminal,\n> then delete this note and create it again.\n`;
+} else {
+  const raw = await app.vault.read(hubFile);
+  tR += raw
+    .replace(/\{\{NAME\}\}/g, name)
+    .replace(/\{\{FOLDER\}\}/g, folder)
+    .replace(/\{\{REPODOCS\}\}/g, repodocs)
+    .replace(/\{\{TODAY\}\}/g, today);
+}
 %>

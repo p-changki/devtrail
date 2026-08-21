@@ -19,6 +19,15 @@ T_FAIL=0
 T_NAME=""
 T_FAILED_LINES=""
 
+# 집계는 파일에 쌓는다.
+#
+# ⚠️ 서브셸 ( ... ) 안에서 T_FAIL 을 올려도 부모에는 남지 않는다.
+#    변수만 쓰면 서브셸에서 실패한 테스트가 "통과"로 보고된다 —
+#    실제로 그랬다(test-bootstrap.sh 가 3건 실패하고 exit 0 을 냈다).
+#    파일은 서브셸을 넘어 살아남는다.
+T_TALLY="${TMPDIR:-/tmp}/dt-tally-$$"
+: > "$T_TALLY"
+
 # ── 색 (harness 는 common.sh 에 의존하지 않는다) ─────────────────────────────
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   T_G=$'\033[32m'; T_R=$'\033[31m'; T_D=$'\033[2m'; T_0=$'\033[0m'
@@ -31,14 +40,17 @@ t_start() {
   printf '\n%s▶%s %s\n' "$T_D" "$T_0" "$T_NAME"
 }
 
-_t_ok()   { T_PASS=$((T_PASS + 1)); printf '  %s✓%s %s\n' "$T_G" "$T_0" "$1"; }
+_t_ok()   {
+  T_PASS=$((T_PASS + 1))
+  printf 'P\n' >> "$T_TALLY"
+  printf '  %s✓%s %s\n' "$T_G" "$T_0" "$1"
+}
 _t_bad()  {
   T_FAIL=$((T_FAIL + 1))
+  printf 'F\t%s › %s\n' "$T_NAME" "$1" >> "$T_TALLY"
   printf '  %s✗%s %s\n' "$T_R" "$T_0" "$1"
   shift
   for line in "$@"; do printf '      %s\n' "$line"; done
-  T_FAILED_LINES="${T_FAILED_LINES}${T_NAME} › $1
-"
 }
 
 # ── 어서션 ───────────────────────────────────────────────────────────────────
@@ -106,14 +118,20 @@ t_json() {
 
 # ── 마무리 ───────────────────────────────────────────────────────────────────
 t_end() {
-  local total=$((T_PASS + T_FAIL))
+  # 변수가 아니라 집계 파일을 읽는다 — 서브셸에서 난 실패도 여기 있다.
+  local pass fail total
+  pass=$(grep -c '^P$' "$T_TALLY" 2>/dev/null | tr -d ' ')
+  fail=$(grep -c '^F' "$T_TALLY" 2>/dev/null | tr -d ' ')
+  total=$(( ${pass:-0} + ${fail:-0} ))
   echo
-  if [ "$T_FAIL" -gt 0 ]; then
-    printf '%s✗ %s/%s 실패%s\n' "$T_R" "$T_FAIL" "$total" "$T_0"
-    printf '%s' "$T_FAILED_LINES" | sed 's/^/    /'
+  if [ "${fail:-0}" -gt 0 ]; then
+    printf '%s✗ %s/%s 실패%s\n' "$T_R" "$fail" "$total" "$T_0"
+    grep '^F' "$T_TALLY" 2>/dev/null | cut -f2- | sed 's/^/    /'
+    rm -f "$T_TALLY"
     exit 1
   fi
   printf '%s✓ %s개 통과%s\n' "$T_G" "$total" "$T_0"
+  rm -f "$T_TALLY"
   exit 0
 }
 

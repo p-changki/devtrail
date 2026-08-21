@@ -77,6 +77,51 @@ _pj_list() {
 #   README·노트 있음 등록만. 기존 파일을 절대 고치지 않는다
 #   docs/ 일부만     없는 하위 폴더만 만든다
 #   이미 등록됨      아무것도 하지 않고 그렇다고 말한다
+# 프로젝트 허브(README)를 만든다.
+#
+# ⚠️ 개발일지·개발메모·트러블슈팅 템플릿이 전부 `<프로젝트>/README` 로 링크한다.
+#    이게 없으면 링크가 전부 깨지고 허브의 입구가 사라진다 —
+#    2026-08-22 실물 QA 에서 CLI 로 만든 프로젝트가 그 상태였다.
+#
+# 본문은 preset/hub/project-readme.<lang>.md 한 곳에서만 온다.
+# Obsidian 의 「프로젝트 생성 템플릿」도 같은 파일을 읽는다 — 두 벌을 두면
+# 언젠가 어긋난다(이번 QA 에서 잡은 결함 6개 중 셋이 그 유형이었다).
+#
+# 이미 있으면 절대 건드리지 않는다. 사용자가 쓴 목표·상태가 거기 있다.
+_pj_readme() {
+  local key="$1"
+  local dir; dir="$(dt_path projects)/$key"
+  local out="$dir/README.md"
+  [ -d "$dir" ] || return 0
+  [ -f "$out" ] && return 0
+
+  local src="$DEVTRAIL_ROOT/preset/hub/project-readme.$(dt_lang).md"
+  [ -f "$src" ] || src="$DEVTRAIL_ROOT/preset/hub/project-readme.ko.md"
+  [ -f "$src" ] || { warn "$(L "허브 원본 없음" "Hub source missing"): $src"; return 0; }
+
+  local folder; folder="$(vault_rel "$(dt_dir projects)")/$key"
+  local repodocs; repodocs="$(vault_rel "$(dt_dir repodocs)")"
+  local today; today="$(date +%Y-%m-%d)"
+
+  local tmp; tmp=$(mktemp)
+  sed -e "s|{{NAME}}|$key|g" \
+      -e "s|{{FOLDER}}|$folder|g" \
+      -e "s|{{REPODOCS}}|$repodocs|g" \
+      -e "s|{{TODAY}}|$today|g" \
+      "$src" > "$tmp" || { rm -f "$tmp"; return 1; }
+
+  # ⚠️ 치환자가 남으면 Dataview 쿼리가 존재하지 않는 폴더를 가리킨다.
+  if grep -q '{{' "$tmp"; then
+    rm -f "$tmp"
+    warn "$(L "허브 치환 실패 — README 를 만들지 않습니다" \
+            "Hub substitution failed — not writing README"): $key"
+    return 1
+  fi
+  mv "$tmp" "$out" || { rm -f "$tmp"; return 1; }
+  jr_created "$out"
+  ok "$(L "허브 생성" "Hub created"): $key/README.md"
+}
+
 _pj_add() {
   local key="" section="" apply=0
   while [ $# -gt 0 ]; do
@@ -138,6 +183,15 @@ _pj_add() {
     dim "   $(L "골격이 이미 다 있습니다" "The skeleton is already complete")"
   fi
 
+  # ⚠️ README 도 '할 일' 로 센다. 이걸 빼면 이미 등록된 프로젝트는
+  #    "할 일이 없습니다" 로 빠져나가 허브를 영영 못 받는다 —
+  #    템플릿이 거는 <프로젝트>/README 링크가 계속 깨진 채로 남는다.
+  local will_readme=0
+  if [ ! -f "$folder/README.md" ]; then
+    will_readme=1
+    ok "$(L "허브 생성" "create hub")  $key/README.md"
+  fi
+
   # 기존 파일이 있으면 밝힌다 — 건드리지 않는다는 약속이다.
   if [ -d "$folder" ]; then
     local files; files=$(find "$folder" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
@@ -145,7 +199,7 @@ _pj_add() {
                                           "${files} existing notes are left alone")"
   fi
 
-  if [ "$will_register" = 0 ] && [ "${n:-0}" = 0 ]; then
+  if [ "$will_register" = 0 ] && [ "${n:-0}" = 0 ] && [ "$will_readme" = 0 ]; then
     echo; dim "   $(L "할 일이 없습니다" "Nothing to do")"; return 0
   fi
 
@@ -182,6 +236,8 @@ _pj_add() {
   done <<EOF
 $will_make
 EOF
+
+  _pj_readme "$key"
 
   # 경로 맵을 갱신해야 선택창에 즉시 반영된다.
   _aug_paths_note
