@@ -49,7 +49,9 @@ mkdir -p /tmp/dt-test /tmp/dt-vault
 | `main` | **프로덕션.** `install.sh` 가 여기서 받아갑니다 |
 | `dev` | 개발. PR 은 기본적으로 여기로 |
 
-`main` 으로 직접 미는 것은 릴리스뿐입니다.
+`main` 은 보호돼 있습니다 — **직접 밀 수 없습니다.** 관리자도 예외가 아니고,
+force push 와 브랜치 삭제도 막혀 있습니다. 릴리스도 PR 로 들어갑니다
+(절차는 [CHANGELOG](CHANGELOG.md) 머리에 있습니다).
 
 ```bash
 git switch dev && git pull
@@ -194,7 +196,7 @@ jr_created "$file"   # 파일을 만들었으면
 
 1. `dev` 로 PR 을 엽니다
 2. PR 템플릿을 채웁니다 — 특히 **어떻게 검증했는가**
-3. CI 4잡이 초록불이어야 합니다
+3. CI 3잡이 초록불이어야 합니다 (`메뉴바 앱 빌드` 는 태그를 밀 때만 돕니다)
 4. 리뷰 후 머지
 
 `main` 머지와 배포는 저장소 소유자가 합니다.
