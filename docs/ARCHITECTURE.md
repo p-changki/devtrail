@@ -18,6 +18,9 @@ bin/devtrail          라우터. 명령을 lib/ 로 넘기기만 한다
 
 lib/<명령>cmd.sh      명령 하나당 파일 하나
 lib/merge/            Obsidian 설정 병합기 9종 — 볼트 '안'
+lib/setupcmd.sh       비대화형 셋업 — init 과 '같은' 적용 경로
+lib/setup/spec.sh     셋업 스펙 검증·기본값 (기본값의 단일 출처)
+lib/setup/plan.sh     "적용하면 무엇이 바뀌는가" — 적용부와 같은 함수를 쓴다
 lib/obsidian_app.sh   Obsidian 앱 자체 — 볼트 '밖' (설치·볼트목록·등록·실행)
 lib/plugins.sh        커뮤니티 플러그인 설치 (버전은 preset/plugins.json 에 고정)
 lib/init/             init 의 단계 5개

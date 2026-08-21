@@ -132,6 +132,24 @@ dir_weekly()    { dt_path weekly; }
 dir_templates() { dt_path templates; }
 
 # ── Dependency checks ────────────────────────────────────────────────────────
+# ── JSON 조립 ────────────────────────────────────────────────────────────────
+#
+# ⚠️ init 전용이 아니다. 셋업 계획(setup plan)도 같은 변환을 쓴다.
+#    init/write.sh 안에 두면 다른 곳에서 쓰려고 한 벌 더 만들게 된다.
+
+# 개행 목록 → JSON 배열. 빈 입력은 [] 가 된다.
+_dt_json_array() {
+  printf '%s' "${1-}" | jq -R -s 'split("\n") | map(select(length > 0))'
+}
+
+# 개행 목록 → { "이름": "이름", ... } 항등 매핑.
+# project_groups 는 '레포명 → 개발일지 섹션명' 이다. 기본은 레포명 그대로 쓰고,
+# fe/be 로 나뉜 레포를 한 섹션에 모으고 싶으면 나중에 값만 바꾸면 된다.
+_dt_json_identity() {
+  printf '%s' "${1-}" \
+    | jq -R -s 'split("\n") | map(select(length > 0)) | map({key: ., value: .}) | from_entries'
+}
+
 has() { command -v "$1" >/dev/null 2>&1; }
 
 require_bins() {
