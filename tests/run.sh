@@ -282,6 +282,7 @@ run behav "augment"       ./tests/test-augment.sh
 run behav "scan"          ./tests/test-scan.sh
 run behav "undo·마이그레이션" ./tests/test-undo.sh
 run behav "한국어·영어"    ./tests/test-i18n.sh
+run behav "프로젝트 키"   ./tests/test-project-keys.sh
 
 [ "$GROUP" = all ] && run swift "swift 빌드" \
   sh -c 'cd app && swift build -c release 2>&1 | tail -1'

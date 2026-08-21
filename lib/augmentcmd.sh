@@ -216,8 +216,16 @@ EOF
     printf '\n  },\n'
     # 프로젝트 목록도 함께 내려보낸다. 템플릿이 선택창을 띄울 때 쓴다 —
     # 원본은 이 배열을 JS 안에 박아둬서 프로젝트가 늘 때마다 템플릿을 고쳐야 했다.
+    # ⚠️ wildcard 키("acme-*")는 프로젝트가 아니라 PR 요약 섹션을 찾는
+    #    매칭 규칙이다. 거르지 않으면 개발일지·개발메모의 선택창에
+    #    'acme-*' 가 항목으로 떠서, 고르면 그런 이름의 폴더를 만들려 든다.
+    #    ADR 0001 D1a 참조. 설정은 그대로 두고 읽는 쪽에서만 거른다 —
+    #    사용자의 acme-* 는 PR 요약에서 계속 동작해야 한다.
     printf '  "projects": %s,\n' \
-      "$(jq -c '[(.github.project_groups // {}) | keys[]]' "$CONFIG_FILE" 2>/dev/null || echo '[]')"
+      "$(jq -c '[(.github.project_groups // {}) | keys[]
+                 | select(test("[*?\\[\\]/\\\\:<>|\"]") | not)
+                 | select(length > 0 and length <= 64)]' \
+         "$CONFIG_FILE" 2>/dev/null || echo '[]')"
     printf '  "categories": %s,\n' \
       "$(jq -c --argjson en "$([ "$(dt_lang)" = en ] && echo true || echo false)" \
          '[.folders[] | select(.key=="devnote") | (.children // [])[]
