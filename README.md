@@ -189,7 +189,7 @@ devtrail update            DevTrail 자체를 최신으로
 devtrail undo [ID]         되돌리기
 devtrail config [get|set]  설정
 devtrail path [키]          볼트 경로 조회
-devtrail app <하위>         메뉴바 앱 (macOS)
+devtrail app <하위>         메뉴바 앱 (install|start|stop|status|uninstall)
 devtrail dashboard         웹 대시보드
 devtrail install-schedule  자동 실행 등록
 devtrail uninstall         자동화 제거 (볼트는 건드리지 않음)
@@ -265,7 +265,8 @@ Obsidian
 | 변경 저널 | `~/.devtrail/journal/` |
 | 볼트 | 직접 정하신 곳 |
 
-`devtrail uninstall` 은 자동화만 제거합니다. **노트는 건드리지 않습니다.**
+`devtrail uninstall` 은 자동화(launchd)만 제거합니다. **노트는 건드리지 않습니다.**
+메뉴바 앱은 `devtrail app uninstall` 로 따로 지웁니다.
 
 ---
 

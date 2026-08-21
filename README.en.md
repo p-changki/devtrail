@@ -205,7 +205,7 @@ devtrail update            update DevTrail itself
 devtrail undo [ID]         revert
 devtrail config [get|set]  settings  (config set lang en)
 devtrail path [key]        resolve a vault path
-devtrail app <sub>         menu bar app (macOS)
+devtrail app <sub>         menu bar app (install|start|stop|status|uninstall)
 devtrail dashboard         web dashboard
 devtrail install-schedule  register automatic runs
 devtrail uninstall         remove automation (never touches your vault)
@@ -285,7 +285,8 @@ It reports what is wrong **and how to fix it**.
 | Change journal | `~/.devtrail/journal/` |
 | Vault | wherever you chose |
 
-`devtrail uninstall` removes automation only. **It never touches your notes.**
+`devtrail uninstall` removes automation (launchd) only. **It never touches your notes.**
+The menu bar app is removed separately with `devtrail app uninstall`.
 
 ---
 

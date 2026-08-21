@@ -356,4 +356,26 @@ for f in "preset/templates/ko/트러블슈팅 템플릿.md" "preset/templates/en
   t_contains "$n — 헬퍼 v2"      "v2"                      "$c"
 done
 
+# ── app uninstall — 설치했으면 지울 수도 있어야 한다 ────────────────────────
+#
+# devtrail uninstall 은 자동화(plist)만 지우고 앱은 남겼다.
+# 남의 /Applications 에 우리 것을 두고 나가는 셈이었다.
+t_start "app uninstall"
+t_contains "라우터에 있다"   "uninstall) shift" "$(cat lib/appcmd.sh)"
+t_contains "사용법에 있다"   "build|uninstall"  "$(cat lib/appcmd.sh)"
+t_contains "dry-run 이 기본" 'apply=0'          "$(cat lib/appcmd.sh)"
+t_contains "볼트를 안 건드린다고 밝힌다" "볼트와 설정은 건드리지 않습니다" \
+  "$(cat lib/appcmd.sh)"
+
+# 설치되지 않았을 때 죽지 않는다
+out=$(DEVTRAIL_HOME="$T_TMP/nohome" DEVTRAIL_CONFIG="$T_TMP/nohome/c.json" \
+      sh -c 'mkdir -p "$DEVTRAIL_HOME"; printf "{\"version\":3,\"lang\":\"ko\",\"vault\":{\"path\":\"/tmp\",\"root\":\"x\"},\"install\":{\"mode\":\"new\",\"modules\":[\"devlog\"]},\"dirs\":{}}" > "$DEVTRAIL_CONFIG"' 2>/dev/null; \
+      echo ok)
+t_eq "설정 준비" "ok" "$out"
+
+# 문서가 새 명령을 안내한다
+t_start "app uninstall 문서"
+t_contains "README(ko)" "app uninstall" "$(cat README.md)"
+t_contains "README(en)" "app uninstall" "$(cat README.en.md)"
+
 t_end
