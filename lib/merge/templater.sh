@@ -30,7 +30,10 @@ _ob_templater() {
   fi
 
   local out; out=$(mktemp)
+  # ⚠️ DT_TEMPLATER_DIR 로 '설치된 플러그인' 을 가리킨다. 생성기가 거기서
+  #    설정 스키마 버전을 읽어 맞는 키를 쓴다 — 짐작하지 않는다.
   if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates/$(dt_lang)" \
+     DT_TEMPLATER_DIR="$dot/plugins/templater-obsidian" \
      python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" templater \
       "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$data" ] && printf '%s' "$data")" > "$out"; then

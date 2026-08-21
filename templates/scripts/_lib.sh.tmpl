@@ -7,6 +7,7 @@
 
 CONFIG_FILE="${DEVTRAIL_CONFIG:-{{CONFIG_FILE}}}"
 DEVTRAIL_HOME_DIR="${DEVTRAIL_HOME:-{{DEVTRAIL_HOME}}}"
+DEVTRAIL_BIN="${DEVTRAIL_BIN:-{{DEVTRAIL_BIN}}}"
 
 # GUI 앱(Obsidian Shell Commands)이나 launchd에서 실행될 때는 PATH가 최소
 # 상태라 gh/jq를 못 찾고 "활동 없음"으로 조용히 실패한다. 명시적으로 붙인다.
@@ -26,14 +27,39 @@ cfg() {
   [ -n "$v" ] && printf '%s' "$v" || printf '%s' "${2-}"
 }
 
+# ── 폴더 경로 ────────────────────────────────────────────────────────────────
+# 해석은 CLI 한 곳(devtrail path → dt_dir)에서만 한다.
+#
+# ⚠️ 예전에는 여기서 cfg '.dirs.devlog' 를 직접 읽었다. 그런데 .dirs 는
+#    '사용자가 고른 폴더'만 담는다 — 새로 설치한 볼트에서는 비어 있다.
+#    그래서 경로가 "$VROOT/" 가 됐고:
+#      activity · summary · backfill  개발일지를 영영 못 찾았다
+#      weekly                         볼트 루트에 파일을 만들었다
+#    기본값이 두 곳(common.sh 의 dt_dir, 그리고 여기)에 있었던 탓이다.
+#    기본값은 한 곳에만 둔다.
+dt_rel() {
+  DEVTRAIL_CONFIG="$CONFIG_FILE" "$DEVTRAIL_BIN" path "$1" --rel 2>/dev/null
+}
+
 # ── 자주 쓰는 파생값 ─────────────────────────────────────────────────────────
 VAULT="$(cfg '.vault.path')"
 VROOT="$VAULT/$(cfg '.vault.root')"
-DEVLOG_DIR="$VROOT/$(cfg '.dirs.devlog')"
-WEEKLY_DIR="$VROOT/$(cfg '.dirs.weekly')"
 GH_USER="$(cfg '.github.user')"
 
 [ -d "$VAULT" ] || { echo "볼트 경로 없음: $VAULT" >&2; exit 1; }
+
+# ⚠️ 빈 값으로 조용히 넘어가면 엉뚱한 폴더에 노트를 만든다. 여기서 멈춘다.
+DEVLOG_REL="$(dt_rel devlog)"
+WEEKLY_REL="$(dt_rel weekly)"
+for _p in "$DEVLOG_REL" "$WEEKLY_REL"; do
+  [ -n "$_p" ] || {
+    echo "폴더 경로를 해석하지 못했습니다 — 확인: $DEVTRAIL_BIN path devlog --rel" >&2
+    exit 1
+  }
+done
+unset _p
+DEVLOG_DIR="$VAULT/$DEVLOG_REL"
+WEEKLY_DIR="$VAULT/$WEEKLY_REL"
 
 # devlog_path <YYYY-MM-DD> — 설정된 파일명 규칙으로 개발일지 경로 생성
 devlog_path() {

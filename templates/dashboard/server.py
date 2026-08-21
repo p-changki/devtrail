@@ -76,11 +76,26 @@ def today_str():
 
 
 def devlog_path(cfg, date):
+    """오늘 개발일지의 절대경로.
+
+    ⚠️ 폴더는 CLI 에서만 해석한다. 예전에는 여기서 dirs.devlog 를 직접 읽고
+       기본값 "devlog" 를 자기가 갖고 있었다. 그런데 dirs 는 '사용자가 고른
+       폴더'만 담아서 새로 설치한 볼트에서는 비어 있다 —
+       화면이 <루트>/devlog/... 를 가리키며 "개발일지 없음" 이라고 말했다.
+       실제 파일은 개발/개발일지 에 멀쩡히 있었는데도(2026-08-22 실물 QA).
+
+       바로 위 effective_toggles() 가 같은 이유로 이미 CLI 를 쓴다.
+       기본값이 두 곳에 있으면 화면과 실제가 갈린다.
+    """
     vault = dig(cfg, "vault.path", "")
-    root = dig(cfg, "vault.root", "")
-    dirname = dig(cfg, "dirs.devlog", "devlog")
     pat = dig(cfg, "naming.devlog_file", "{{DATE}} devlog.md")
-    return Path(vault) / root / dirname / pat.replace("{{DATE}}", date)
+    r = run([DEVTRAIL_BIN, "path", "devlog", "--rel"], timeout=10)
+    rel = (r.get("out") or "").strip() if r.get("ok") else ""
+    if not rel:
+        # CLI 를 못 부르면 최소한 볼트 루트까지는 맞춘다. 없는 폴더를
+        # 지어내는 것보다 낫다 — 화면은 "없음" 을 정직하게 말한다.
+        rel = dig(cfg, "vault.root", "")
+    return Path(vault) / rel / pat.replace("{{DATE}}", date)
 
 
 def effective_toggles():

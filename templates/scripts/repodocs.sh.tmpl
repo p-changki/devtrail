@@ -19,7 +19,9 @@ set -euo pipefail
 
 SRC_ROOT="$(cfg '.sync.source_root')"
 SRC_ROOT="${SRC_ROOT/#\~/$HOME}"
-DEST_ROOT="$VROOT/$(cfg '.dirs.repodocs' 'repodocs')"
+REPODOCS_REL="$(dt_rel repodocs)"
+[ -n "$REPODOCS_REL" ] || { echo "레포docs 경로를 해석하지 못했습니다" >&2; exit 1; }
+DEST_ROOT="$VAULT/$REPODOCS_REL"
 
 [ -n "$SRC_ROOT" ] || { echo "sync.source_root 미설정 — devtrail init" >&2; exit 1; }
 [ -d "$SRC_ROOT" ] || { echo "소스 루트 없음: $SRC_ROOT" >&2; exit 1; }
@@ -57,7 +59,7 @@ while IFS= read -r repo; do
   mkdir -p "$dest"
   rsync "${RSYNC_ARGS[@]}" "$src/" "$dest/"
   n=$(find "$dest" -name '*.md' -type f | wc -l | tr -d ' ')
-  echo "  ✓ $repo/docs → $(cfg '.dirs.repodocs' 'repodocs')/$repo (md ${n}개)"
+  echo "  ✓ $repo/docs → $REPODOCS_REL/$repo (md ${n}개)"
   total=$((total + 1))
 done <<EOF
 $REPOS

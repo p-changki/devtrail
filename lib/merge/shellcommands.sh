@@ -10,6 +10,31 @@
 #   - 플러그인이 없으면 안내만 하고 조용히 넘어간다
 #   - ⚠️ 한글 앞 변수는 중괄호로: "${n}개"  (bash 3.2)
 
+# data.json 씨앗 만들기.
+#
+# 플러그인 폴더는 있는데 data.json 이 없는 상태가 있다 — 우리가 플러그인을
+# 설치했지만 Obsidian 이 아직 한 번도 로드하지 않았을 때다. 예전에는 여기서
+# "설치 후 재시작하고 다시 실행하세요" 로 넘어갔고, 그러면 단축키가 동작하지
+# 않는 채로 셋업이 끝났다.
+#
+# ⚠️ settings_version 이 틀리면 플러그인이 '지원하지 않는 설정 파일' 로 보고
+#    스스로를 끈다. 그래서 값을 짐작하지 않고 플러그인 코드에서 읽는다.
+#    못 읽으면 만들지 않는다 — 틀린 파일을 쓰느니 안내가 낫다.
+#
+# 나머지 필드는 비워도 된다. 플러그인이 로드할 때 기본값과 합친다
+# (loadSettings → combineObjects(getDefaultSettings(false), loaded)).
+_ob_sc_seed() {
+  local dir="$1" data="$2"
+  [ -f "$dir/main.js" ] || return 1
+  local ver
+  ver=$(grep -o 'SettingsVersion *= *"[^"]*"' "$dir/main.js" 2>/dev/null \
+        | head -1 | sed 's/.*"\(.*\)"/\1/')
+  [ -n "$ver" ] || return 1
+  jq -n --arg v "$ver" '{settings_version: $v, shell_commands: []}' > "$data" 2>/dev/null || return 1
+  jr_created "$data"
+  return 0
+}
+
 # ── 셸 커맨드 병합 ───────────────────────────────────────────────────────────
 _ob_shellcommands() {
   local dot="$1"
@@ -19,11 +44,15 @@ _ob_shellcommands() {
   step "Shell commands"
 
   if [ ! -f "$data" ]; then
-    _d_note "Shell commands $(L "플러그인이 설치/활성화되지 않았습니다." "plugin is not installed or not enabled.")"
-    dim "     $(L "설치 후 Obsidian 을 재시작하고 다시 실행하세요." \
-                "Install it, restart Obsidian, then run this again.")"
-    dim "     $(L "경로" "Path"): $data"
-    return 0
+    if _ob_sc_seed "$dot/plugins/obsidian-shellcommands" "$data"; then
+      dim "     $(L "설정 파일이 없어 새로 만들었습니다" "No settings file — created one")"
+    else
+      _d_note "Shell commands $(L "플러그인이 설치/활성화되지 않았습니다." "plugin is not installed or not enabled.")"
+      dim "     $(L "설치 후 Obsidian 을 재시작하고 다시 실행하세요." \
+                  "Install it, restart Obsidian, then run this again.")"
+      dim "     $(L "경로" "Path"): $data"
+      return 0
+    fi
   fi
   [ -f "$src" ] || { warn "$(L "템플릿 없음" "Template missing"): $src"; return 0; }
 

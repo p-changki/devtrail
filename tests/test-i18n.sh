@@ -150,10 +150,20 @@ t_file "영어 템플릿" "$tdir/Devlog.md"
 t_no_file "한국어 이름은 없다" "$tdir/개발일지양식.md"
 # ⚠️ 개수를 박지 않는다. 템플릿을 추가할 때마다 테스트가 깨지면
 #    고치는 김에 단언을 느슨하게 만들게 된다.
+# ⚠️ 밑줄로 시작하는 것은 템플릿이 아니라 데이터다(_devtrail-paths,
+#    _devtrail-project-readme). 사용자가 삽입하는 물건이 아니므로 세지 않는다.
 t_eq "템플릿 개수" "$(ls preset/templates/en/*.md | wc -l | tr -d ' ')" \
-  "$(ls "$tdir"/*.md 2>/dev/null | grep -vc '_devtrail-paths' | tr -d ' ')"
+  "$(ls "$tdir"/*.md 2>/dev/null | grep -vc '/_' | tr -d ' ')"
 t_eq "한글 든 템플릿 0개" "0" \
-  "$(grep -l '[가-힣]' "$tdir"/*.md 2>/dev/null | grep -vc '_devtrail-paths' | tr -d ' ')"
+  "$(grep -l '[가-힣]' "$tdir"/*.md 2>/dev/null | grep -vc '/_' | tr -d ' ')"
+# 데이터 파일은 위 개수 검사에서 뺐다. 언어는 여기서 따로 본다 —
+# ⚠️ 영어 볼트에 한국어 허브가 깔리면 프로젝트 README 가 통째로 한국어가 된다.
+t_file "허브 원본 설치" "$tdir/_devtrail-project-readme.md"
+t_eq "허브가 영어다" "0" \
+  "$(grep -c '[가-힣]' "$tdir/_devtrail-project-readme.md" 2>/dev/null | tr -d ' ')"
+t_contains "허브에 치환자가 그대로" "{{NAME}}" \
+  "$(cat "$tdir/_devtrail-project-readme.md" 2>/dev/null)"
+
 t_file "영어 가이드" "$T_VAULT/MyVault/Guides/1. Getting started.md"
 
 # ── 단축키가 존재하는 템플릿을 가리켜야 한다 ────────────────────────────────
@@ -207,10 +217,16 @@ t_vault flow
 _flow() {
   # 2=English · 1=Local · 볼트 · 모드(Enter) · 루트(Enter) · 모듈(Enter)
   # · GitHub(Enter) · 프로젝트폴더 · 나머지 Enter
+  #
+  # ⚠️ DEVTRAIL_OBSIDIAN_REGISTRY 를 빈 파일로 고정한다. 없으면 init 이
+  #    실행 머신의 진짜 Obsidian 볼트 목록을 읽고, "1" 이 그 사람의 볼트를
+  #    고른다 — 실제로 그렇게 사용자 볼트에 폴더가 생겼다.
+  # ⚠️ --no-bootstrap: 테스트가 플러그인을 내려받거나 Obsidian 을 열면 안 된다.
   { printf '2\n1\n%s\n\n\n\n\n' "$T_VAULT"
     printf '%s\n\n\n\n\n\n' "$T_TMP/nonexistent"; } \
   | LANG=en_US.UTF-8 DEVTRAIL_LANG= DEVTRAIL_SKILL_DIR="$T_TMP/sk-$$" \
-    "$DT" init 2>&1
+    DEVTRAIL_OBSIDIAN_REGISTRY="$T_TMP/no-such-registry.json" \
+    "$DT" init --no-bootstrap 2>&1
 }
 out=$(_flow)
 

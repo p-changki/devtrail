@@ -52,6 +52,20 @@ _ob_templates() {
     done
   fi
 
+  # 프로젝트 허브 원본. 「프로젝트 생성 템플릿」과 `devtrail project add` 가
+  # 둘 다 이 파일을 읽는다 — 본문이 두 곳에 있으면 언젠가 어긋난다.
+  #
+  # ⚠️ 이건 사용자가 삽입하는 템플릿이 아니라 '데이터'다. _devtrail-paths.md 와
+  #    같은 성격이라 밑줄로 시작하는 이름을 쓴다.
+  # ⚠️ 갱신본을 받아야 하므로 이건 매번 덮어쓴다. 사용자가 고칠 파일이 아니다.
+  local hub="$DEVTRAIL_ROOT/preset/hub/project-readme.$(dt_lang).md"
+  [ -f "$hub" ] || hub="$DEVTRAIL_ROOT/preset/hub/project-readme.ko.md"
+  if [ -f "$hub" ]; then
+    jr_backup "$dest/_devtrail-project-readme.md" >/dev/null 2>&1 || true
+    cp "$hub" "$dest/_devtrail-project-readme.md" \
+      || warn "$(L "프로젝트 허브 원본 복사 실패" "Could not copy the project hub source")"
+  fi
+
   ok "$(L "템플릿 ${n}개 설치 (기존 유지 ${skipped}개)" \
           "${n} templates installed (${skipped} kept)") → $(dt_dir templates)"
   [ "$fb" -gt 0 ] && dim "     $(L "번역 대기 ${fb}개는 한국어로 설치했습니다" \

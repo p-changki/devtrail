@@ -116,12 +116,36 @@ def main():
 
     ours, excluded = collect_rules(tree, cfg)
 
-    kept, skipped = [], []
+    # 우리 규칙을 '구체성 순서 그대로' 한 덩어리로 낸다.
+    #
+    # ⚠️ 예전에는 새로 만든 규칙만 앞에 붙이고(kept + old_rules) 이미 있던
+    #    우리 규칙은 뒤에 남겨뒀다. 그래서 나중에 프로젝트를 등록하면
+    #    #project/acme-be 가 이미 있던 #type/devlog 보다 앞으로 갔다.
+    #    Auto Note Mover 는 첫 매칭을 쓰므로(for i=0..), 프로젝트 태그가 붙은
+    #    개발일지가 프로젝트 폴더로 끌려갔다 — 사용자 노트가 사라진 것처럼
+    #    보이는 종류의 사고다(2026-08-22 실물 QA 에서 실제로 발생).
+    #
+    # 사용자가 우리 규칙의 folder 를 고쳤다면 그 값을 존중한다.
+    old_by_tag = {}
+    for r in old_rules:
+        t = r.get("tag")
+        if t:
+            old_by_tag[t.lstrip("#")] = r
+
+    ordered, skipped = [], []
+    our_tags = set()
     for _, tag, folder in ours:
-        if f"#{tag}" in old_tags or tag in old_tags:
+        our_tags.add(tag)
+        if tag in old_by_tag:
             skipped.append(tag)          # 이미 라우팅 중이면 그들 것을 남긴다
+            ordered.append(old_by_tag[tag])
             continue
-        kept.append({"folder": folder, "tag": f"#{tag}", "pattern": ""})
+        ordered.append({"folder": folder, "tag": f"#{tag}", "pattern": ""})
+    kept = [r for r in ordered if r.get("tag", "").lstrip("#") not in set(skipped)]
+
+    # 우리가 모르는 규칙은 사용자 것이다. 순서를 바꾸지 않고 뒤에 붙인다.
+    foreign_rules = [r for r in old_rules
+                     if (r.get("tag") or "").lstrip("#") not in our_tags]
 
     auto = profile.get("automove") or {}
     trigger = auto.get("trigger", "Manual")
@@ -141,9 +165,9 @@ def main():
             existing.get("use_regex_to_check_for_excluded_folder", False),
         "statusBar_trigger_indicator": existing.get("statusBar_trigger_indicator", True),
         "excluded_folder": [{"folder": f} for f in ex],
-        # 우리 규칙이 앞이다 — 내부적으로 구체성 순서라 자기들끼리는 안 싸운다.
-        # 겹치는 태그는 이미 걸러냈으므로 기존 규칙도 그대로 동작한다.
-        "folder_tag_pattern": kept + old_rules,
+        # 우리 규칙이 앞이고, 그 안에서 구체성 순서를 항상 유지한다.
+        # type/* 가 project/* 보다 먼저 와야 개발일지가 제자리에 남는다.
+        "folder_tag_pattern": ordered + foreign_rules,
     })
 
     print(json.dumps(merged, ensure_ascii=False, indent=2))

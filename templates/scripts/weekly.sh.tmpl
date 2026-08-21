@@ -46,7 +46,7 @@ fi
 #    this.period_start 같은 frontmatter 참조는 Dataview에서 null로 읽혀
 #    'No implementation found for null + duration' 으로 쿼리 전체가 실패한다.
 #    (2026-08-20 확인 — 기존 주간리뷰가 이 문제로 아무것도 못 잡고 있었다.)
-DEVLOG_REL="$(cfg '.vault.root')/$(cfg '.dirs.devlog')"
+# DEVLOG_REL 은 _lib.sh 가 devtrail path 로 이미 해석해 두었다.
 VROOT_REL="$(cfg '.vault.root')"
 
 cat > "$TARGET" <<EOF
