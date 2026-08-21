@@ -198,6 +198,28 @@ _aug_paths_note() {
   ok "$(L "경로 맵" "path map")  $(dt_dir templates)/_devtrail-paths.md"
 }
 
+# 실제 프로젝트 키만 남기는 jq 필터.
+#
+# project_groups 는 두 가지를 담는다:
+#   "my-app": "myapp"    실제 프로젝트   → 태그·폴더·라우팅·선택창
+#   "acme-*": "acme"     PR 섹션 매칭 규칙 → summary.sh 만
+#
+# 태그와 폴더 이름이 되므로 파일명에 못 쓰는 문자가 있으면 프로젝트가 아니다.
+# ⚠️ 두 곳에서 같은 규칙을 써야 projects 와 project_sections 의 짝이 맞는다.
+DT_PROJECT_KEY_FILTER='select(test("[*?\\[\\]/\\\\:<>|\"]") | not)
+                       | select(length > 0 and length <= 64)'
+
+_aug_project_keys() {
+  jq -c "[(.github.project_groups // {}) | keys[] | $DT_PROJECT_KEY_FILTER]" \
+    "$CONFIG_FILE" 2>/dev/null || echo '[]'
+}
+
+_aug_project_sections() {
+  jq -c "(.github.project_groups // {})
+         | with_entries(select(.key | $DT_PROJECT_KEY_FILTER))" \
+    "$CONFIG_FILE" 2>/dev/null || echo '{}'
+}
+
 _aug_paths_json() {
   local keys k
   keys=$(jq -r '[ .folders[] | . as $p | $p.key, (($p.children // [])[] | .key) ] | .[]' "$DT_TREE")
@@ -221,11 +243,14 @@ EOF
     #    'acme-*' 가 항목으로 떠서, 고르면 그런 이름의 폴더를 만들려 든다.
     #    ADR 0001 D1a 참조. 설정은 그대로 두고 읽는 쪽에서만 거른다 —
     #    사용자의 acme-* 는 PR 요약에서 계속 동작해야 한다.
-    printf '  "projects": %s,\n' \
-      "$(jq -c '[(.github.project_groups // {}) | keys[]
-                 | select(test("[*?\\[\\]/\\\\:<>|\"]") | not)
-                 | select(length > 0 and length <= 64)]' \
-         "$CONFIG_FILE" 2>/dev/null || echo '[]')"
+    printf '  "projects": %s,\n' "$(_aug_project_keys)"
+    # 키 → 섹션 매핑.
+    #
+    # ⚠️ projects 의 타입은 절대 바꾸지 않는다(문자열 배열). 헬퍼는 템플릿
+    #    안에 복사돼 있어서, 이미 설치된 볼트의 옛 템플릿에는 새 포맷을
+    #    흡수할 코드가 없다. 객체 배열로 바꾸면 태그와 파일명이
+    #    "[object Object]" 로 오염된다. 그래서 키를 '더한다'.  ADR 0001 D7.
+    printf '  "project_sections": %s,\n' "$(_aug_project_sections)"
     printf '  "categories": %s,\n' \
       "$(jq -c --argjson en "$([ "$(dt_lang)" = en ] && echo true || echo false)" \
          '[.folders[] | select(.key=="devnote") | (.children // [])[]

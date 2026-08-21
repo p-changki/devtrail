@@ -104,4 +104,41 @@ projects=$(sed -n '/```json/,/```/p' "$T_VAULT/MyVault/템플릿/_devtrail-paths
 t_eq "안전한 것만 남는다" '["ok"]' "$projects"
 t_eq "라우팅도 하나" "1" "$(_routes "$T_CONFIG" | grep -c . | tr -d ' ')"
 
+# ── 경로 맵이 키와 섹션을 함께 내려보낸다 ───────────────────────────────────
+#
+# ⚠️ projects 는 문자열 배열로 유지한다. 헬퍼는 템플릿 안에 복사돼 있어서
+#    옛 템플릿은 새 포맷을 흡수할 코드가 없다. 객체 배열로 바꾸면 태그와
+#    파일명이 "[object Object]" 로 오염된다.  ADR 0001 D7.
+t_start "경로 맵 — projects · project_sections"
+t_vault sect
+t_config MyVault '.github.project_groups = {"acme-fe":"acme","acme-be":"acme","myapp":"myapp","acme-*":"acme"}'
+mkdir -p "$T_VAULT/.obsidian"
+"$DT" augment --apply >/dev/null 2>&1
+
+pm="$T_VAULT/MyVault/템플릿/_devtrail-paths.md"
+json=$(sed -n '/```json/,/```/p' "$pm" | sed '1d;$d')
+
+t_eq "projects 는 문자열 배열" "string" \
+  "$(printf '%s' "$json" | jq -r '.projects[0] | type')"
+t_eq "wildcard 는 projects 에 없다" "false" \
+  "$(printf '%s' "$json" | jq -c '.projects | index("acme-*") != null')"
+t_eq "wildcard 는 sections 에도 없다" "false" \
+  "$(printf '%s' "$json" | jq -c '.project_sections | has("acme-*")')"
+
+# 둘의 짝이 맞아야 한다 — 한쪽에만 있으면 소비자가 못 잇는다
+t_eq "키 집합이 동일" "true" \
+  "$(printf '%s' "$json" | jq -c '(.projects | sort) == (.project_sections | keys | sort)')"
+
+t_eq "섹션 값" "acme" "$(printf '%s' "$json" | jq -r '.project_sections["acme-fe"]')"
+t_eq "항등 매핑도 담긴다" "myapp" "$(printf '%s' "$json" | jq -r '.project_sections.myapp')"
+
+# ── 옛 템플릿이 새 경로 맵을 봐도 깨지지 않는다 ─────────────────────────────
+#
+# 이게 D7 의 핵심이다. 옛 dtProjects 는 DT.projects 만 읽는다.
+t_start "옛 템플릿 호환"
+t_eq "옛 헬퍼가 받는 것은 문자열" "true" \
+  "$(printf '%s' "$json" | jq -c '[.projects[] | type == "string"] | all')"
+t_not_contains "object 가 섞이지 않는다" "object" \
+  "$(printf '%s' "$json" | jq -r '[.projects[] | type] | join(",")')"
+
 t_end
