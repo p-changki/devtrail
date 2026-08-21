@@ -57,6 +57,17 @@ _ob_templates() {
   [ "$fb" -gt 0 ] && dim "     $(L "번역 대기 ${fb}개는 한국어로 설치했습니다" \
                 "${fb} not translated yet — installed in Korean")"
 
+  # ⚠️ 이름이 같으면 설치를 건너뛰므로, 기존 사용자는 새 템플릿을 못 받는다.
+  #    덮어쓰지 않는다 — 알리고 사용자가 정한다.  ADR 0001 D7.
+  . "$DEVTRAIL_ROOT/lib/templatecmd.sh"
+  local old; old=$(_tpl_outdated)
+  if [ -n "$old" ]; then
+    local on; on=$(printf '%s' "$old" | grep -c . | tr -d ' ')
+    warn "     $(L "구버전 템플릿 ${on}개 — 새 기능이 동작하지 않습니다" \
+                   "${on} outdated templates — new features will not work")"
+    dim "       devtrail template list"
+  fi
+
   local sections
   sections=$(jq -r '(.github.project_groups // {}) | [.[]] | unique | .[]' "$CONFIG_FILE" 2>/dev/null)
   if [ -n "$sections" ]; then

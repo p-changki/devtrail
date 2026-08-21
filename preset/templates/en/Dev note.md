@@ -1,5 +1,5 @@
 <%*
-// ── DevTrail shared helpers ─────────────────────────────────────────────────
+// ── DevTrail shared helpers v2 ────────────────────────────────────────────
 // Prepended to every template. This is what keeps vault paths out of them.
 //
 // It finds the path-map note *by filename*, so it works wherever that note
@@ -60,6 +60,20 @@ const dtWeeklyName = (iso) => {
   const pat = (DT.naming && DT.naming.weekly_file) || "{{ISOWEEK}} weekly.md";
   return pat.replace("{{ISOWEEK}}", iso).replace(/\.md$/, "");
 };
+
+// Project key -> PR summary section.
+//
+// ⚠️ The key and the section can differ — that is how fe/be repos group into
+//    one section. The devlog's #### heading uses the *section*; tags and links
+//    use the *key*.  ADR 0001 D5a.
+// Old path maps have no project_sections — then the key is used as-is.
+const dtSection = (key) => (DT.project_sections && DT.project_sections[key]) || key;
+
+// Keys -> sections (deduplicated, input order preserved)
+const dtSections = (keys) => [...new Set((keys || []).map(dtSection))];
+
+// The keys that belong to a section
+const dtKeysOf = (keys, section) => (keys || []).filter(k => dtSection(k) === section);
 _%>
 <%*
 const initial = app.workspace.getActiveFile();

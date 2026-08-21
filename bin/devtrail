@@ -28,6 +28,7 @@ ${C_BOLD}설치${C_RESET}
   devtrail scan [VAULT]      볼트 진단 — 구조·메타·충돌 (쓰기 없음)
   devtrail augment [모듈]    없는 폴더·허브만 생성 (기본 dry-run)
   devtrail project <sub>     프로젝트 등록 (add|list)
+  devtrail template <sub>    노트 템플릿 (list|diff|update)
   devtrail skills <sub>      AI 스킬 설치 (install|sync|list|remove)
   devtrail obsidian          Obsidian 설정 적용 (병합 — 덮어쓰지 않음)
   devtrail app <sub>         메뉴바 앱 (install|start|stop|status)
@@ -93,6 +94,8 @@ case "$cmd" in
   project)
     . "$DEVTRAIL_ROOT/lib/augmentcmd.sh"   # _aug_paths_note 재사용
     . "$DEVTRAIL_ROOT/lib/projectcmd.sh"; project_cmd "$@" ;;
+  template)
+    . "$DEVTRAIL_ROOT/lib/templatecmd.sh"; template_cmd "$@" ;;
   skills)
     . "$DEVTRAIL_ROOT/lib/doctor.sh"   # _d_section 재사용
     . "$DEVTRAIL_ROOT/lib/skillcmd.sh"; skills_cmd "$@" ;;

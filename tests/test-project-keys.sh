@@ -217,4 +217,65 @@ t_eq "설정에서 사라진다" "false" \
   "$(jq -c '.github.project_groups | has("rollme")' "$T_CONFIG")"
 t_no_file "폴더도 사라진다" "$T_VAULT/MyVault/개발/프로젝트/rollme"
 
+# ── 템플릿 v2 — 섹션으로 제목을 합친다 ──────────────────────────────────────
+t_start "템플릿 v2 — 헬퍼"
+for f in preset/templates/ko/_lib.js.txt preset/templates/en/_lib.js.txt; do
+  t_contains "$(basename "$(dirname "$f")") 버전 표시" "v2" "$(cat "$f")"
+  t_contains "$(basename "$(dirname "$f")") dtSection"  "dtSection"  "$(cat "$f")"
+  t_contains "$(basename "$(dirname "$f")") dtSections" "dtSections" "$(cat "$f")"
+  t_contains "$(basename "$(dirname "$f")") dtKeysOf"   "dtKeysOf"   "$(cat "$f")"
+done
+
+t_start "개발일지가 섹션으로 묶는다"
+for f in "preset/templates/ko/개발일지양식.md" "preset/templates/en/Devlog.md"; do
+  n=$(basename "$f")
+  t_contains "$n — 섹션으로 제목"   "dtSections(picked)" "$(cat "$f")"
+  t_contains "$n — 키로 링크"       "dtKeysOf"           "$(cat "$f")"
+  t_contains "$n — frontmatter 키"  "projects: <% projectList %>" "$(cat "$f")"
+  t_contains "$n — project 태그"    "project/" "$(cat "$f")"
+  t_not_contains "$n — 옛 방식 아님" 'picked.map(p => `#### ${p}' "$(cat "$f")"
+done
+
+# 인라인 헤더가 원본과 동기화돼 있어야 한다 — 안 그러면 설치 직후가 구버전이 된다
+t_start "인라인 헤더 동기화"
+# ⚠️ 파일명에 공백이 있다("Dev note.md"). ls | xargs 는 쪼갠다 — grep -l 을 직접 쓴다.
+for lang in ko en; do
+  want=$(grep -lE 'DevTrail (공통 헬퍼|shared helpers)' preset/templates/$lang/*.md | wc -l | tr -d ' ')
+  got=$(grep -lE '(공통 헬퍼|shared helpers) v2' preset/templates/$lang/*.md | wc -l | tr -d ' ')
+  t_eq "$lang — 전부 v2" "$want" "$got"
+done
+
+# ── devtrail template ────────────────────────────────────────────────────────
+t_start "template list — 신규 설치는 최신"
+t_vault tpl2
+t_config MyVault
+mkdir -p "$T_VAULT/.obsidian"
+"$DT" augment --apply >/dev/null 2>&1
+"$DT" obsidian >/dev/null 2>&1
+t_contains "최신이라고 말한다" "v2" "$("$DT" template list 2>&1)"
+
+t_start "template — 구버전 감지"
+TPL="$T_VAULT/MyVault/템플릿/개발일지양식.md"
+printf '%s\n' "$(sed 's/공통 헬퍼 v2/공통 헬퍼/' "$TPL")" > "$TPL"
+printf '\n## 내가 고친 것\n' >> "$TPL"
+
+out=$("$DT" template list 2>&1)
+t_contains "구버전이라고 말한다" "개발일지양식.md" "$out"
+t_contains "obsidian 도 알린다" "구버전" "$("$DT" obsidian 2>&1)"
+
+# ⚠️ 덮어쓰지 않는다. dry-run 이 기본이다.
+t_start "template update — 안전 계약"
+before=$(cat "$TPL")
+"$DT" template update 개발일지양식.md >/dev/null 2>&1
+t_eq "dry-run 은 안 바꾼다" "$before" "$(cat "$TPL")"
+
+"$DT" template update 개발일지양식.md --apply >/dev/null 2>&1
+t_contains "교체됨 (v2)" "v2" "$(cat "$TPL")"
+t_not_contains "사용자 수정은 사라진다" "내가 고친 것" "$(cat "$TPL")"
+
+# 저널에 남아 되돌아간다 — 사용자 수정을 잃지 않는 마지막 보루
+job=$(ls -1 "$DEVTRAIL_HOME/journal" | tail -1)
+"$DT" undo "$job" --apply >/dev/null 2>&1
+t_contains "undo 로 복구된다" "내가 고친 것" "$(cat "$TPL")"
+
 t_end
