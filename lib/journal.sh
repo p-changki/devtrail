@@ -24,6 +24,19 @@ DT_JOURNAL_DIR="${DEVTRAIL_JOURNAL:-$DEVTRAIL_HOME/journal}"
 # jr_begin <명령이름>  → 전역 DT_JOB 설정
 jr_begin() {
   local cmd="$1"
+
+  # ⚠️ 이미 열린 작업이 있으면 그 안에 머문다.
+  #
+  #    중첩은 실제로 일어난다 — `setup apply` 가 내부에서 augment 를 부르고,
+  #    augment 도 자기 작업을 연다. 예전에는 자식이 DT_JOB_DIR 을 덮어써서
+  #    부모가 기록한 백업이 미아가 됐고, "되돌리기" 안내가 두 번 찍혔다.
+  #    한 번의 명령은 하나의 되돌림 단위여야 한다.
+  if _jr_active; then
+    DT_JOB_NESTED=$(( ${DT_JOB_NESTED:-0} + 1 ))
+    export DT_JOB_NESTED
+    return 0
+  fi
+
   DT_JOB="$(date +%Y%m%d-%H%M%S)-$$"
   DT_JOB_DIR="$DT_JOURNAL_DIR/$DT_JOB"
 
@@ -105,6 +118,12 @@ $missing"
 
 # ── 작업 종료 ────────────────────────────────────────────────────────────────
 jr_end() {
+  # 중첩된 호출은 부모 작업을 닫지 않는다.
+  if [ "${DT_JOB_NESTED:-0}" -gt 0 ]; then
+    DT_JOB_NESTED=$(( DT_JOB_NESTED - 1 ))
+    export DT_JOB_NESTED
+    return 0
+  fi
   _jr_active || return 0
   local n; n=$(wc -l < "$DT_JOB_DIR/entries.tsv" | tr -d ' ')
   if [ "${n:-0}" -eq 0 ]; then

@@ -74,10 +74,13 @@ init_run() {
   DT_PROJECTS=$(_init_projects "$gh_user"); export DT_PROJECTS
   ai_provider=$(_init_ai)
 
-  _init_write_config "$backend" "$vault" "$root" "$gh_user" "$ai_provider"
-  _init_render_scripts
-  _init_scaffold
-  _init_skills
+  # ⚠️ 여기서 직접 적용하지 않는다. 질문의 결과를 스펙으로 만들어
+  #    setup_apply 에 넘긴다 — 앱·CI 가 타는 길과 같은 길이다.
+  #    적용 로직이 두 벌이면 언젠가 한쪽만 고쳐지고, 사용자는
+  #    "앱으로 하면 다르다" 를 만난다.
+  . "$DEVTRAIL_ROOT/lib/setupcmd.sh"
+  local spec; spec=$(sp_from_init "$backend" "$vault" "$root" "$gh_user" "$ai_provider")
+  setup_apply "$spec"
 
   # 여기서 끝내면 사용자는 다시 GUI 로 나가야 한다. 끝까지 데려다준다.
   if [ "$DT_BOOTSTRAP" = 1 ]; then
