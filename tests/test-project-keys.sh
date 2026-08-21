@@ -141,4 +141,80 @@ t_eq "옛 헬퍼가 받는 것은 문자열" "true" \
 t_not_contains "object 가 섞이지 않는다" "object" \
   "$(printf '%s' "$json" | jq -r '[.projects[] | type] | join(",")')"
 
+# ── devtrail project add ─────────────────────────────────────────────────────
+t_start "project add — 등록과 골격"
+t_vault pjadd
+t_config MyVault
+mkdir -p "$T_VAULT/.obsidian"
+"$DT" augment --apply >/dev/null 2>&1
+
+# dry-run 이 기본
+out=$("$DT" project add my-app 2>&1)
+t_contains "dry-run 이라고 말한다" "dry-run" "$out"
+t_eq "설정이 안 바뀐다" "" "$(cfg_get() { jq -r --arg k my-app '.github.project_groups[$k] // ""' "$T_CONFIG"; }; cfg_get)"
+t_no_file "폴더도 안 생긴다" "$T_VAULT/MyVault/개발/프로젝트/my-app"
+
+"$DT" project add my-app --apply >/dev/null 2>&1
+t_eq "등록됨" "my-app" "$(jq -r '.github.project_groups["my-app"]' "$T_CONFIG")"
+t_dir "폴더 생성" "$T_VAULT/MyVault/개발/프로젝트/my-app"
+t_dir "worklogs"  "$T_VAULT/MyVault/개발/프로젝트/my-app/worklogs"
+
+# 골격은 preset/project-skeleton.json 이 단일 출처다
+want=$(jq -r '.docs | length' preset/project-skeleton.json)
+got=$(find "$T_VAULT/MyVault/개발/프로젝트/my-app/docs" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+t_eq "docs 골격이 선언과 일치" "$want" "$got"
+
+# 경로 맵이 즉시 갱신된다 — 선택창에 바로 나타나야 한다
+json=$(sed -n '/```json/,/```/p' "$T_VAULT/MyVault/템플릿/_devtrail-paths.md" | sed '1d;$d')
+t_contains "경로 맵에 반영" "my-app" "$(printf '%s' "$json" | jq -c '.projects')"
+
+# ── wildcard 는 거부한다 ─────────────────────────────────────────────────────
+t_start "project add — wildcard 거부"
+t_exit "종료코드 1" 1 "$DT" project add 'acme-*'
+out=$("$DT" project add 'acme-*' 2>&1 || true)
+t_contains "대안을 안내한다" "--section" "$out"
+t_eq "설정에 안 들어간다" "false" \
+  "$(jq -c '.github.project_groups | has("acme-*")' "$T_CONFIG")"
+
+# ── 그룹핑 — 각각 등록하고 같은 섹션 ─────────────────────────────────────────
+t_start "project add — 그룹핑"
+"$DT" project add acme-fe --section acme --apply >/dev/null 2>&1
+"$DT" project add acme-be --section acme --apply >/dev/null 2>&1
+t_eq "fe 섹션" "acme" "$(jq -r '.github.project_groups["acme-fe"]' "$T_CONFIG")"
+t_eq "be 섹션" "acme" "$(jq -r '.github.project_groups["acme-be"]' "$T_CONFIG")"
+
+json=$(sed -n '/```json/,/```/p' "$T_VAULT/MyVault/템플릿/_devtrail-paths.md" | sed '1d;$d')
+t_eq "제목은 하나로 합쳐진다" "1" \
+  "$(printf '%s' "$json" | jq -r '[.project_sections["acme-fe"], .project_sections["acme-be"]] | unique | length')"
+
+# ── 기존 폴더를 만났을 때 (D4) ───────────────────────────────────────────────
+t_start "project add — 기존 노트 무수정"
+mkdir -p "$T_VAULT/MyVault/개발/프로젝트/legacy/docs/01-product"
+printf '# 내 노트\n' > "$T_VAULT/MyVault/개발/프로젝트/legacy/README.md"
+before=$(cat "$T_VAULT/MyVault/개발/프로젝트/legacy/README.md")
+
+out=$("$DT" project add legacy 2>&1)
+t_contains "기존 노트를 밝힌다" "건드리지 않습니다" "$out"
+
+"$DT" project add legacy --apply >/dev/null 2>&1
+t_eq "README 무수정" "$before" "$(cat "$T_VAULT/MyVault/개발/프로젝트/legacy/README.md")"
+t_dir "없던 것만 보강" "$T_VAULT/MyVault/개발/프로젝트/legacy/worklogs"
+t_dir "있던 것 유지"   "$T_VAULT/MyVault/개발/프로젝트/legacy/docs/01-product"
+
+# ── 롤백 — 설정과 폴더가 함께 되돌아간다 ────────────────────────────────────
+#
+# 설정만 바뀌고 폴더가 없는 상태를 남기면 안 된다.  ADR 0001 D4.
+t_start "project add — undo"
+t_vault pjundo
+t_config MyVault
+mkdir -p "$T_VAULT/.obsidian"
+"$DT" augment --apply >/dev/null 2>&1
+"$DT" project add rollme --apply >/dev/null 2>&1
+job=$(ls -1 "$DEVTRAIL_HOME/journal" | tail -1)
+"$DT" undo "$job" --apply >/dev/null 2>&1
+
+t_eq "설정에서 사라진다" "false" \
+  "$(jq -c '.github.project_groups | has("rollme")' "$T_CONFIG")"
+t_no_file "폴더도 사라진다" "$T_VAULT/MyVault/개발/프로젝트/rollme"
+
 t_end

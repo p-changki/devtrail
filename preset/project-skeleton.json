@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "프로젝트 폴더 '안'의 구조. 볼트 최상위 구조는 tree.json 이 정한다.",
+    "층이 다르므로 합치지 않는다.",
+    "",
+    "⚠️ CLI(devtrail project add)와 Templater 템플릿이 같은 선언을 읽어야 한다.",
+    "   각자 가지면 반드시 갈라진다 — 이 저장소가 세 번 겪은 실패다.",
+    "   템플릿은 경로 맵(_devtrail-paths.md)을 통해 받는다."
+  ],
+  "docs": [
+    "00-overview",
+    "01-product",
+    "02-domain",
+    "03-architecture",
+    "04-data",
+    "05-infra",
+    "06-compliance",
+    "07-delivery"
+  ],
+  "dirs": ["worklogs"],
+  "doc_dir": {
+    "_why": "문서 종류 → 골격 폴더. 번호는 읽는 순서다.",
+    "prd": "01-product",
+    "design": "03-architecture",
+    "architecture": "03-architecture",
+    "tech": "03-architecture",
+    "decision": "00-overview",
+    "meeting": "00-overview"
+  }
+}
