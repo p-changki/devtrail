@@ -318,4 +318,42 @@ t_contains "가이드(en)"  '⌘⇧W' "$(cat 'preset/guides/en/3. Hotkeys.md')"
 t_contains "스킬(ko)"    '⌘⇧W' "$(cat skills/ko/worklog/SKILL.md)"
 t_contains "스킬(en)"    '⌘⇧W' "$(cat skills/en/worklog/SKILL.md)"
 
+# ── 프로젝트 허브 — 볼트 전체에서 이 프로젝트를 모은다 ─────────────────────
+#
+# 예전에는 자기 폴더 안(docs·worklogs)만 봤다. 그래서 "이 프로젝트의 지난
+# 작업·설계안·트러블슈팅"을 한 번에 볼 수 없었다.
+t_start "프로젝트 허브"
+for f in "preset/templates/ko/프로젝트 생성 템플릿.md" "preset/templates/en/New project.md"; do
+  n=$(basename "$f"); c=$(cat "$f")
+  t_contains "$n — 개발일지"     'WHERE type = "devlog"'     "$c"
+  t_contains "$n — 메모·트러블"  'type != "devlog"'          "$c"
+  t_contains "$n — 레포 문서"    '${repodocs}/${name}'       "$c"
+  t_contains "$n — 재방문"       'review_at <= date(today)'  "$c"
+  # 태그로 모은다 — 폴더가 아니라
+  t_contains "$n — 태그로 모음"  'FROM #project/${name}'     "$c"
+done
+
+# 허브가 찾는 태그를 실제로 붙이는 템플릿들
+t_start "허브가 찾는 태그를 붙인다"
+for t in "개발일지양식.md" "워크로그 템플릿.md" "개발메모 템플릿.md" \
+         "docs 문서 템플릿.md" "트러블슈팅 템플릿.md"; do
+  t_contains "$t" "project/" "$(cat "preset/templates/ko/$t")"
+done
+for t in "Devlog.md" "Worklog.md" "Dev note.md" "Project doc.md" "Troubleshooting.md"; do
+  t_contains "$t" "project/" "$(cat "preset/templates/en/$t")"
+done
+
+# 트러블슈팅은 프로젝트를 고를 수 있어야 한다 — 안 그러면 태그가 안 붙는다
+t_start "트러블슈팅이 프로젝트를 묻는다"
+for f in "preset/templates/ko/트러블슈팅 템플릿.md" "preset/templates/en/Troubleshooting.md"; do
+  n=$(basename "$f"); c=$(cat "$f")
+  t_contains "$n — 선택창"       "dtProjects()"            "$c"
+  # ⚠️ 정의만 보면 안 된다. frontmatter 에서 '쓰는지'까지 봐야
+  #    태그가 실제로 붙는다. (변이 주입으로 확인했다)
+  t_contains "$n — 태그 조립"    "const projectTag"        "$c"
+  t_contains "$n — 태그 삽입"    "<% projectTag %>"        "$c"
+  t_contains "$n — frontmatter"  "project: <% project %>"  "$c"
+  t_contains "$n — 헬퍼 v2"      "v2"                      "$c"
+done
+
 t_end

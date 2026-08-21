@@ -99,6 +99,7 @@ for (const d of [folder, `${folder}/docs`, `${folder}/worklogs`,
 }
 await tp.file.move(`${folder}/README`);
 const today = tp.date.now("YYYY-MM-DD");
+const repodocs = dtPath("repodocs");
 
 tR += `---
 tags:
@@ -125,12 +126,14 @@ review_at:
 
 - 
 
-## Document skeleton
+## Documents
 
 \`\`\`dataview
-LIST FROM "${folder}/docs"
+TABLE WITHOUT ID file.link AS "Doc", doc_type AS "Kind",
+  dateformat(file.mtime, "MM-dd") AS "Modified"
+FROM "${folder}/docs"
 WHERE file.name != "README"
-SORT file.path ASC
+SORT doc_type ASC, file.mtime DESC
 \`\`\`
 
 ## Work log
@@ -138,10 +141,55 @@ SORT file.path ASC
 > One task = one folder. Press \`⌘⇧W\` to create one.
 
 \`\`\`dataview
-TABLE file.folder AS "Task", file.mtime AS "Modified"
+TABLE WITHOUT ID file.folder AS "Task",
+  dateformat(file.mtime, "MM-dd") AS "Modified"
 FROM "${folder}/worklogs"
 SORT file.mtime DESC
 LIMIT 20
+\`\`\`
+
+## Devlogs that touched this project
+
+> Tagged when you pick the project with \`⌘⇧D\`.
+
+\`\`\`dataview
+LIST
+FROM #project/${name}
+WHERE type = "devlog"
+SORT file.day DESC
+LIMIT 15
+\`\`\`
+
+## Notes and troubleshooting
+
+\`\`\`dataview
+TABLE WITHOUT ID file.link AS "Note", type AS "Type",
+  dateformat(file.mtime, "MM-dd") AS "Modified"
+FROM #project/${name}
+WHERE type != "devlog" AND type != "worklog" AND type != "project-home"
+SORT file.mtime DESC
+LIMIT 20
+\`\`\`
+
+## Repo docs
+
+> Synced by \`devtrail sync\`. A mirror — do not edit here.
+> Only appears when the repo name matches this project key exactly.
+
+\`\`\`dataview
+LIST
+FROM "${repodocs}/${name}"
+SORT file.mtime DESC
+LIMIT 10
+\`\`\`
+
+## Needs a second look
+
+\`\`\`dataview
+TABLE WITHOUT ID file.link AS "Note", review_at AS "Review"
+FROM #project/${name}
+WHERE review_at != null AND review_at <= date(today)
+SORT review_at ASC
 \`\`\`
 
 ## Next action
