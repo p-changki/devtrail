@@ -25,6 +25,23 @@ import os
 import sys
 
 
+# 실제 프로젝트 키인가.
+#
+# project_groups 는 두 가지를 담는다:
+#   "my-app": "myapp"    실제 프로젝트   → 태그·폴더·라우팅에 쓴다
+#   "acme-*": "acme"     PR 섹션 매칭 규칙 → summary.sh 만 쓴다
+#
+# 태그와 폴더 이름이 되므로 파일명에 못 쓰는 문자가 있으면 프로젝트가 아니다.
+# ADR 0001 D1a · D3 참조.
+_BAD_KEY_CHARS = set('*?[]/\\:<>|"')
+
+
+def is_project_key(key):
+    if not key or len(key) > 64:
+        return False
+    return not (_BAD_KEY_CHARS & set(key))
+
+
 def load(path, default=None):
     try:
         with open(path, encoding="utf-8") as fh:
@@ -63,9 +80,17 @@ def collect_rules(tree, cfg):
                 rules.append((c["tag"].count("/"), c["tag"], full(crel)))
 
     # 프로젝트 귀속은 타입보다 뒤다. 값이 섹션명이고 키가 레포명이다.
+    #
+    # ⚠️ wildcard 키("acme-*")는 프로젝트가 아니라 PR 요약 섹션을 찾는
+    #    매칭 규칙이다(summary.sh 가 접두사 일치를 지원한다).
+    #    거르지 않으면 #project/acme-* → 프로젝트/acme-* 규칙이 생긴다.
+    #    Obsidian 태그에 * 를 쓸 수 없으므로 영원히 매치되지 않는 죽은
+    #    규칙이고, 폴더 이름에도 * 가 들어간다.
     groups = ((cfg.get("github") or {}).get("project_groups") or {})
     proj_rel = resolve("projects", "개발/프로젝트")
     for repo in sorted(set(groups.keys())):
+        if not is_project_key(repo):
+            continue
         rules.append((-1, f"project/{repo}", full(f"{proj_rel}/{repo}")))
 
     # 구체성 내림차순, 같으면 태그 이름순. project/* 는 -1 이라 맨 뒤로 간다.
