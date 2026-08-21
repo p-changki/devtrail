@@ -171,6 +171,8 @@ devtrail scan [path]       diagnose a vault — structure · meta · conflicts (
 devtrail doctor            dependencies · auth · permissions · automation
 devtrail obsidian          merge Obsidian settings
 devtrail augment [module]  create only missing folders and hubs
+devtrail project <sub>     register projects (add|list)
+devtrail template <sub>    note templates (list|diff|update)
 devtrail skills <sub>      AI skills (install|sync|list|remove)
 ```
 
@@ -183,6 +185,18 @@ devtrail weekly            draft this week's review
 devtrail backfill [date]   fill in past dates
 devtrail sync              project docs → vault
 ```
+
+### Projects
+
+```bash
+devtrail project add my-app                    # register + docs skeleton
+devtrail project add acme-fe --section acme    # group repos into one section
+devtrail project list                          # see what is registered
+```
+
+A project made with `⌘⇧P` still needs registering here before it shows up in
+the devlog and dev-note pickers. Templater cannot call the shell, so this
+cannot be automated.
 
 ### Manage
 

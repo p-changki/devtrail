@@ -36,6 +36,72 @@ git push origin main --tags
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-21 · Project Relations
+
+프로젝트를 1급 개념으로 만든다. 폴더는 있었지만 등록 경로가 없었고, 일지가
+관계를 남기지 않았고, 허브가 자기 폴더 안만 봤다. 그래서 *"이 프로젝트의
+지난 작업·설계안·트러블슈팅"* 을 한 번에 볼 수 없었다.
+
+계약은 [ADR 0001](docs/decisions/0001-project-identity.md) 에 있다.
+
+### 추가
+
+- **`devtrail project add|list`** — 프로젝트를 등록하는 유일한 쓰기 경로.
+  지금까지는 `devtrail init` 뿐이라, Obsidian `⌘⇧P` 로 만든 프로젝트가
+  선택창에 나타나지 않았다.
+
+      devtrail project add my-app
+      devtrail project add acme-fe --section acme
+
+  기존 폴더를 만나면 **기본 dry-run · 없는 것만 보강 · 기존 파일 무수정**.
+  설정 쓰기와 폴더 생성을 하나의 저널 작업으로 묶어, 어느 쪽이 실패해도
+  `devtrail undo` 로 되돌아간다.
+
+- **`devtrail template list|diff|update`** — 설치된 템플릿이 구버전일 때
+  무엇을 할지 사용자가 정한다. 덮어쓰지 않는다.
+
+- **`⌘⇧W` 워크로그** — AI 없이도 만든다. 지금까지 작성 규칙이 AI 스킬에만
+  있어, "AI 없이도 동일하게 쓸 수 있다"는 제품 철학과 어긋났다.
+
+- **프로젝트 허브** — 볼트 전체에서 이 프로젝트를 모은다. 폴더가 아니라
+  태그로 모으므로 노트가 어디에 있든 붙는다.
+
+      문서 · 작업 기록 · 이 프로젝트를 다룬 개발일지
+      메모와 트러블슈팅 · 레포 문서 · 다시 볼 때가 된 것
+
+- 경로 맵에 `project_sections` — 키 → 섹션 매핑.
+- `preset/project-skeleton.json` — 프로젝트 골격의 단일 출처.
+  CLI 와 템플릿이 같은 선언을 읽는다.
+
+### 변경
+
+- **개발일지가 프로젝트를 검색 가능한 관계로 남긴다.** 예전에는 `####`
+  제목뿐이라 Dataview 로 묶을 수 없었다.
+
+      #### acme
+      > [[개발/프로젝트/acme-fe/README|acme-fe]] · [[…/acme-be/README|acme-be]]
+
+      projects: [acme-fe, acme-be]
+      tags:  - project/acme-fe  - project/acme-be
+
+  제목은 **섹션**(중복 제거), 링크와 frontmatter 는 **키**다.
+
+- 헬퍼 버전이 **v2** 가 됐다. 구버전 템플릿은 `devtrail obsidian` 이 알린다.
+
+### 수정
+
+- **`--section` 을 쓰면 PR 요약이 조용히 건너뛰어졌다.** 경로 맵이 키만
+  넘겨 키↔섹션 관계가 소실됐고, 일지는 `#### acme-fe` 를 만드는데
+  `summary.sh` 는 `#### acme` 를 찾았다. 이제 일치한다.
+- **트러블슈팅이 프로젝트 태그를 붙이지 않았다.** `project:` 필드는 있는데
+  비어 있어, 허브가 이 노트를 영영 못 잡았다.
+
+### 내부
+
+- 회귀 테스트 120개 (`tests/test-project-keys.sh`).
+- 문서의 템플릿 개수 검사가 README 양쪽도 본다. 한 곳만 보면 나머지가
+  조용히 낡는다 — 변이 주입으로 발견했다.
+
 ## [0.2.1] — 2026-08-21
 
 ### 수정

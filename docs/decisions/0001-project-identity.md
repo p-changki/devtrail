@@ -1,6 +1,6 @@
 # ADR 0001 — 프로젝트 식별자
 
-- 상태: **확정** (리뷰 2회 · revise 2회 · 호환 결정 완료)
+- 상태: **구현 완료** (v0.3.0)
 - 날짜: 2026-08-21
 - 대상 릴리스: v0.3.0 — Project Relations
 
@@ -461,6 +461,35 @@ $ devtrail obsidian
 
 설치된 파일에 그 표시가 없으면 구버전이다. 사용자가 헤더를 지웠다면
 구버전으로 보고 알리기만 한다 — 틀린 알림이 조용한 오작동보다 낫다.
+
+## 구현 결과 (v0.3.0)
+
+| 결정 | 구현 |
+|---|---|
+| D1 · D1a 정식 키 · wildcard 제외 | `anm.py` · `augmentcmd.sh` (v0.2.1) |
+| D2 볼트 폴더명 = 키 | `project add` 가 `프로젝트/<키>` 로 만든다 |
+| D3 키의 규칙 | `_pj_valid_key` |
+| D4 쓰기 경로 · 기존 폴더 | `devtrail project add` |
+| D5 · D5a 일지의 관계 · 경로 맵 | 템플릿 v2 · `project_sections` |
+| D6 골격 단일 출처 | `preset/project-skeleton.json` |
+| D7 호환 | `projects` 타입 유지 · `template diff\|update` |
+| Q1 wildcard 거부 | `project add` 가 대안을 안내 |
+| Q2 RepoDocs 정확 일치 | 프로젝트 허브의 「레포 문서」 |
+| Q3 수동 노트 무이동 | `no_automove: true` 유지 |
+
+검사 120개 (`tests/test-project-keys.sh`).
+
+### 구현하며 드러난 것
+
+- **트러블슈팅이 프로젝트 태그를 안 붙였다.** `project:` 필드는 있는데
+  비어 있어 허브가 영영 못 잡았다. 계약을 쓸 때는 안 보였다.
+- **개수 검사가 한 문서만 봤다.** 템플릿이 21→22 가 됐는데 README 양쪽이
+  낡은 채 통과했다.
+
+## 다음에 남긴 것
+
+- RepoDocs 의 레포명이 프로젝트 키와 다를 때의 **명시적 매핑** (Q2)
+- `project_groups` 의 wildcard 항목을 **어디에 옮길지** (D1a)
 
 ## 구현 착수 조건
 

@@ -156,6 +156,8 @@ devtrail scan [경로]        볼트 진단 — 구조 · 메타 · 충돌 (쓰�
 devtrail doctor            의존성 · 인증 · 권한 · 자동화 상태
 devtrail obsidian          Obsidian 설정 병합
 devtrail augment [모듈]     없는 폴더 · 허브만 생성
+devtrail project <하위>     프로젝트 등록 (add|list)
+devtrail template <하위>    노트 템플릿 (list|diff|update)
 devtrail skills <하위>      AI 스킬 설치 (install|sync|list|remove)
 ```
 
@@ -168,6 +170,17 @@ devtrail weekly            이번 주 주간리뷰 초안
 devtrail backfill [날짜]    지난 날짜를 채워 넣기
 devtrail sync              프로젝트 docs → 볼트
 ```
+
+### 프로젝트
+
+```bash
+devtrail project add my-app              # 등록 + docs 골격 생성
+devtrail project add acme-fe --section acme   # 여러 레포를 한 섹션에
+devtrail project list                    # 등록된 것 보기
+```
+
+`⌘⇧P` 로 만든 프로젝트도 여기서 등록해야 개발일지·개발메모의 선택창에
+나타납니다. Templater 는 셸을 부를 수 없어 자동화할 수 없습니다.
 
 ### 관리
 
