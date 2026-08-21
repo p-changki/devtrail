@@ -231,7 +231,10 @@ check_docs() {
   actual=$(ls preset/templates/ko/*.md 2>/dev/null | wc -l | tr -d ' ')
   for d in "$doc" README.md README.en.md; do
     [ -f "$d" ] || continue
-    claim=$(grep -oE '(노트 템플릿|note templates) [0-9]+종|[0-9]+ note templates' "$d" \
+    # ⚠️ 줄바꿈을 넘어야 한다. "노트 템플릿\n21종" 처럼 나뉘어 있으면
+    #    한 줄만 보는 grep 이 못 잡는다 — 실제로 그랬다.
+    claim=$(tr '\n' ' ' < "$d" \
+            | grep -oE '(노트 템플릿|note templates) +[0-9]+종|[0-9]+ note templates' \
             | head -1 | grep -oE '[0-9]+')
     [ -n "$claim" ] || continue
     [ "$claim" = "$actual" ] \
