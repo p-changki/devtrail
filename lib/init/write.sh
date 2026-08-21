@@ -77,6 +77,7 @@ _init_render_scripts() {
     sed \
       -e "s|{{DEVTRAIL_HOME}}|$DEVTRAIL_HOME|g" \
       -e "s|{{CONFIG_FILE}}|$CONFIG_FILE|g" \
+      -e "s|{{DEVTRAIL_BIN}}|$DEVTRAIL_ROOT/bin/devtrail|g" \
       "$t" > "$dst/$name"
     chmod +x "$dst/$name"
     n=$((n+1))
@@ -140,25 +141,48 @@ _init_skills() {
 #
 # 그 일은 `devtrail obsidian` 이 제대로 한다(병합·치환·백업). 여기서는
 # 그 명령을 부르기 위한 선행 조건만 안내한다.
+# 완료 안내.
+#
+# ⚠️ 여기는 '무엇을 했는지'가 아니라 '사용자가 아직 해야 할 것'만 적는다.
+#    bootstrap 이 이미 한 일을 다시 시키면 사용자는 두 번 한다 —
+#    예전 문구가 그랬다("플러그인 4개를 설치하고 재시작하세요").
 _init_next_steps() {
   local vault="$1"
   echo
   ok "$(L "셋업 완료" "Setup complete")"
   echo
+
+  local n=0
   printf '%s\n' "${C_BOLD}$(L "다음 단계" "Next steps")${C_RESET}"
-  info "  1) $(L "Obsidian 에서 볼트를 엽니다" "Open the vault in Obsidian"): $vault"
-  dim "     $(L "처음 열어야 .obsidian/ 폴더가 생깁니다." \
-              "The .obsidian/ folder only appears after you open it once.")"
-  info "  2) $(L "플러그인 4개를 설치·활성화하고 Obsidian 을 재시작합니다" \
-               "Install and enable the 4 plugins, then restart Obsidian")"
-  dim "     Shell commands · Templater · Dataview · Auto Note Mover"
-  info "  3) devtrail obsidian             # $(L "셸커맨드 병합 · 노트 템플릿 설치" \
-                                                "merge shell commands · install templates")"
-  dim "     $(L "2번을 마치기 전에 실행하면 셸커맨드 병합을 건너뜁니다." \
-              "Running this before step 2 skips the shell-command merge.")"
-  info "  4) devtrail doctor               # $(L "진단 — 여기서 ❌ 가 없어야 합니다" \
-                                                "diagnose — you want no ❌ here")"
-  info "  5) devtrail install-schedule     # $(L "자동 실행 등록" "register automatic runs")"
+
+  # bootstrap 이 꺼졌거나 Obsidian 이 없으면 예전 안내가 여전히 맞다.
+  if [ "${DT_BOOTSTRAP:-1}" != 1 ]; then
+    n=$((n + 1)); info "  ${n}) devtrail obsidian             # $(L "Obsidian 설정 적용" "apply Obsidian settings")"
+  else
+    case "${DT_BOOT_PLUGINS:-skip}" in
+      ok)
+        n=$((n + 1))
+        info "  ${n}) $(L "Obsidian 이 플러그인을 신뢰할지 물으면 허용합니다" \
+                        "When Obsidian asks whether to trust the plugins, allow them")"
+        dim "     $(L "커뮤니티 플러그인에 대한 Obsidian 의 보안 확인입니다. 한 번만 묻습니다." \
+                    "That is Obsidian's security check for community plugins. It asks once.")" ;;
+      failed)
+        n=$((n + 1))
+        info "  ${n}) devtrail plugins install      # $(L "플러그인 설치 재시도" "retry plugin install")" ;;
+      *)
+        n=$((n + 1))
+        info "  ${n}) devtrail obsidian             # $(L "Obsidian 설정 적용" "apply Obsidian settings")" ;;
+    esac
+    if [ "${DT_BOOT_OPENED:-0}" != 1 ]; then
+      n=$((n + 1))
+      info "  ${n}) $(L "Obsidian 에서 볼트를 엽니다" "Open the vault in Obsidian"): $vault"
+    fi
+  fi
+
+  n=$((n + 1)); info "  ${n}) devtrail doctor               # $(L "진단 — 여기서 ❌ 가 없어야 합니다" \
+                                                                "diagnose — you want no ❌ here")"
+  n=$((n + 1)); info "  ${n}) devtrail install-schedule     # $(L "자동 실행 등록" "register automatic runs")"
+
   if [ "${DT_MODE:-existing}" != new ]; then
     echo
     dim "   $(L "기존 볼트이므로 자동 이동은 수동(Manual)으로 시작합니다." \
@@ -168,4 +192,5 @@ _init_next_steps() {
   echo
   dim "$(L "설정" "Config"): $CONFIG_FILE"
   dim "$(L "스크립트" "Scripts"): $DEVTRAIL_HOME/scripts/"
+  dim "$(L "되돌리기" "Undo"): devtrail undo"
 }

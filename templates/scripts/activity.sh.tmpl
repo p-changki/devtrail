@@ -20,15 +20,39 @@ MARKER_END="<!-- devtrail:activity:end -->"
 
 [ -n "$GH_USER" ] || { echo "github.user 미설정 — devtrail init" >&2; exit 1; }
 
+# DEVTRAIL_EVENT_FILE 이 있으면 '이 파일 때문에 불렸다'는 뜻이다
+# (Obsidian 의 file-created 이벤트). 오늘 개발일지가 아니면 할 일이 없다 —
+# 기다리지 않고 바로 빠진다.
+#
+# ⚠️ 이게 없으면 아무 노트나 만들 때마다 아래의 대기 루프가 돌아,
+#    노트 하나당 최대 WAIT_SECS 동안 프로세스가 잠들어 있게 된다.
+# ⚠️ 인자가 아니라 환경변수인 이유: $1 은 이미 날짜다(devtrail activity [DATE]).
+EVENT_FILE="${DEVTRAIL_EVENT_FILE:-}"
+if [ -n "$EVENT_FILE" ] && [ "$EVENT_FILE" != "$TARGET_FILE" ]; then
+  exit 0
+fi
+
 if [ ! -f "$TARGET_FILE" ]; then
   echo "개발일지 없음 - 건너뜀: $TARGET_FILE"; exit 0
 fi
 
-# 파일은 있는데 헤딩이 아직 없으면 템플릿 엔진이 비동기로 쓰는 중일 수 있다.
-for _ in 1 2 3; do
-  grep -qF "$HEADING" "$TARGET_FILE" && break
-  sleep 0.5
-done
+# 파일은 있는데 헤딩이 아직 없으면 템플릿 엔진이 아직 본문을 쓰지 않은 것이다.
+#
+# ⚠️ Obsidian 의 file-created 는 '빈 파일이 생기는 순간' 쏜다. Templater 는
+#    그 뒤에, 그것도 사용자가 선택창에 답한 다음에 본문을 쓴다. 예전에는
+#    1.5초만 기다려서 사용자가 조금만 머뭇거려도 "헤딩 없음"으로 끝났다 —
+#    같은 조작이 될 때도 있고 안 될 때도 있는 간헐적 실패였다(2026-08-22).
+#
+# 사람이 선택창에 답하는 시간을 감안한다. 이벤트로 불린 경우에만 기다린다.
+WAIT_SECS="${DEVTRAIL_ACTIVITY_WAIT:-30}"
+if [ -n "$EVENT_FILE" ]; then
+  _waited=0
+  while [ "$_waited" -lt "$((WAIT_SECS * 2))" ]; do
+    grep -qF "$HEADING" "$TARGET_FILE" && break
+    sleep 0.5
+    _waited=$((_waited + 1))
+  done
+fi
 grep -qF "$HEADING" "$TARGET_FILE" || { echo "헤딩 없음 - 건너뜀: $HEADING"; exit 0; }
 
 if [ "${FORCE_REFRESH:-0}" != "1" ] && grep -qF "$MARKER_START" "$TARGET_FILE"; then

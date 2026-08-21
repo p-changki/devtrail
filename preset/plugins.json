@@ -1,0 +1,58 @@
+{
+  "_comment": [
+    "DevTrail 이 볼트에 설치하는 Obsidian 커뮤니티 플러그인.",
+    "",
+    "⚠️ tag 는 반드시 고정한다. 'latest' 를 추적하면 어제 되던 셋업이",
+    "   오늘 깨진다 — 우리가 릴리스하지 않은 코드가 들어오기 때문이다.",
+    "   올릴 때는 사람이 실제로 확인하고 이 파일을 고친다.",
+    "",
+    "id 는 플러그인 manifest.json 의 id 다. 폴더 이름이자",
+    "community-plugins.json 에 들어가는 값이므로 레포 이름과 다를 수 있다",
+    "(예: blacksmithgu/obsidian-dataview → id 는 'dataview').",
+    "",
+    "files 는 릴리스 자산 이름이다. styles.css 가 없는 플러그인이 있다",
+    "(auto-note-mover). 없는 파일을 필수로 받으면 설치가 통째로 실패한다."
+  ],
+  "plugins": [
+    {
+      "id": "templater-obsidian",
+      "name": "Templater",
+      "repo": "SilentVoid13/Templater",
+      "tag": "2.25.0",
+      "files": ["main.js", "manifest.json", "styles.css"],
+      "required": true,
+      "why_ko": "노트 템플릿 — 개발일지·주간리뷰가 여기서 만들어집니다",
+      "why_en": "Note templates — devlogs and weekly reviews come from here"
+    },
+    {
+      "id": "dataview",
+      "name": "Dataview",
+      "repo": "blacksmithgu/obsidian-dataview",
+      "tag": "0.5.70",
+      "files": ["main.js", "manifest.json", "styles.css"],
+      "required": true,
+      "why_ko": "대시보드·프로젝트 허브 쿼리 — 없으면 빈 코드블록만 보입니다",
+      "why_en": "Dashboard and project hub queries — without it you see empty code blocks"
+    },
+    {
+      "id": "obsidian-shellcommands",
+      "name": "Shell commands",
+      "repo": "Taitava/obsidian-shellcommands",
+      "tag": "0.23.0",
+      "files": ["main.js", "manifest.json", "styles.css"],
+      "required": true,
+      "why_ko": "Obsidian 단축키에서 devtrail 을 호출하는 통로",
+      "why_en": "Lets Obsidian hotkeys call devtrail"
+    },
+    {
+      "id": "auto-note-mover",
+      "name": "Auto Note Mover",
+      "repo": "farux/obsidian-auto-note-mover",
+      "tag": "1.2.0",
+      "files": ["main.js", "manifest.json"],
+      "required": false,
+      "why_ko": "태그를 보고 노트를 폴더로 정리 (없어도 나머지는 동작)",
+      "why_en": "Files notes into folders by tag (everything else works without it)"
+    }
+  ]
+}

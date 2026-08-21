@@ -41,14 +41,19 @@ obsidian_apply() {
   [ -d "$vault" ] || die "$(L "볼트 없음" "Vault not found"): $vault"
 
   local dot="$vault/.obsidian"
-  if [ ! -d "$dot" ]; then
-    die "$(L "Obsidian 설정 폴더가 없습니다" "No Obsidian config folder"): $dot
-   $(L "Obsidian 에서 이 볼트를 한 번 연 뒤 다시 실행하세요." \
-       "Open this vault in Obsidian once, then run it again.")"
-  fi
 
   # 한 번의 실행을 하나로 묶는다 — devtrail undo 가 되돌릴 단위다.
   jr_begin obsidian
+
+  # ⚠️ 예전에는 여기서 "Obsidian 에서 한 번 연 뒤 다시 실행하세요" 로 막았다.
+  #    .obsidian 은 그냥 폴더다. 그 한 줄 때문에 사용자가 터미널과 GUI 를
+  #    왕복해야 했다 — 셋업에서 가장 큰 마찰이었다.
+  if [ ! -d "$dot" ]; then
+    . "$DEVTRAIL_ROOT/lib/obsidian_app.sh"
+    oa_ensure_dot "$vault" || die "$(L "Obsidian 설정 폴더를 만들지 못했습니다" \
+                                     "Could not create the Obsidian config folder"): $dot"
+    dim "   $(L "Obsidian 설정 폴더를 만들었습니다" "Created the Obsidian config folder"): .obsidian/"
+  fi
 
   local m
   for m in $DT_MERGERS; do

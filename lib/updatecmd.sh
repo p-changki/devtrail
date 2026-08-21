@@ -120,7 +120,27 @@ _up_apply() {
   ok "$(L "코드" "Code") v$(cat "$DEVTRAIL_ROOT/VERSION" 2>/dev/null)"
 
   _up_schema 1
+  _up_scripts 1
   _up_next
+}
+
+# 실행 스크립트를 다시 만든다.
+#
+# ⚠️ 스크립트는 설정을 실행 시점에 읽지만, '스크립트 자체'는 템플릿에서
+#    렌더링된 사본이다. 코드를 올려도 사본은 옛날 그대로다.
+#    2026-08-22 에 이것 때문에 개발일지 경로 결함이 고쳐져도 기존 사용자에게
+#    닿지 않는 상태였다 — 갱신이 코드만 올리고 사본을 두고 갔기 때문이다.
+_up_scripts() {
+  local apply="$1"
+  config_exists || return 0
+  [ -d "$DEVTRAIL_HOME/scripts" ] || return 0
+  if [ "$apply" != 1 ]; then
+    dim "   $(L "실행 스크립트를 다시 만듭니다" "Run scripts will be re-rendered")"
+    return 0
+  fi
+  . "$DEVTRAIL_ROOT/lib/init/prompts.sh"
+  . "$DEVTRAIL_ROOT/lib/init/write.sh"
+  _init_render_scripts
 }
 
 # 코드가 올라갔으면 설정 스키마도 맞춰야 한다.

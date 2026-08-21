@@ -31,6 +31,7 @@ ${C_BOLD}설치${C_RESET}
   devtrail template <sub>    노트 템플릿 (list|diff|update)
   devtrail skills <sub>      AI 스킬 설치 (install|sync|list|remove)
   devtrail obsidian          Obsidian 설정 적용 (병합 — 덮어쓰지 않음)
+  devtrail plugins <sub>     Obsidian 플러그인 (install|status)
   devtrail app <sub>         메뉴바 앱 (install|start|stop|status)
   devtrail dashboard         웹 대시보드 (상태·실행·설정)
   devtrail install-schedule  launchd 자동 실행 등록
@@ -64,6 +65,9 @@ case "$cmd" in
     . "$DEVTRAIL_ROOT/lib/doctor.sh"; doctor_run "$@" ;;
   obsidian)
     . "$DEVTRAIL_ROOT/lib/obsidian.sh"; obsidian_apply "$@" ;;
+  plugins)
+    . "$DEVTRAIL_ROOT/lib/obsidian_app.sh"   # oa_ensure_dot
+    . "$DEVTRAIL_ROOT/lib/plugins.sh"; plugins_cmd "$@" ;;
   app)
     . "$DEVTRAIL_ROOT/lib/appcmd.sh"; app_cmd "$@" ;;
   dashboard)

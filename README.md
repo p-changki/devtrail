@@ -22,18 +22,28 @@
 ```bash
 curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash
 
-devtrail init        # 대화형 셋업
+devtrail init        # 이거 하나면 끝납니다
                      #   1) 언어 — 한국어 / English
-                     #   2) 볼트 경로
+                     #   2) 볼트 — Obsidian 이 아는 볼트 목록에서 고르거나 새로 만들기
                      #   3) 설치 방식 — 기존 볼트에 얹기 / 새로 시작 / 분리 설치
                      #   4) 루트 폴더 이름 · 모듈 · GitHub · AI
-                     # → Obsidian 에서 볼트를 열고 플러그인 4개 설치 후 재시작
-devtrail obsidian    # 플러그인 설정 병합 · 템플릿 · 단축키
+                     # → 플러그인 4개 설치 · 설정 병합 · Obsidian 실행까지 자동
 devtrail doctor      # 뭐가 안 되는지 정확히 알려줍니다
 ```
 
+`init` 이 Obsidian 플러그인 4개를 **버전을 고정해** 내려받아 넣고, 설정을
+병합한 뒤, 볼트를 열어 줍니다. 터미널과 Obsidian 을 오갈 일이 없습니다.
+설치 전에 무엇을 어디서 받는지 화면에 띄우고 동의를 받습니다.
+
+> 사용자가 직접 해야 하는 것은 하나입니다 — Obsidian 이 "커뮤니티 플러그인을
+> 신뢰하시겠습니까?" 라고 물으면 허용하는 것. 서드파티 코드에 대한 Obsidian 의
+> 보안 확인이라 우회하지 않습니다.
+>
+> 볼트를 직접 만지고 싶으면 `devtrail init --no-bootstrap` 으로 설정만 만들고
+> `devtrail obsidian` 을 나중에 실행할 수 있습니다.
+
 이미 쓰던 볼트가 있어도 됩니다. `init` 이 먼저 진단하고 **기존 폴더를 그대로
-쓰는 쪽**을 제안합니다.
+쓰는 쪽**을 제안합니다. 이미 깔려 있는 플러그인은 건드리지 않습니다.
 
 ---
 
@@ -155,6 +165,7 @@ devtrail init              대화형 셋업
 devtrail scan [경로]        볼트 진단 — 구조 · 메타 · 충돌 (쓰기 없음)
 devtrail doctor            의존성 · 인증 · 권한 · 자동화 상태
 devtrail obsidian          Obsidian 설정 병합
+devtrail plugins <sub>     Obsidian 플러그인 (install|status)
 devtrail augment [모듈]     없는 폴더 · 허브만 생성
 devtrail project <하위>     프로젝트 등록 (add|list)
 devtrail template <하위>    노트 템플릿 (list|diff|update)
@@ -189,7 +200,7 @@ devtrail update            DevTrail 자체를 최신으로
 devtrail undo [ID]         되돌리기
 devtrail config [get|set]  설정
 devtrail path [키]          볼트 경로 조회
-devtrail app <하위>         메뉴바 앱 (macOS)
+devtrail app <하위>         메뉴바 앱 (install|start|stop|status|uninstall)
 devtrail dashboard         웹 대시보드
 devtrail install-schedule  자동 실행 등록
 devtrail uninstall         자동화 제거 (볼트는 건드리지 않음)
@@ -265,17 +276,26 @@ Obsidian
 | 변경 저널 | `~/.devtrail/journal/` |
 | 볼트 | 직접 정하신 곳 |
 
-`devtrail uninstall` 은 자동화만 제거합니다. **노트는 건드리지 않습니다.**
+`devtrail uninstall` 은 자동화(launchd)만 제거합니다. **노트는 건드리지 않습니다.**
+메뉴바 앱은 `devtrail app uninstall` 로 따로 지웁니다.
 
 ---
 
-## 현재 상태 (v0.2)
+## 현재 상태 (v0.3)
 
-**되는 것** — 볼트 구조 생성 · 기존 볼트에 얹기 · 모드 3종 · 노트 템플릿
-21종 · 폴더별 허브 · 자동 분류 · GitHub 활동/PR 요약 · 주간리뷰 · AI 스킬
-12종 · 되돌리기 · 메뉴바 앱 · 웹 대시보드
+**되는 것** — 볼트 구조 생성 · 기존 볼트에 얹기 · 모드 3종 · 노트 템플릿 22종
+· 폴더별 허브 · 자동 분류 · GitHub 활동/PR 요약 · 주간리뷰 · AI 스킬 12종 ·
+되돌리기 · 메뉴바 앱 · 웹 대시보드
 
-**아직인 것** — Linux · Windows · 영어 · GitHub 외 다른 호스팅 ·
+**프로젝트 관계 (v0.3)** — `devtrail project add` 로 등록하면 개발일지 ·
+개발메모 · 워크로그 · 트러블슈팅이 전부 `#project/<키>` 로 이어지고,
+프로젝트 README 가 그것들을 볼트 전체에서 모읍니다.
+
+**언어** — 한국어 · English 둘 다 완전 지원. 폴더 이름 · 템플릿 · 가이드 ·
+CLI 출력 · AI 스킬 전부. 태그와 frontmatter 키는 양쪽이 같아서 자동 분류와
+Dataview 쿼리는 언어를 타지 않습니다.
+
+**아직인 것** — Linux · Windows · GitHub 외 다른 호스팅 ·
 Obsidian 외 다른 노트 앱
 
 **시험 중** — 실제 볼트에서의 장기 사용. 버그를 만나시면

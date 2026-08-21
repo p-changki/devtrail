@@ -102,7 +102,7 @@ def tpl_name(entry):
     return entry["template"]
 
 
-def build_templater(tmpl_rel, paths, existing, have=None):
+def build_templater(tmpl_rel, paths, existing, have=None, spec=None):
     """폴더 → 템플릿 매핑. 새 노트를 만들면 양식이 자동으로 채워진다."""
     # (폴더 키, 한국어 파일명, 영어 파일명)
     mapping = [
@@ -137,9 +137,98 @@ def build_templater(tmpl_rel, paths, existing, have=None):
 
     out["folder_templates"] = old
     out["templates_folder"] = out.get("templates_folder") or tmpl_rel
-    out["trigger_on_file_creation"] = True     # 이게 꺼져 있으면 자동 삽입이 안 된다
     out["syntax_highlighting"] = out.get("syntax_highlighting", True)
+    _set_trigger(out)
+    _set_template_hotkeys(out, spec, tmpl_rel, have)
     return out, added
+
+
+def _set_template_hotkeys(out, spec, tmpl_rel, have):
+    """단축키를 걸 템플릿을 Templater 에 등록한다.
+
+    ⚠️ Templater 는 이 목록에 있는 템플릿에만 명령을 만든다:
+
+         register_templates_hotkeys() {
+           this.plugin.settings.enabled_templates_hotkeys.forEach(
+             t => this.add_template_hotkey(t))
+         }
+
+       비워두면 templater-obsidian:create-<경로> 라는 명령이 아예 없다.
+       그런데 hotkeys.json 에는 그 ID 로 키가 배정된다 — 존재하지 않는
+       명령에 키를 거는 셈이라 눌러도 아무 일도 일어나지 않는다.
+       "단축키 13개 등록" 이라고 보고하면서 실제로는 0개였다
+       (2026-08-22 실물 QA 에서 ⌘⇧D 가 무반응인 것으로 발견).
+
+    build_hotkeys 와 같은 목록을 써야 한다. 어긋나면 다시 죽은 키가 생긴다.
+    """
+    want = []
+    for t in (spec or {}).get("templater", []) or []:
+        name = tpl_name(t)
+        if have is not None and name not in have:
+            continue           # 없는 템플릿에 명령을 만들면 눌렀을 때 오류가 뜬다
+        want.append("%s/%s" % (tmpl_rel, name))
+
+    # 사용자가 직접 넣은 항목은 그대로 둔다. 문자열·객체 두 형태를 모두 쓴다.
+    old = list(out.get("enabled_templates_hotkeys") or [])
+    known = set()
+    for e in old:
+        known.add(e if isinstance(e, str) else (e or {}).get("template", ""))
+    for w in want:
+        if w not in known:
+            old.append(w)
+            known.add(w)
+    out["enabled_templates_hotkeys"] = old
+
+
+def templater_schema_version(plugin_dir):
+    """설치된 Templater 가 쓰는 설정 스키마 버전. 못 읽으면 None.
+
+    ⚠️ 값을 짐작하지 않는다. 틀린 data_version 을 쓰면 Templater 가
+       마이그레이션을 건너뛰거나 반대로 우리 설정을 지운다.
+    """
+    if not plugin_dir:
+        return None
+    import re
+    main_js = os.path.join(plugin_dir, "main.js")
+    if not os.path.isfile(main_js):
+        return None
+    try:
+        with open(main_js, encoding="utf-8", errors="replace") as f:
+            src = f.read()
+    except OSError:
+        return None
+    m = re.search(r"data_version\s*:\s*(\d+)", src)
+    return int(m.group(1)) if m else None
+
+
+def _set_trigger(out):
+    """새 파일을 만들 때 폴더 템플릿이 자동으로 들어가게 한다.
+
+    ⚠️ Templater 2.x 는 키를 바꿨다. 예전 키(trigger_on_file_creation,
+       enable_folder_templates)는 로드할 때 **삭제된다**:
+
+         for (n of ["trigger_on_file_creation", "enable_system_commands",
+                    "enable_folder_templates", "enable_file_templates"])
+           delete i[n]
+
+       그래서 예전 키만 쓰면 모드가 "none" 이 되고 자동 삽입이 통째로
+       꺼진다 — 2026-08-22 실물 QA 에서 확인했다. 게다가 data_version 이
+       없으면 Templater 가 "설정을 초기화했습니다" 경고까지 띄운다.
+
+    설치된 플러그인이 말하는 버전을 읽어 맞는 키를 쓴다.
+    읽지 못하면 예전 키로 떨어진다 — 구버전에서는 그게 맞는 키다.
+    """
+    ver = templater_schema_version(os.environ.get("DT_TEMPLATER_DIR", ""))
+    if ver is None:
+        out["trigger_on_file_creation"] = True
+        out["enable_folder_templates"] = True
+        return
+    out["data_version"] = ver
+    out["trigger_on_file_creation_mode"] = "folder"
+    # 예전 키가 남아 있으면 경고를 띄우므로 치운다.
+    for k in ("trigger_on_file_creation", "enable_folder_templates",
+              "enable_file_templates"):
+        out.pop(k, None)
 
 
 def main():
@@ -159,7 +248,7 @@ def main():
         have = {f for f in os.listdir(tdir) if f.endswith(".md")}
 
     if what == "templater":
-        out, added = build_templater(tmpl_rel, paths, existing, have)
+        out, added = build_templater(tmpl_rel, paths, existing, have, spec)
         print(json.dumps(out, ensure_ascii=False, indent=2))
         print(f"폴더 매핑 {len(added)}개 추가 · 전체 {len(out['folder_templates'])}개",
               file=sys.stderr)

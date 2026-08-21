@@ -322,16 +322,26 @@ t_contains "스킬(en)"    '⌘⇧W' "$(cat skills/en/worklog/SKILL.md)"
 #
 # 예전에는 자기 폴더 안(docs·worklogs)만 봤다. 그래서 "이 프로젝트의 지난
 # 작업·설계안·트러블슈팅"을 한 번에 볼 수 없었다.
+#
+# ⚠️ 본문은 preset/hub/project-readme.<lang>.md 한 곳에 있다.
+#    Obsidian 템플릿과 `devtrail project add` 가 둘 다 이걸 읽는다 —
+#    예전에는 템플릿 안에만 있어서 CLI 로 만든 프로젝트에는 허브가 없었다.
 t_start "프로젝트 허브"
-for f in "preset/templates/ko/프로젝트 생성 템플릿.md" "preset/templates/en/New project.md"; do
+for f in "preset/hub/project-readme.ko.md" "preset/hub/project-readme.en.md"; do
   n=$(basename "$f"); c=$(cat "$f")
   t_contains "$n — 개발일지"     'WHERE type = "devlog"'     "$c"
   t_contains "$n — 메모·트러블"  'type != "devlog"'          "$c"
-  t_contains "$n — 레포 문서"    '${repodocs}/${name}'       "$c"
+  t_contains "$n — 레포 문서"    '{{REPODOCS}}/{{NAME}}'     "$c"
   t_contains "$n — 재방문"       'review_at <= date(today)'  "$c"
   # 태그로 모은다 — 폴더가 아니라
-  t_contains "$n — 태그로 모음"  'FROM #project/${name}'     "$c"
+  t_contains "$n — 태그로 모음"  'FROM #project/{{NAME}}'    "$c"
 done
+
+# 두 생성 경로가 같은 것을 읽는가 — 여기가 어긋나면 결과가 갈린다.
+for f in "preset/templates/ko/프로젝트 생성 템플릿.md" "preset/templates/en/New project.md"; do
+  t_contains "$(basename "$f") — 허브를 읽는다" "_devtrail-project-readme.md" "$(cat "$f")"
+done
+t_contains "project add 도 같은 원본" "preset/hub/project-readme" "$(cat lib/projectcmd.sh)"
 
 # 허브가 찾는 태그를 실제로 붙이는 템플릿들
 t_start "허브가 찾는 태그를 붙인다"
@@ -355,5 +365,27 @@ for f in "preset/templates/ko/트러블슈팅 템플릿.md" "preset/templates/en
   t_contains "$n — frontmatter"  "project: <% project %>"  "$c"
   t_contains "$n — 헬퍼 v2"      "v2"                      "$c"
 done
+
+# ── app uninstall — 설치했으면 지울 수도 있어야 한다 ────────────────────────
+#
+# devtrail uninstall 은 자동화(plist)만 지우고 앱은 남겼다.
+# 남의 /Applications 에 우리 것을 두고 나가는 셈이었다.
+t_start "app uninstall"
+t_contains "라우터에 있다"   "uninstall) shift" "$(cat lib/appcmd.sh)"
+t_contains "사용법에 있다"   "build|uninstall"  "$(cat lib/appcmd.sh)"
+t_contains "dry-run 이 기본" 'apply=0'          "$(cat lib/appcmd.sh)"
+t_contains "볼트를 안 건드린다고 밝힌다" "볼트와 설정은 건드리지 않습니다" \
+  "$(cat lib/appcmd.sh)"
+
+# 설치되지 않았을 때 죽지 않는다
+out=$(DEVTRAIL_HOME="$T_TMP/nohome" DEVTRAIL_CONFIG="$T_TMP/nohome/c.json" \
+      sh -c 'mkdir -p "$DEVTRAIL_HOME"; printf "{\"version\":3,\"lang\":\"ko\",\"vault\":{\"path\":\"/tmp\",\"root\":\"x\"},\"install\":{\"mode\":\"new\",\"modules\":[\"devlog\"]},\"dirs\":{}}" > "$DEVTRAIL_CONFIG"' 2>/dev/null; \
+      echo ok)
+t_eq "설정 준비" "ok" "$out"
+
+# 문서가 새 명령을 안내한다
+t_start "app uninstall 문서"
+t_contains "README(ko)" "app uninstall" "$(cat README.md)"
+t_contains "README(en)" "app uninstall" "$(cat README.en.md)"
 
 t_end
