@@ -58,7 +58,15 @@ final class Status: ObservableObject {
         }
         cliMissing = false
 
-        needsSetup = !FileManager.default.fileExists(atPath: configPath)
+        // ⚠️ '셋업했는가' 를 파일 존재로 판정하지 않는다. 설정 파일이 있어도
+        //    스키마가 낡았거나 CLI 가 읽지 못할 수 있고, 그러면 앱은 셋업된
+        //    줄 알고 빈 화면을 보여준다. 판정은 CLI 가 한다.
+        //    CLI 를 못 부르면 파일 존재로 떨어진다 — 그때도 화면은 나와야 한다.
+        if let s = CLI.json(["setup", "status", "--json"]) {
+            needsSetup = (s["configured"] as? Bool) == false
+        } else {
+            needsSetup = !FileManager.default.fileExists(atPath: configPath)
+        }
         if needsSetup {
             health = .warn
             headline = "아직 셋업하지 않았습니다"
@@ -119,21 +127,33 @@ final class Status: ObservableObject {
                 .appendingPathComponent(".devtrail").path
     }
 
+    /// 폴더 경로. CLI 가 유일한 해석기다.
+    ///
+    /// ⚠️ 여기서 dirs 를 직접 읽고 기본값을 두면 앱이 세 번째 해석기가 된다.
+    ///    새로 설치한 볼트는 dirs 가 비어 있어 <루트>/devlog/ 를 가리키게 되고,
+    ///    파일이 멀쩡히 있는데도 "개발일지 없음" 이 뜬다. 같은 결함을 생성
+    ///    스크립트와 웹 대시보드에서 이미 두 번 고쳤다(2026-08-22 실물 QA).
+    private var pathCache: [String: String] = [:]
+
+    private func vaultPath(_ key: String) -> String? {
+        guard let vault = dig("vault.path") as? String, !vault.isEmpty else { return nil }
+        if let hit = pathCache[key] { return "\(vault)/\(hit)" }
+        guard let obj = CLI.json(["path", "--json"]),
+              let entry = obj[key] as? [String: Any],
+              let rel = entry["rel"] as? String, !rel.isEmpty else { return nil }
+        pathCache[key] = rel
+        return "\(vault)/\(rel)"
+    }
+
     /// 오늘 개발일지 절대경로. 없으면 nil.
     var devlogFile: String? {
-        guard let vault = dig("vault.path") as? String, !vault.isEmpty else { return nil }
-        let root = dig("vault.root") as? String ?? ""
-        let dir = dig("dirs.devlog") as? String ?? "devlog"
+        guard let dir = vaultPath("devlog") else { return nil }
         let pattern = dig("naming.devlog_file") as? String ?? "{{DATE}} devlog.md"
-        return "\(vault)/\(root)/\(dir)/\(pattern.replacingOccurrences(of: "{{DATE}}", with: date))"
+        return "\(dir)/\(pattern.replacingOccurrences(of: "{{DATE}}", with: date))"
     }
 
     /// 주간리뷰 폴더. 특정 파일명은 ISO 주차 계산이 필요해 폴더를 연다.
-    var weeklyDir: String? {
-        guard let vault = dig("vault.path") as? String, !vault.isEmpty else { return nil }
-        let root = dig("vault.root") as? String ?? ""
-        return "\(vault)/\(root)/\(dig("dirs.weekly") as? String ?? "weekly")"
-    }
+    var weeklyDir: String? { vaultPath("weekly") }
 
     /// 설정 화면 하단에 표시할 볼트 위치(짧게).
     var vaultLabel: String {
@@ -207,14 +227,10 @@ final class Status: ObservableObject {
         f.dateFormat = "yyyy-MM-dd"
         date = f.string(from: Date())
 
-        guard let vault = dig("vault.path") as? String, !vault.isEmpty else {
+        // ⚠️ 경로를 여기서 다시 조립하지 않는다. devlogFile 이 CLI 로 해석한다.
+        guard let path = devlogFile else {
             devlogExists = false; prRows = 0; summaries = 0; return
         }
-        let root = dig("vault.root") as? String ?? ""
-        let dir = dig("dirs.devlog") as? String ?? "devlog"
-        let pattern = dig("naming.devlog_file") as? String ?? "{{DATE}} devlog.md"
-        let name = pattern.replacingOccurrences(of: "{{DATE}}", with: date)
-        let path = "\(vault)/\(root)/\(dir)/\(name)"
 
         guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
             devlogExists = false; prRows = 0; summaries = 0; hasActivity = false; return

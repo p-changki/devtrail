@@ -286,4 +286,42 @@ t_exit "spec_version 이 틀리면 실패" 1 \
   env DEVTRAIL_HOME="$HP" DEVTRAIL_CONFIG="$HP/devtrail.config.json" \
   "$DT" setup plan --input "$BAD"
 
+# ── env: Wizard 화면 0 이 쓸 환경 확인 ──────────────────────────────────────
+#
+# 앱이 "지금 무엇이 준비됐나" 를 물을 때 쓴다.
+#
+# ⚠️ 앱이 Obsidian.app 존재나 gh 인증을 직접 확인하기 시작하면 판정이 두 곳이
+#    된다. CLI 가 답하고 앱은 화면만 그린다.
+t_start "setup env --json"
+e=$(DEVTRAIL_HOME="$T_TMP/none" DEVTRAIL_CONFIG="$T_TMP/none/x.json" \
+    "$DT" setup env --json 2>/dev/null)
+printf '%s' "$e" > "$T_TMP/env.json"
+t_json "유효한 JSON" "$T_TMP/env.json"
+
+# 앱이 화면 0 에서 판단할 것들
+for k in obsidian_installed obsidian_running configured; do
+  t_ne "$k 가 있다" "null" "$(jq -r ".$k" "$T_TMP/env.json")"
+done
+t_ne "필수 도구 상태가 있다" "null" "$(jq -r '.tools' "$T_TMP/env.json")"
+for t in jq git python3; do
+  t_ne "도구 $t" "null" "$(jq -r ".tools.\"$t\"" "$T_TMP/env.json")"
+done
+t_eq "설정이 없으면 configured=false" "false" "$(jq -r '.configured' "$T_TMP/env.json")"
+t_ne "볼트 후보 목록이 있다" "null" "$(jq -r '.vaults' "$T_TMP/env.json")"
+
+# ⚠️ 레지스트리를 갈아끼울 수 있어야 테스트가 실행 머신의 진짜 볼트를 읽지 않는다.
+REG="$T_TMP/reg.json"
+mkdir -p "$T_TMP/vv1" "$T_TMP/vv2"
+jq -n --arg a "$T_TMP/vv1" --arg b "$T_TMP/vv2" --arg c "$T_TMP/gone" \
+  '{vaults: {a: {path: $a, ts: 3}, b: {path: $b, ts: 2}, c: {path: $c, ts: 1}}}' > "$REG"
+e2=$(DEVTRAIL_OBSIDIAN_REGISTRY="$REG" DEVTRAIL_HOME="$T_TMP/none" \
+     DEVTRAIL_CONFIG="$T_TMP/none/x.json" "$DT" setup env --json 2>/dev/null)
+printf '%s' "$e2" > "$T_TMP/env2.json"
+t_eq "있는 볼트만 센다" "2" "$(jq '.vaults | length' "$T_TMP/env2.json")"
+t_contains "볼트 경로가 나온다" "vv1" "$(jq -r '.vaults[].path' "$T_TMP/env2.json")"
+# 화면 1 은 "노트 몇 개인지" 를 보여준다.
+t_ne "노트 수를 센다" "null" "$(jq -r '.vaults[0].notes' "$T_TMP/env2.json")"
+# 사라진 볼트를 목록에 보여주면 고르고 나서 실패한다.
+t_not_contains "사라진 볼트는 빠진다" "gone" "$(jq -r '.vaults[].path' "$T_TMP/env2.json")"
+
 t_end

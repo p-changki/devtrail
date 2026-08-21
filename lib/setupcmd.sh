@@ -115,11 +115,98 @@ setup_cmd() {
   local sub="${1:-status}"
   [ $# -gt 0 ] && shift
   case "$sub" in
+    env)    _setup_env_cmd "$@" ;;
     plan)   _setup_plan_cmd "$@" ;;
     apply)  _setup_apply_cmd "$@" ;;
     status) setup_status "$@" ;;
-    *) die "$(L "알 수 없는 하위 명령" "Unknown subcommand"): $sub  (plan|apply|status)" ;;
+    *) die "$(L "알 수 없는 하위 명령" "Unknown subcommand"): $sub  (env|plan|apply|status)" ;;
   esac
+}
+
+# ── 환경 ─────────────────────────────────────────────────────────────────────
+# 앱의 첫 화면이 "지금 무엇이 준비됐나" 를 물을 때 쓴다.
+#
+# ⚠️ 앱이 Obsidian.app 존재나 gh 인증을 직접 확인하기 시작하면 판정이 두 곳이
+#    된다. CLI 가 답하고 앱은 화면만 그린다.
+setup_env() {
+  . "$DEVTRAIL_ROOT/lib/obsidian_app.sh"
+
+  local installed=false running=false
+  oa_installed && installed=true
+  oa_running   && running=true
+
+  # 볼트 후보. 노트 수까지 함께 준다 — 화면 1 이 "어느 것이 내 진짜 볼트인지"
+  # 를 가르는 유일한 단서다.
+  local vaults="[]" v tmp
+  tmp=$(mktemp)
+  printf '%s' '[]' > "$tmp"
+  while IFS= read -r v; do
+    [ -n "$v" ] || continue
+    jq --arg p "$v" --arg n "$(oa_note_count "$v")" \
+       '. + [{path: $p, name: ($p | split("/") | last), notes: ($n | tonumber)}]' \
+       "$tmp" > "$tmp.2" && mv "$tmp.2" "$tmp"
+  done <<EOF
+$(oa_vaults 2>/dev/null)
+EOF
+  vaults=$(cat "$tmp"); rm -f "$tmp" "$tmp.2"
+
+  local gh_auth=false
+  has gh && gh auth status >/dev/null 2>&1 && gh_auth=true
+
+  local configured=false
+  [ -f "$CONFIG_FILE" ] && configured=true
+
+  jq -n --argjson v "$DT_SPEC_VERSION" \
+    --argjson installed "$installed" --argjson running "$running" \
+    --argjson vaults "$vaults" --argjson gh "$gh_auth" \
+    --argjson configured "$configured" \
+    --argjson jq_ok "$(has jq && echo true || echo false)" \
+    --argjson git_ok "$(has git && echo true || echo false)" \
+    --argjson py_ok "$(has python3 && echo true || echo false)" \
+    --argjson gh_ok "$(has gh && echo true || echo false)" \
+    --arg cfg "$CONFIG_FILE" '{
+      spec_version: $v,
+      configured: $configured,
+      config_path: $cfg,
+      obsidian_installed: $installed,
+      obsidian_running: $running,
+      vaults: $vaults,
+      github: { cli: $gh_ok, authenticated: $gh },
+      tools: { jq: $jq_ok, git: $git_ok, python3: $py_ok }
+    }'
+}
+
+_setup_env_cmd() {
+  require_bins jq
+  local json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) json=1 ;;
+      -h|--help)
+        info "$(L "사용법" "Usage"): devtrail setup env [--json]"
+        return 0 ;;
+      *) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
+    esac
+    shift
+  done
+
+  if [ "$json" = 1 ]; then setup_env; return 0; fi
+
+  local e; e=$(setup_env)
+  step "$(L "환경 확인" "Environment")"
+  _se_row "Obsidian"  "$(printf '%s' "$e" | jq -r '.obsidian_installed')"
+  _se_row "jq"        "$(printf '%s' "$e" | jq -r '.tools.jq')"
+  _se_row "git"       "$(printf '%s' "$e" | jq -r '.tools.git')"
+  _se_row "python3"   "$(printf '%s' "$e" | jq -r '.tools.python3')"
+  _se_row "gh"        "$(printf '%s' "$e" | jq -r '.github.authenticated')"
+  echo
+  local n; n=$(printf '%s' "$e" | jq -r '.vaults | length')
+  info "  $(L "볼트 후보 ${n}개" "${n} vault candidates")"
+  printf '%s' "$e" | jq -r '.vaults[] | "     \(.name)  (\(.notes))  \(.path)"'
+}
+
+_se_row() {
+  if [ "$2" = "true" ]; then ok "$1"; else warn "$1"; fi
 }
 
 _setup_plan_cmd() {
