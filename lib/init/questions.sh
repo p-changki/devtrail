@@ -59,6 +59,28 @@ _init_backend() {
 }
 
 
+# 경로를 손으로 치게 하는 마지막 수단.
+_init_vault_typed() {
+  local suggest="$1" p
+  p=$(_init_ask "$(L "경로" "Path")" "$suggest" 2>/dev/null)
+  p="${p%/}"
+  [ -n "$p" ] || return 1
+  if [ ! -d "$p" ]; then
+    if confirm "   $(L "폴더가 없습니다. 새로 만들까요?" "That folder does not exist. Create it?") ($p)" >&2; then
+      mkdir -p "$p" || die "$(L "폴더 생성 실패" "Could not create folder"): $p"
+    else
+      return 1
+    fi
+  fi
+  printf '%s' "$p"
+}
+
+# 볼트 고르기.
+#
+# 예전에는 절대경로를 손으로 치게 했다. 사용자는 자기 볼트가 어디 있는지
+# 모른다 — iCloud 볼트의 실제 경로를 외우는 사람은 없다.
+# Obsidian 은 자기가 아는 볼트를 레지스트리에 갖고 있으므로, 그걸 읽어
+# 목록으로 보여준다. 목록이 비어 있을 때만 예전처럼 묻는다.
 _init_vault() {
   local backend="$1" suggest=""
   case "$backend" in
@@ -66,21 +88,61 @@ _init_vault() {
     gdrive) suggest=$(find "$HOME/Library/CloudStorage" -maxdepth 1 -name 'GoogleDrive-*' 2>/dev/null | head -1) ;;
     *)      suggest="$HOME/DevTrailVault" ;;
   esac
+
+  . "$DEVTRAIL_ROOT/lib/obsidian_app.sh"
+
+  local known=() v
+  while IFS= read -r v; do [ -n "$v" ] && known+=("$v"); done <<EOF
+$(oa_vaults 2>/dev/null)
+EOF
+
   {
     echo
-    printf '%s\n' "${C_BOLD}2. $(L "볼트 경로" "Vault path")${C_RESET}"
-    dim "   $(L "Obsidian 볼트 폴더의 절대경로입니다. 없으면 만들어 드립니다." \
-                "Absolute path to your Obsidian vault. We create it if missing.")"
+    printf '%s\n' "${C_BOLD}2. $(L "볼트" "Vault")${C_RESET}"
   } >&2
-  local p
-  p=$(_init_ask "$(L "경로" "Path")" "$suggest" 2>/dev/null)
-  p="${p%/}"
-  if [ ! -d "$p" ]; then
-    if confirm "   $(L "폴더가 없습니다. 새로 만들까요?" "That folder does not exist. Create it?") ($p)" >&2; then
-      mkdir -p "$p" || die "$(L "폴더 생성 실패" "Could not create folder"): $p"
-    fi
+
+  # 아는 볼트가 없으면 예전 방식 그대로.
+  if [ ${#known[@]} -eq 0 ]; then
+    dim "   $(L "Obsidian 볼트 폴더의 절대경로입니다. 없으면 만들어 드립니다." \
+                "Absolute path to your Obsidian vault. We create it if missing.")" >&2
+    local typed; typed=$(_init_vault_typed "$suggest") \
+      || die "$(L "볼트를 정하지 않았습니다." "No vault chosen.")"
+    printf '%s' "$typed"
+    return 0
   fi
-  printf '%s' "$p"
+
+  local i=0 n
+  {
+    dim "   $(L "Obsidian 이 알고 있는 볼트입니다." "Vaults Obsidian already knows about.")"
+    while [ $i -lt ${#known[@]} ]; do
+      n=$(oa_note_count "${known[$i]}")
+      printf '   %2d) %-28s %s\n' $((i + 1)) "$(basename "${known[$i]}")" \
+        "${C_MUTED}$(L "노트 ${n}개" "${n} notes") · ${known[$i]}${C_RESET}"
+      i=$((i + 1))
+    done
+    printf '   %2d) %s\n' $((${#known[@]} + 1)) "$(L "새 볼트 만들기" "Create a new vault")"
+    printf '   %2d) %s\n' $((${#known[@]} + 2)) "$(L "경로 직접 입력" "Type a path")"
+  } >&2
+
+  local pick; pick=$(_init_ask "$(L "선택" "Choose")" "1" 2>/dev/null)
+  case "$pick" in
+    ''|*[!0-9]*) pick=1 ;;
+  esac
+
+  if [ "$pick" -ge 1 ] && [ "$pick" -le ${#known[@]} ]; then
+    printf '%s' "${known[$((pick - 1))]}"
+    return 0
+  fi
+
+  local target=""
+  if [ "$pick" -eq $((${#known[@]} + 1)) ]; then
+    dim "   $(L "만들 위치입니다. 없으면 만들어 드립니다." "Where to create it. We make it if missing.")" >&2
+    target=$(_init_vault_typed "$HOME/DevTrailVault")
+  else
+    target=$(_init_vault_typed "$suggest")
+  fi
+  [ -n "$target" ] || die "$(L "볼트를 정하지 않았습니다." "No vault chosen.")"
+  printf '%s' "$target"
 }
 
 

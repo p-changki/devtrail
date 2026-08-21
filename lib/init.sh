@@ -7,19 +7,31 @@
 #   detect.sh     볼트를 읽어 기본값을 정한다 (scan · 모드 · 루트 · 역할 매핑)
 #   questions.sh  셋업 질문들
 #   write.sh      설정 저장과 산출물 생성
+#   bootstrap.sh  Obsidian 을 쓸 수 있는 상태로 만든다(폴더·플러그인·등록·열기)
 #
 # 설계 원칙:
 #   - 기존 파일을 덮어쓰지 않는다. 항상 .bak 후 진행한다
 #   - 볼트를 알아낸 직후 진단한다 — 이후의 기본값이 전부 거기서 나온다
 #   - 탐지 결과가 비면 질문을 건너뛴다. 빈 볼트 사용자에게 매핑을 묻지 않는다
 
-for _dt_part in prompts detect questions write; do
+for _dt_part in prompts detect questions write bootstrap; do
   # shellcheck disable=SC1090
   . "$DEVTRAIL_ROOT/lib/init/$_dt_part.sh"
 done
 unset _dt_part
 
 init_run() {
+  # --no-bootstrap: 설정만 만들고 Obsidian 은 건드리지 않는다.
+  # 자동화·테스트, 그리고 "내 볼트는 내가 만진다" 는 사용자를 위한 탈출구다.
+  DT_BOOTSTRAP=1
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-bootstrap) DT_BOOTSTRAP=0 ;;
+      -*) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
+    esac
+    shift
+  done
+
   # ⚠️ 이 두 줄은 언어를 묻기 '전'에 나온다. 그 시점의 dt_lang 은 설정도
   #    사용자의 답도 없어 로케일로 떨어지므로, L 을 쓰면 환경에 따라 문구가
   #    달라진다. 언어 선택 화면과 같은 원칙으로 양쪽을 병기한다.
@@ -66,6 +78,13 @@ init_run() {
   _init_render_scripts
   _init_scaffold
   _init_skills
+
+  # 여기서 끝내면 사용자는 다시 GUI 로 나가야 한다. 끝까지 데려다준다.
+  if [ "$DT_BOOTSTRAP" = 1 ]; then
+    init_bootstrap "$vault"
+    init_bootstrap_apply "$vault"
+  fi
+
   _init_next_steps "$vault"
 }
 

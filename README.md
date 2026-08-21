@@ -22,18 +22,28 @@
 ```bash
 curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash
 
-devtrail init        # 대화형 셋업
+devtrail init        # 이거 하나면 끝납니다
                      #   1) 언어 — 한국어 / English
-                     #   2) 볼트 경로
+                     #   2) 볼트 — Obsidian 이 아는 볼트 목록에서 고르거나 새로 만들기
                      #   3) 설치 방식 — 기존 볼트에 얹기 / 새로 시작 / 분리 설치
                      #   4) 루트 폴더 이름 · 모듈 · GitHub · AI
-                     # → Obsidian 에서 볼트를 열고 플러그인 4개 설치 후 재시작
-devtrail obsidian    # 플러그인 설정 병합 · 템플릿 · 단축키
+                     # → 플러그인 4개 설치 · 설정 병합 · Obsidian 실행까지 자동
 devtrail doctor      # 뭐가 안 되는지 정확히 알려줍니다
 ```
 
+`init` 이 Obsidian 플러그인 4개를 **버전을 고정해** 내려받아 넣고, 설정을
+병합한 뒤, 볼트를 열어 줍니다. 터미널과 Obsidian 을 오갈 일이 없습니다.
+설치 전에 무엇을 어디서 받는지 화면에 띄우고 동의를 받습니다.
+
+> 사용자가 직접 해야 하는 것은 하나입니다 — Obsidian 이 "커뮤니티 플러그인을
+> 신뢰하시겠습니까?" 라고 물으면 허용하는 것. 서드파티 코드에 대한 Obsidian 의
+> 보안 확인이라 우회하지 않습니다.
+>
+> 볼트를 직접 만지고 싶으면 `devtrail init --no-bootstrap` 으로 설정만 만들고
+> `devtrail obsidian` 을 나중에 실행할 수 있습니다.
+
 이미 쓰던 볼트가 있어도 됩니다. `init` 이 먼저 진단하고 **기존 폴더를 그대로
-쓰는 쪽**을 제안합니다.
+쓰는 쪽**을 제안합니다. 이미 깔려 있는 플러그인은 건드리지 않습니다.
 
 ---
 
@@ -155,6 +165,7 @@ devtrail init              대화형 셋업
 devtrail scan [경로]        볼트 진단 — 구조 · 메타 · 충돌 (쓰기 없음)
 devtrail doctor            의존성 · 인증 · 권한 · 자동화 상태
 devtrail obsidian          Obsidian 설정 병합
+devtrail plugins <sub>     Obsidian 플러그인 (install|status)
 devtrail augment [모듈]     없는 폴더 · 허브만 생성
 devtrail project <하위>     프로젝트 등록 (add|list)
 devtrail template <하위>    노트 템플릿 (list|diff|update)

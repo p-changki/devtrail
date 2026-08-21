@@ -17,8 +17,10 @@ bin/devtrail          라우터. 명령을 lib/ 로 넘기기만 한다
        └─ lib/journal.sh   변경 저널 — 되돌리기의 근거
 
 lib/<명령>cmd.sh      명령 하나당 파일 하나
-lib/merge/            Obsidian 설정 병합기 9종
-lib/init/             init 의 단계 4개
+lib/merge/            Obsidian 설정 병합기 9종 — 볼트 '안'
+lib/obsidian_app.sh   Obsidian 앱 자체 — 볼트 '밖' (설치·볼트목록·등록·실행)
+lib/plugins.sh        커뮤니티 플러그인 설치 (버전은 preset/plugins.json 에 고정)
+lib/init/             init 의 단계 5개
 lib/gen/*.py          생성기 — 셸이 못 하는 것만
 lib/migrations/       설정 스키마 마이그레이션
 
@@ -78,6 +80,7 @@ preset/  templates/                데이터. 실행되지 않는다
 | 새 CLI 명령 | `lib/<이름>cmd.sh` | `<이름>_cmd()` |
 | Obsidian 설정을 건드리는 것 | `lib/merge/<대상>.sh` | `_ob_<대상>()` |
 | init 의 새 단계 | `lib/init/<단계>.sh` | `_init_<단계>()` |
+| Obsidian 플러그인 추가 | `preset/plugins.json` | — (태그 고정 필수) |
 | 설정 스키마 변경 | `lib/migrations/NNN-<이름>.sh` | `_mg_NNN()` + `_mg_NNN_why` |
 | 노트·JSON 을 생성하는 것 | `lib/gen/<이름>.py` | — |
 | 폴더 구조·기본값 | `preset/` (JSON·Markdown) | — |
