@@ -379,12 +379,81 @@ t_contains "인자 없으면 dry-run" "dry-run" "$out"
 t_eq "plist 를 만들지 않는다" "0" \
   "$(ls "$T_TMP/fakehome-sched/Library/LaunchAgents" 2>/dev/null | wc -l | tr -d ' ')"
 
+# ⚠️ --help 은 라우터가 가로채므로 여기까지 오지 않는다. 그래도 부작용이
+#    없는지는 확인한다 — 결함 7 은 도움말을 물었는데 등록을 한 것이었다.
 out2=$(HOME="$T_TMP/fakehome-sched" "$ROOT/bin/devtrail" install-schedule --help 2>&1)
-t_contains "--help 는 사용법만" "사용법" "$out2"
+t_contains "--help 는 무언가 알려준다" "install-schedule" "$out2"
 t_eq "--help 도 plist 를 만들지 않는다" "0" \
   "$(ls "$T_TMP/fakehome-sched/Library/LaunchAgents" 2>/dev/null | wc -l | tr -d ' ')"
 
 t_exit "알 수 없는 옵션은 종료코드 1" 1 \
   env HOME="$T_TMP/fakehome-sched" "$ROOT/bin/devtrail" install-schedule --nonsense
+
+# ── 오류는 stderr 로 ────────────────────────────────────────────────────────
+#
+# ⚠️ 회귀: die 가 stdout 으로 나가면 명령 치환에 갇힌다.
+#
+#      spec=$(sp_read "$file")   # 안에서 die 하면 메시지가 $() 에 삼켜진다
+#
+#    스펙이 잘못돼도 화면에 아무것도 나오지 않았다(2026-08-22). 그때는
+#    검증을 치환 밖으로 빼는 국소 수정을 했지만, 원인은 die 의 출력
+#    스트림이다. 같은 함정이 lib/ 곳곳에 남아 있었다.
+#
+# ⚠️ 성공 출력(ok/info/step)은 stdout 그대로 둔다. 파이프로 넘기는 값이다.
+t_start "오류는 stderr 로 나간다"
+(
+  export DEVTRAIL_ROOT="$ROOT"
+  . "$ROOT/lib/common.sh"
+  printf '%s' "$(fail "보이면 안 됨" 2>/dev/null)" > "$T_TMP/fail-stdout"
+  fail "여기 나와야 함" 2> "$T_TMP/fail-stderr" >/dev/null
+  warn "경고도" 2> "$T_TMP/warn-stderr" >/dev/null
+  ok   "성공은" > "$T_TMP/ok-stdout" 2>/dev/null
+)
+t_eq "fail 은 stdout 에 안 쓴다" "" "$(cat "$T_TMP/fail-stdout")"
+t_contains "fail 은 stderr 로"   "여기 나와야 함" "$(cat "$T_TMP/fail-stderr")"
+t_contains "warn 도 stderr 로"   "경고도"         "$(cat "$T_TMP/warn-stderr")"
+# 성공 출력까지 옮기면 $(devtrail path devlog) 같은 것이 전부 빈다.
+t_contains "ok 는 stdout 유지"   "성공은"         "$(cat "$T_TMP/ok-stdout")"
+
+# ⚠️ 진짜로 중요한 것: 명령 치환 안에서도 사용자가 오류를 본다.
+t_start "명령 치환 안에서도 오류가 보인다"
+out=$( { v=$(DEVTRAIL_CONFIG="$T_TMP/nope.json" "$ROOT/bin/devtrail" path devlog); } 2>&1 )
+t_contains "설정 없음을 말해준다" "설정이 없습니다" "$out"
+
+# 실제로 이 함정에 빠졌던 경로 — 잘못된 스펙
+BADSPEC="$T_TMP/badspec.json"
+jq -n '{spec_version: 99, vault: {path: "/tmp/x"}}' > "$BADSPEC"
+out2=$( { v=$(DEVTRAIL_CONFIG="$T_TMP/nope.json" \
+          "$ROOT/bin/devtrail" setup apply --input "$BADSPEC"); } 2>&1 )
+t_contains "모르는 spec_version 을 말해준다" "spec_version" "$out2"
+
+# ── --help 은 설정을 요구하지 않는다 ────────────────────────────────────────
+#
+# ⚠️ 도움말을 보려는 사람에게 "먼저 devtrail init 을 실행하세요" 가 뜨는 건
+#    말이 안 된다. 그런데 require_config 가 인자 파싱보다 먼저 돌아서
+#    augment · path · config · template · project 가 전부 그랬다.
+#
+# ⚠️ 명령마다 따로 처리하면 또 갈린다 — 실제로 어떤 것은 "알 수 없는 옵션",
+#    어떤 것은 "init 하세요", doctor 는 그냥 진단을 돌렸다.
+#    라우터 한 곳에서 가로챈다.
+t_start "--help 은 설정 없이도 답한다"
+for c in scan augment doctor path config template project skills plugins \
+         update undo app dashboard setup activity weekly sync; do
+  out=$(DEVTRAIL_CONFIG="$T_TMP/nope.json" "$ROOT/bin/devtrail" "$c" --help 2>&1)
+  t_not_contains "$c — init 을 요구하지 않는다" "설정이 없습니다" "$out"
+  t_ne "$c — 무언가 알려준다" "" "$out"
+done
+
+# -h 도 같아야 한다.
+t_not_contains "-h 도 마찬가지" "설정이 없습니다" \
+  "$(DEVTRAIL_CONFIG="$T_TMP/nope.json" "$ROOT/bin/devtrail" augment -h 2>&1)"
+
+# ⚠️ --help 이 부작용을 내면 안 된다. 결함 7 이 그것이었다.
+t_start "--help 은 아무것도 하지 않는다"
+HH="$T_TMP/help-home"; mkdir -p "$HH"
+DEVTRAIL_CONFIG="$T_TMP/nope.json" HOME="$HH" \
+  "$ROOT/bin/devtrail" install-schedule --help >/dev/null 2>&1
+t_eq "launchd 를 등록하지 않는다" "0" \
+  "$(ls "$HH/Library/LaunchAgents" 2>/dev/null | wc -l | tr -d ' ')"
 
 t_end
