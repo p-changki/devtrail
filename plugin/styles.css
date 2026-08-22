@@ -1,0 +1,75 @@
+/* DevTrail Command Center
+ *
+ * ⚠️ Obsidian 의 시맨틱 변수만 쓴다. 색을 직접 박으면 사용자의 테마에서
+ *    글자가 안 보이거나 배경과 섞인다. 전역 폰트·body 스타일은 건드리지 않는다.
+ */
+
+.devtrail-command-center { padding: 0 4px; }
+
+.devtrail-cc-header h2 { margin: 0 0 12px; font-size: var(--font-ui-large); }
+
+.devtrail-cc-muted { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+
+.devtrail-cc-recovery,
+.devtrail-cc-empty {
+  padding: 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+}
+
+.devtrail-cc-card {
+  margin-bottom: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+}
+
+.devtrail-cc-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.devtrail-cc-card-head h3 {
+  margin: 0;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+.devtrail-cc-count {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.devtrail-cc-list { padding: 6px 12px 10px; }
+
+.devtrail-cc-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  /* 좁은 패널에서도 줄이 깨지지 않게 한다. */
+  flex-wrap: wrap;
+}
+
+.devtrail-cc-link {
+  color: var(--text-accent);
+  cursor: pointer;
+  /* 클릭 영역을 넉넉히 — 손이 정확하지 않아도 눌린다. */
+  padding: 2px 0;
+}
+
+.devtrail-cc-link:hover { text-decoration: underline; }
+
+/* 키보드로 이동할 때 지금 어디인지 보여야 한다. */
+.devtrail-cc-link:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-s);
+}

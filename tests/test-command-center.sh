@@ -182,4 +182,73 @@ out=$(DEVTRAIL_HOME="$H3" DEVTRAIL_CONFIG="$H3/devtrail.config.json" \
 t_file "실행 여부와 무관하게 설치된다" "$V3/.obsidian/plugins/$PID/main.js"
 t_eq "종료코드 0" "0" "$?"
 
+# ── 읽기 모델 ────────────────────────────────────────────────────────────────
+#
+# Phase 2 의 종료 기준: 어떤 카드도 지어낸 데이터를 보고하지 않는다.
+#
+# ⚠️ 볼트에는 '노트처럼 생겼지만 노트가 아닌 것' 이 많다. 실측(QA 볼트):
+#
+#      type: project-home    6건 — 그중 2건이 템플릿
+#      status: inbox         2건 — 둘 다 템플릿
+#
+#    템플릿을 세면 빈 볼트에서도 "프로젝트 2개" 가 뜬다. 그게 지어낸
+#    데이터다. 제외 규칙은 화면 장식이 아니라 계약이다.
+t_start "읽기 모델의 제외 규칙"
+JS="$ROOT/plugin/main.js"
+t_contains "템플릿 폴더를 제외한다"  "templates"   "$(cat "$JS")"
+t_contains "밑줄 파일을 제외한다"    "startsWith('_')" "$(cat "$JS")"
+t_contains "허브(_index)를 제외한다" "_index"      "$(cat "$JS")"
+
+# 제외 함수가 실제로 동작하는지 — 문자열 검사만으로는 '있지만 안 부르는' 코드를 못 잡는다.
+t_start "제외가 실제로 동작한다"
+cat > "$T_TMP/excl.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const P = require(process.argv[2]);
+const f = P.__test;
+if (!f || typeof f.isUserNote !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const paths = { templates: 'notes/템플릿' };
+const cases = [
+  ['notes/템플릿/Inbox Capture 템플릿.md', false],
+  ['notes/템플릿/_devtrail-project-readme.md', false],
+  ['notes/개발/프로젝트/_index.md', false],
+  ['notes/개발/프로젝트/my-app/README.md', true],
+  ['notes/개발/개발일지/2026-08-22 devlog.md', true],
+];
+let bad = 0;
+for (const [p, want] of cases) {
+  const got = f.isUserNote(p, paths);
+  if (got !== want) { bad++; console.log('MISMATCH', p, 'want', want, 'got', got); }
+}
+console.log(bad === 0 ? 'OK' : 'FAIL');
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  r=$(node "$T_TMP/excl.js" "$JS" 2>&1 | tail -1)
+  t_eq "템플릿·밑줄·허브를 걸러낸다" "OK" "$r"
+else
+  dim "   node 없음 — 동작 검사 건너뜀"
+fi
+
+# ── 카드 ─────────────────────────────────────────────────────────────────────
+t_start "카드가 실재 소스를 읽는다"
+# 설계안 §6 의 읽기 모델. 없는 필드를 지어내지 않는다.
+t_contains "프로젝트: project-home"  "project-home"   "$(cat "$JS")"
+t_contains "프로젝트: status active" "'active'"       "$(cat "$JS")"
+t_contains "Inbox: status inbox"     "'inbox'"        "$(cat "$JS")"
+t_contains "리뷰: review_at"         "review_at"      "$(cat "$JS")"
+# ⚠️ v1 에 없는 필드를 만들지 않는다. frontmatter 커버리지가 고르지 않아
+#    빈 대시보드가 되고, 사용자 노트 마이그레이션을 강요하게 된다.
+#    ⚠️ 주석에 단어가 나오는 것은 괜찮다. '읽는지' 를 봐야 한다.
+t_eq "priority 를 읽지 않는다" "0" \
+  "$(grep -cE 'meta\.priority|\.priority\b' "$JS" | tr -d ' ')"
+t_eq "due 를 읽지 않는다" "0" \
+  "$(grep -cE 'meta\.due\b|\.due\b' "$JS" | tr -d ' ')"
+
+# 빈 볼트에서 0 을 늘어놓지 않는다 — 안내가 되어야 한다.
+t_contains "빈 상태 문구가 있다" "empty" "$(cat "$JS")"
+
 t_end
