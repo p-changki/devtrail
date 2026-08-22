@@ -243,6 +243,138 @@ function findSearchCommand(app, pluginIds) {
   return null;
 }
 
+/* 볼트 전체의 열린 체크박스.
+ *
+ * ⚠️ 모든 파일을 읽지 않는다. metadataCache 의 listItems 가 이미 어느 파일에
+ *    열린 작업이 있는지 안다 — 그 파일만 읽는다. 볼트가 커져도 읽는 양이
+ *    작업 수에 비례한다.
+ * ⚠️ 빈 자리표시('- [ ]' 뒤에 아무것도 없는 것)는 작업이 아니다. */
+async function openTasksInVault(app, paths, limit) {
+  const out = [];
+  const files = app.vault.getMarkdownFiles().filter((f) => isUserNote(f.path, paths));
+  // 최근에 손댄 것부터 — 지금 하려는 일이 거기 있다.
+  files.sort((a, b) => b.stat.mtime - a.stat.mtime);
+  for (const f of files) {
+    if (out.length >= limit) break;
+    const cache = app.metadataCache.getFileCache(f);
+    const items = (cache && cache.listItems) || [];
+    if (!items.some((i) => i.task === ' ')) continue;
+    let raw = '';
+    try { raw = await app.vault.cachedRead(f); } catch (e) { continue; }
+    for (const line of openTasks(raw)) {
+      if (out.length >= limit) break;
+      out.push({ text: line, file: f });
+    }
+  }
+  return out;
+}
+
+/* ── 재설계 데이터 (디자인 핸드오프 2026-08-22) ──────────────────────────────
+ *
+ * 전부 기존 노트에서 계산한다 — 새 스키마도 마이그레이션도 없다.
+ *
+ * ⚠️ 사양이 노출하라고 한 설정은 둘뿐이다. 더 늘리면 화면이 아니라 설정을
+ *    관리하게 된다. */
+const STALE_DAYS = 14;
+const FLOW_WEEKS = 12;
+
+const DAY_MS = 86400000;
+
+/* 로컬 기준 그 날의 0시. 히트맵 칸은 '날' 이 단위다.
+ *
+ * ⚠️ UTC 로 자르면 한국에서 오전 9시 이전에 만든 노트가 전날 칸에 들어간다. */
+function dayStart(ms) {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/* 히트맵·연속 기록·요일별 평균을 한 번에 만든다.
+ *
+ * files: [{ ctime }] — 생성 시각만 있으면 된다.
+ *
+ * ⚠️ 강도는 개수 그대로가 아니라 5단계다. 하루 30건 쓴 날 하나가 나머지를
+ *    전부 0단계로 만들면 격자가 아무것도 말하지 않는다. */
+function buildFlow(files, nowMs, weeks) {
+  const days = (weeks || FLOW_WEEKS) * 7;
+  const today = dayStart(nowMs);
+  const start = today - (days - 1) * DAY_MS;
+
+  const counts = {};
+  for (const f of files) {
+    if (typeof f.ctime !== 'number') continue;
+    const d = dayStart(f.ctime);
+    if (d < start || d > today) continue;
+    counts[d] = (counts[d] || 0) + 1;
+  }
+
+  const cells = [];
+  let total = 0;
+  for (let i = 0; i < days; i++) {
+    const d = start + i * DAY_MS;
+    const n = counts[d] || 0;
+    total += n;
+    cells.push({ day: d, count: n, level: 0, weekday: new Date(d).getDay() });
+  }
+
+  // 5단계. 0 은 언제나 0단계 — 쓴 날과 안 쓴 날은 눈으로 갈려야 한다.
+  const nonZero = cells.filter((c) => c.count > 0).map((c) => c.count).sort((a, b) => a - b);
+  if (nonZero.length > 0) {
+    const q = (p) => nonZero[Math.min(nonZero.length - 1, Math.floor(nonZero.length * p))];
+    const t1 = q(0.25), t2 = q(0.5), t3 = q(0.75);
+    for (const c of cells) {
+      if (c.count === 0) c.level = 0;
+      else if (c.count <= t1) c.level = 1;
+      else if (c.count <= t2) c.level = 2;
+      else if (c.count <= t3) c.level = 3;
+      else c.level = 4;
+    }
+  }
+
+  // 연속 기록 — 오늘부터 거꾸로. 오늘 아직 안 썼으면 어제부터 센다.
+  let streak = 0;
+  for (let d = today; d >= start; d -= DAY_MS) {
+    if ((counts[d] || 0) > 0) streak++;
+    else if (d !== today) break;
+    else if (streak === 0 && d === today) continue;
+  }
+
+  // 요일별 평균 — 12주치를 요일로 모은다.
+  const byWeekday = [];
+  for (let w = 0; w < 7; w++) {
+    const of = cells.filter((c) => c.weekday === w);
+    const sum = of.reduce((a, c) => a + c.count, 0);
+    byWeekday.push({ weekday: w, avg: of.length ? sum / of.length : 0 });
+  }
+
+  const weekAgo = today - 6 * DAY_MS;
+  const thisWeek = cells.filter((c) => c.day >= weekAgo).reduce((a, c) => a + c.count, 0);
+
+  return { cells, total, streak, byWeekday, thisWeek, weeks: weeks || FLOW_WEEKS,
+           weeklyAvg: total / (weeks || FLOW_WEEKS) };
+}
+
+/* 손을 놓은 지 오래됐는가.
+ *
+ * ⚠️ 모르면 방치라고 하지 않는다. 수정 시각을 못 읽은 것과 오래 안 건드린
+ *    것은 다른 사실이다 — 지어낸 경고는 사람을 무디게 만든다.
+ * ⚠️ 경계는 '넘었을 때' 다. 딱 14일은 아직 아니다. */
+/* "1일 전" · "31일 전". 오늘은 "오늘".
+ *
+ * ⚠️ 절대 날짜를 쓰지 않는다 — 표에서 중요한 건 '얼마나 손을 놨나' 이지
+ *    '언제였나' 가 아니다. */
+function relativeDays(mtime, nowMs, t) {
+  if (typeof mtime !== 'number') return '—';
+  const d = Math.floor((dayStart(nowMs) - dayStart(mtime)) / DAY_MS);
+  if (d <= 0) return t.todayLabel;
+  return t.daysAgo(d);
+}
+
+function isStale(mtime, nowMs, days) {
+  if (typeof mtime !== 'number') return false;
+  return (nowMs - mtime) > (days || STALE_DAYS) * DAY_MS;
+}
+
 /* ── 프로젝트 보드 ──────────────────────────────────────────────────────────
  *
  * 카드 하나 = 프로젝트 노트 하나다. 개발일지 체크박스를 카드로 만들지 않는다 —
@@ -370,6 +502,18 @@ const TEXT = {
     mDevlog: '오늘 일지', mProjects: '활성 프로젝트', mInbox: 'Inbox',
     mWeek: '이번 주 노트', mTrouble: '트러블슈팅', mOverdue: '다시 볼 것',
     colToday: '오늘 현황', devlogMake: '기록 탭의 [개발일지] 로 만드세요.', lastEdit: '마지막 수정', colProjects: '활성 프로젝트', colRecent: '최근 기록',
+    flowTitle: '기록 흐름', lastWeeks: (n) => `최근 ${n}주`,
+    less: '적음', more: '많음',
+    streak: '연속 기록', weeklyAvg: '주간 평균', dayUnit: '일',
+    byWeekday: '요일별 평균',
+    weekdayShort: ['일', '월', '화', '수', '목', '금', '토'],
+    devlogWritten: '일지 작성됨', tasks: '미완료 작업',
+    todayLabel: '오늘', daysAgo: (n) => `${n}일 전`,
+    stale: '방치', staleNote: (n) => `${n}일 넘게 업데이트가 없으면 방치로 표시합니다.`,
+    thName: '이름', thStage: '단계', thNext: '다음 행동', thUpdated: '업데이트',
+    composition: '노트 구성', last30: '최근 30일', untyped: '분류 없음',
+    emptyComposition: '최근 30일에 만든 노트가 없습니다',
+    pending: '처리 대기',
     hDevlog: '오늘 개발일지가 있는지', hProjects: 'status 가 active 인 프로젝트',
     hInbox: '아직 정리하지 않은 포착물', hWeek: '최근 7일에 만든 노트',
     hTrouble: '기록해 둔 트러블슈팅', hOverdue: 'review_at 이 지난 노트',
@@ -434,6 +578,18 @@ const TEXT = {
     mDevlog: "Today's log", mProjects: 'Active projects', mInbox: 'Inbox',
     mWeek: 'Notes this week', mTrouble: 'Troubleshooting', mOverdue: 'To revisit',
     colToday: 'Today', devlogMake: 'Create one from [Devlog] on the Capture tab.', lastEdit: 'Last edit', colProjects: 'Active projects', colRecent: 'Recent',
+    flowTitle: 'Writing flow', lastWeeks: (n) => `last ${n} weeks`,
+    less: 'less', more: 'more',
+    streak: 'Streak', weeklyAvg: 'Weekly average', dayUnit: 'd',
+    byWeekday: 'By weekday',
+    weekdayShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    devlogWritten: 'Written', tasks: 'Open tasks',
+    todayLabel: 'today', daysAgo: (n) => `${n}d ago`,
+    stale: 'stale', staleNote: (n) => `Projects untouched for more than ${n} days are marked stale.`,
+    thName: 'Name', thStage: 'Stage', thNext: 'Next action', thUpdated: 'Updated',
+    composition: 'Note mix', last30: 'last 30 days', untyped: 'untyped',
+    emptyComposition: 'No notes created in the last 30 days',
+    pending: 'Pending',
     hDevlog: 'Whether today has a devlog', hProjects: 'Projects with status active',
     hInbox: 'Captures you have not sorted yet', hWeek: 'Notes created in the last 7 days',
     hTrouble: 'Troubleshooting notes you kept', hOverdue: 'Notes past their review_at',
@@ -498,12 +654,13 @@ class CommandCenterView extends obsidian.ItemView {
       return;
     }
 
-    // 어디를 보고 있는가(탭) → 무엇을 찾는가(검색) → 무엇을 남기는가(빠른 실행).
-    // 순서가 곧 위계다.
+    // 상단 바 하나 — 탭 · 날짜 · 만들기 안내.
+    //
+    // ⚠️ 생성 버튼 6개를 여기 늘어놓지 않는다. 그게 "오늘 뭘 이어서 쓸지" 를
+    //    스크롤 아래로 밀어냈다 (디자인 핸드오프 2026-08-22).
     this.nav(root, t);
-    this.searchBar(root, t);
-    this.launchBar(root, t, map.data);
 
+    this.paths = map.data.paths;
     const model = collect(this.app, map.data.paths);
     const devlog = todayDevlog(this.app, map.data);
     const body = root.createEl('div', { cls: 'devtrail-cc-body' });
@@ -529,123 +686,286 @@ class CommandCenterView extends obsidian.ItemView {
 
   /* ── 홈 ───────────────────────────────────────────────────────────────
    *
-   * 한 화면에서 '지금 무엇을 하면 되는가' 에 답한다.
+   * 디자인 핸드오프(2026-08-22)를 따른다. 화면을 네 덩어리로 줄인다:
    *
-   *   지표     오늘·프로젝트·Inbox·이번주·트러블·다시볼것
-   *   좌측     오늘 현황 · Inbox 미리보기
-   *   중앙     프로젝트 보드            ← 화면의 중심
-   *   아래     최근 기록
+   *   1  기록 흐름(12주 히트맵 · 지표 3개 · 요일별 평균) + 오늘
+   *   2  프로젝트(단계 분포 + 표, 방치만 색)
+   *   3  노트 구성 + 최근 기록
    *
-   * ⚠️ 보드는 프로젝트 탭과 같은 함수를 쓴다. 두 벌로 나뉘면 한쪽만 고쳐진다 —
-   *    이 저장소가 dirs.devlog 로 이미 세 번 겪은 일이다. */
+   * ⚠️ 생성 버튼 6개를 위에 늘어놓지 않는다. 그게 "오늘 뭘 이어서 쓸지" 를
+   *    스크롤 아래로 밀어냈다. 만들기는 ⌘P 로 간다. */
   async viewHome(body, t, model, devlog) {
-    this.metrics(body, t, model, devlog);
+    const now = Date.now();
+    const files = this.app.vault.getMarkdownFiles()
+      .filter((f) => isUserNote(f.path, this.paths))
+      .map((f) => ({ ctime: f.stat.ctime }));
+    const flow = buildFlow(files, now, FLOW_WEEKS);
 
-    // ⚠️ 오늘 할 일은 개발일지의 체크박스다. 보드로 복제하지 않는다 —
-    //    같은 일을 두 곳에 적으면 어느 쪽도 믿을 수 없게 된다.
-    //    viewToday 와 같은 방식으로 읽는다.
-    let open = [];
-    if (devlog) {
-      try {
-        open = openTasks(await this.app.vault.read(devlog));
-      } catch (e) { open = []; }
+    const top = body.createEl('div', { cls: 'devtrail-cc-grid-2' });
+    this.panelFlow(top, t, flow);
+    await this.panelToday(top, t, devlog);
+
+    this.panelProjects(body, t, model, now);
+
+    const bottom = body.createEl('div', { cls: 'devtrail-cc-grid-3' });
+    this.panelComposition(bottom, t, model);
+    this.panelRecent(bottom, t, model);
+  }
+
+  /* 1a. 기록 흐름 — 무엇을 얼마나 남겼나. */
+  panelFlow(parent, t, flow) {
+    const card = parent.createEl('section', { cls: 'devtrail-cc-panel' });
+    const head = card.createEl('div', { cls: 'devtrail-cc-panel-head' });
+    head.createEl('span', { text: `${t.flowTitle} · ${t.lastWeeks(flow.weeks)}`,
+                            cls: 'devtrail-cc-eyebrow' });
+    const legend = head.createEl('div', { cls: 'devtrail-cc-legend' });
+    legend.createEl('span', { text: t.less, cls: 'devtrail-cc-legend-label' });
+    for (let l = 0; l <= 4; l++) {
+      legend.createEl('span', { cls: `devtrail-cc-swatch devtrail-cc-lv${l}` });
+    }
+    legend.createEl('span', { text: t.more, cls: 'devtrail-cc-legend-label' });
+
+    // 히트맵 — 7행 × N열. 왼쪽에 월/수/금 라벨.
+    const map = card.createEl('div', { cls: 'devtrail-cc-heat' });
+    const labels = map.createEl('div', { cls: 'devtrail-cc-heat-days' });
+    for (let w = 0; w < 7; w++) {
+      labels.createEl('span', { text: (w === 1 || w === 3 || w === 5) ? t.weekdayShort[w] : '' });
+    }
+    const grid = map.createEl('div', { cls: 'devtrail-cc-heat-grid' });
+    grid.style.gridTemplateColumns = `repeat(${flow.weeks}, minmax(0, 1fr))`;
+    // 열 = 주, 행 = 요일. 첫 칸의 요일만큼 앞을 비운다.
+    const pad = flow.cells.length ? flow.cells[0].weekday : 0;
+    for (let i = 0; i < pad; i++) grid.createEl('span', { cls: 'devtrail-cc-cell is-empty' });
+    for (const c of flow.cells) {
+      const el = grid.createEl('span', { cls: `devtrail-cc-cell devtrail-cc-lv${c.level}` });
+      el.setAttr('title', `${new Date(c.day).toISOString().slice(0, 10)} · ${c.count}`);
+      el.setAttr('aria-label', `${new Date(c.day).toISOString().slice(0, 10)} ${c.count}`);
     }
 
-    const ws = body.createEl('div', { cls: 'devtrail-cc-workspace' });
+    // 지표 셋.
+    const stats = card.createEl('div', { cls: 'devtrail-cc-stats' });
+    const items = [
+      [String(flow.thisWeek), t.mWeek],
+      [`${flow.streak}${t.dayUnit}`, t.streak],
+      [flow.weeklyAvg.toFixed(1), t.weeklyAvg],
+    ];
+    for (const [value, label] of items) {
+      const b = stats.createEl('div', { cls: 'devtrail-cc-stat' });
+      b.createEl('div', { text: value, cls: 'devtrail-cc-stat-value' });
+      b.createEl('div', { text: label, cls: 'devtrail-cc-stat-label' });
+    }
 
-    // 좌측 — 좁은 정보 열.
-    const side = ws.createEl('div', { cls: 'devtrail-cc-side' });
-    this.card(side, t.colToday, devlog ? 1 : 0, (list) => {
-      if (!devlog) {
-        list.createEl('p', { text: t.devlogNo, cls: 'devtrail-cc-muted' });
-        list.createEl('p', { text: t.devlogMake, cls: 'devtrail-cc-muted' });
-        return;
-      }
-      this.row(list, devlog.basename, devlog, t.open);
-      for (const line of open.slice(0, 5)) {
-        list.createEl('div', { text: '☐ ' + line, cls: 'devtrail-cc-row devtrail-cc-muted' });
-      }
-    });
-    this.inboxPreview(side, t, model);
+    // 요일별 평균.
+    const week = card.createEl('div', { cls: 'devtrail-cc-weekdays' });
+    week.createEl('div', { text: t.byWeekday, cls: 'devtrail-cc-eyebrow' });
+    const max = Math.max(...flow.byWeekday.map((d) => d.avg), 0.0001);
+    for (const d of flow.byWeekday) {
+      const row = week.createEl('div', { cls: 'devtrail-cc-wd-row' });
+      row.createEl('span', { text: t.weekdayShort[d.weekday], cls: 'devtrail-cc-wd-name' });
+      const track = row.createEl('span', { cls: 'devtrail-cc-track' });
+      const fill = track.createEl('span', { cls: 'devtrail-cc-fill' });
+      fill.style.width = `${Math.round((d.avg / max) * 100)}%`;
+      if (d.avg === max) fill.addClass('is-peak');
+      row.createEl('span', { text: d.avg.toFixed(1), cls: 'devtrail-cc-wd-value' });
+    }
+  }
 
-    // 중앙 — 프로젝트 보드.
-    // ⚠️ 제목을 따로 두지 않는다. 컬럼 헤더(계획 중·진행 중·막힘·완료)가 이미
-    //    무엇인지 말하고, 위 지표에도 '활성 프로젝트' 가 있다. 제목 한 줄이
-    //    좌측 카드와 높이를 어긋나게 만들어 보드가 아래로 밀렸다.
-    const main = ws.createEl('div', { cls: 'devtrail-cc-main' });
-    main.setAttr('aria-label', t.colProjects);
-    this.board(main, t, model);
+  /* 1b. 오늘 — 이어쓸 노트와 남은 작업. */
+  async panelToday(parent, t, devlog) {
+    const card = parent.createEl('section', { cls: 'devtrail-cc-panel' });
+    const head = card.createEl('div', { cls: 'devtrail-cc-panel-head' });
+    head.createEl('span', { text: t.colToday, cls: 'devtrail-cc-eyebrow' });
+    if (devlog) this.badge(head, t.devlogWritten, 'done');
 
-    // 아래 — 최근 기록.
-    this.card(body, t.colRecent, model.recent.length, (box) => {
-      // ⚠️ 폭이 넓어지면 한 줄짜리 목록은 이름과 배지가 화면 양끝으로 갈린다.
-      //    여러 열로 접어 눈길이 이어지게 한다.
-      const list = box.createEl('div', { cls: 'devtrail-cc-recent' });
-      for (const r of model.recent.slice(0, 8)) {
-        const el = list.createEl('div', { cls: 'devtrail-cc-row' });
-        const a = el.createEl('a', { text: r.file.basename, cls: 'devtrail-cc-link' });
-        a.setAttr('role', 'button'); a.setAttr('tabindex', '0');
-        const open = () => this.app.workspace.getLeaf(false).openFile(r.file);
-        a.addEventListener('click', open);
-        a.addEventListener('keydown', (ev) => {
-          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
-        });
-        if (r.type) this.badge(el, r.type, 'type');
-      }
+    if (devlog) {
+      const row = card.createEl('div', { cls: 'devtrail-cc-today-note' });
+      const a = row.createEl('a', { text: devlog.basename, cls: 'devtrail-cc-link' });
+      a.setAttr('role', 'button'); a.setAttr('tabindex', '0');
+      const open = () => this.app.workspace.getLeaf(false).openFile(devlog);
+      a.addEventListener('click', open);
+      a.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+      });
+      row.createEl('span', {
+        text: new Date(devlog.stat.mtime).toTimeString().slice(0, 5),
+        cls: 'devtrail-cc-mono devtrail-cc-faint',
+      });
+    } else {
+      card.createEl('p', { text: t.devlogNo, cls: 'devtrail-cc-muted' });
+      card.createEl('p', { text: t.devlogMake, cls: 'devtrail-cc-muted' });
+    }
+
+    const sub = card.createEl('div', { cls: 'devtrail-cc-panel-sub' });
+    sub.createEl('span', { text: t.tasks, cls: 'devtrail-cc-eyebrow' });
+    const countEl = sub.createEl('span', { text: '…', cls: 'devtrail-cc-mono devtrail-cc-faint' });
+    const list = card.createEl('div', { cls: 'devtrail-cc-tasks' });
+
+    // ⚠️ 읽기는 비동기다. 화면을 먼저 그리고 채운다 — 목록을 기다리느라
+    //    나머지 패널이 늦게 뜨면 "느린 대시보드" 가 된다.
+    const tasks = await openTasksInVault(this.app, this.paths, 5);
+    countEl.setText(String(tasks.length));
+    if (tasks.length === 0) {
+      list.createEl('p', { text: t.noTasks, cls: 'devtrail-cc-muted' });
+      return;
+    }
+    for (const task of tasks) {
+      const row = list.createEl('div', { cls: 'devtrail-cc-task' });
+      row.createEl('span', { cls: 'devtrail-cc-checkbox' });
+      const body = row.createEl('div', { cls: 'devtrail-cc-task-body' });
+      body.createEl('div', { text: task.text, cls: 'devtrail-cc-task-text' });
+      const src = body.createEl('a', { text: task.file.basename, cls: 'devtrail-cc-task-src' });
+      src.setAttr('role', 'button'); src.setAttr('tabindex', '0');
+      const open = () => this.app.workspace.getLeaf(false).openFile(task.file);
+      src.addEventListener('click', open);
+      src.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+      });
+    }
+  }
+
+  /* 2. 프로젝트 — 단계 분포와 표. 방치만 색이 붙는다. */
+  panelProjects(parent, t, model, now) {
+    const sec = parent.createEl('section', { cls: 'devtrail-cc-section' });
+    const head = sec.createEl('div', { cls: 'devtrail-cc-section-head' });
+    head.createEl('h2', { text: t.colProjects });
+    const right = head.createEl('div', { cls: 'devtrail-cc-section-meta' });
+
+    const rows = model.projects.map((p) => ({
+      p, col: normalizeStage(p.stage), stale: isStale(p.mtime, now, STALE_DAYS),
+    }));
+    const staleN = rows.filter((r) => r.stale).length;
+    if (staleN > 0) {
+      right.createEl('span', { text: `● ${t.stale} ${staleN}`, cls: 'devtrail-cc-warn devtrail-cc-mono' });
+    }
+    right.createEl('span', { text: `${model.projects.length} active`, cls: 'devtrail-cc-mono devtrail-cc-faint' });
+
+    if (model.projects.length === 0) {
+      sec.createEl('p', { text: t.emptyProjects, cls: 'devtrail-cc-muted' });
+      sec.createEl('p', { text: t.emptyProjectsHelp, cls: 'devtrail-cc-muted' });
+      return;
+    }
+
+    // 단계 분포 막대 — 계획 중만 색이 붙는다.
+    const counts = {};
+    for (const [key] of BOARD_COLUMNS) counts[key] = 0;
+    let unstaged = 0;
+    for (const r of rows) { if (r.col) counts[r.col]++; else unstaged++; }
+    const total = model.projects.length;
+    const bar = sec.createEl('div', { cls: 'devtrail-cc-dist' });
+    for (const [key] of BOARD_COLUMNS) {
+      if (counts[key] === 0) continue;
+      const seg = bar.createEl('span', { cls: `devtrail-cc-dist-seg devtrail-cc-stage-${key}` });
+      seg.style.width = `${(counts[key] / total) * 100}%`;
+      seg.setAttr('title', `${t.col[key]} ${counts[key]}`);
+    }
+    const leg = sec.createEl('div', { cls: 'devtrail-cc-dist-legend' });
+    for (const [key] of BOARD_COLUMNS) {
+      const item = leg.createEl('span', { cls: 'devtrail-cc-dist-item' });
+      item.createEl('span', { cls: `devtrail-cc-dot devtrail-cc-stage-${key}` });
+      item.createEl('span', { text: t.col[key] });
+      item.createEl('span', { text: String(counts[key]), cls: 'devtrail-cc-mono devtrail-cc-faint' });
+    }
+    if (unstaged > 0) {
+      const item = leg.createEl('span', { cls: 'devtrail-cc-dist-item' });
+      item.createEl('span', { cls: 'devtrail-cc-dot devtrail-cc-stage-unstaged' });
+      item.createEl('span', { text: t.unstaged });
+      item.createEl('span', { text: String(unstaged), cls: 'devtrail-cc-mono devtrail-cc-faint' });
+    }
+
+    // 표.
+    const table = sec.createEl('div', { cls: 'devtrail-cc-table' });
+    const th = table.createEl('div', { cls: 'devtrail-cc-tr devtrail-cc-th' });
+    for (const label of [t.thName, t.thStage, t.thNext, t.thUpdated]) {
+      th.createEl('span', { text: label });
+    }
+    for (const r of rows) {
+      const tr = table.createEl('div', { cls: 'devtrail-cc-tr' });
+      if (r.stale) tr.addClass('is-stale');
+      tr.setAttr('role', 'button'); tr.setAttr('tabindex', '0');
+      const name = tr.createEl('span', { cls: 'devtrail-cc-td-name' });
+      if (r.stale) name.createEl('span', { cls: 'devtrail-cc-dot devtrail-cc-warn-dot' });
+      name.createEl('span', { text: r.p.name });
+      tr.createEl('span', { text: r.p.stage || '—', cls: 'devtrail-cc-mono devtrail-cc-faint' });
+      tr.createEl('span', { text: r.p.next || t.noNext,
+                            cls: r.p.next ? '' : 'devtrail-cc-faint' });
+      tr.createEl('span', {
+        text: relativeDays(r.p.mtime, now, t),
+        cls: `devtrail-cc-mono ${r.stale ? 'devtrail-cc-warn' : 'devtrail-cc-faint'}`,
+      });
+      const open = () => this.app.workspace.getLeaf(false).openFile(r.p.file);
+      tr.addEventListener('click', open);
+      tr.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+      });
+    }
+    sec.createEl('p', { text: t.staleNote(STALE_DAYS), cls: 'devtrail-cc-footnote' });
+  }
+
+  /* 3a. 노트 구성 — 최근 30일 무엇을 썼나. */
+  panelComposition(parent, t, model) {
+    const card = parent.createEl('section', { cls: 'devtrail-cc-panel' });
+    card.createEl('div', { text: `${t.composition} · ${t.last30}`, cls: 'devtrail-cc-eyebrow' });
+
+    const cutoff = Date.now() - 30 * DAY_MS;
+    const byType = {};
+    for (const r of model.recentAll || model.recent) {
+      if (r.mtime < cutoff) continue;
+      const k = r.type || t.untyped;
+      byType[k] = (byType[k] || 0) + 1;
+    }
+    const entries = Object.keys(byType).map((k) => [k, byType[k]])
+      .sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const sum = entries.reduce((a, e) => a + e[1], 0);
+
+    if (sum === 0) {
+      card.createEl('p', { text: t.emptyComposition, cls: 'devtrail-cc-muted' });
+    } else {
+      const bar = card.createEl('div', { cls: 'devtrail-cc-stack' });
+      entries.forEach(([, n], i) => {
+        const seg = bar.createEl('span', { cls: `devtrail-cc-stack-seg devtrail-cc-lv${4 - i}` });
+        seg.style.width = `${(n / sum) * 100}%`;
+      });
+      const leg = card.createEl('div', { cls: 'devtrail-cc-comp-legend' });
+      entries.forEach(([k, n], i) => {
+        const row = leg.createEl('div', { cls: 'devtrail-cc-comp-row' });
+        row.createEl('span', { cls: `devtrail-cc-dot devtrail-cc-lv${4 - i}` });
+        row.createEl('span', { text: k });
+        row.createEl('span', { text: String(n), cls: 'devtrail-cc-mono devtrail-cc-faint' });
+      });
+    }
+
+    const sub = card.createEl('div', { cls: 'devtrail-cc-panel-sub' });
+    sub.createEl('span', { text: t.pending, cls: 'devtrail-cc-eyebrow' });
+    card.createEl('div', {
+      text: `inbox ${model.inbox.length} · ${t.mOverdue} ${model.overdue.length} · ${t.mTrouble} ${model.trouble.length}`,
+      cls: 'devtrail-cc-mono devtrail-cc-faint',
     });
   }
 
-  /* Inbox 미리보기. 숫자만 보여주면 무엇이 쌓였는지 알 수 없다.
-   *
-   * ⚠️ 여기서 분류하거나 상태를 바꾸지 않는다 — 열어서 사용자가 정한다. */
-  inboxPreview(parent, t, model) {
-    this.card(parent, t.mInbox, model.inbox.length, (list) => {
-      if (model.inbox.length === 0) {
-        list.createEl('p', { text: t.emptyInbox, cls: 'devtrail-cc-muted' });
-        return;
-      }
-      for (const i of model.inbox.slice(0, 5)) {
-        this.row(list, i.file.basename, i.file, t.open);
-      }
-    });
+  /* 3b. 최근 기록 — 2열. */
+  panelRecent(parent, t, model) {
+    const card = parent.createEl('section', { cls: 'devtrail-cc-panel' });
+    card.createEl('div', { text: t.colRecent, cls: 'devtrail-cc-eyebrow' });
+    const list = card.createEl('div', { cls: 'devtrail-cc-recent' });
+    for (const r of model.recent.slice(0, 10)) {
+      const row = list.createEl('div', { cls: 'devtrail-cc-recent-row' });
+      const a = row.createEl('a', { text: r.file.basename, cls: 'devtrail-cc-link' });
+      a.setAttr('role', 'button'); a.setAttr('tabindex', '0');
+      const open = () => this.app.workspace.getLeaf(false).openFile(r.file);
+      a.addEventListener('click', open);
+      a.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+      });
+      if (r.type) row.createEl('span', { text: r.type, cls: 'devtrail-cc-mono devtrail-cc-faint' });
+    }
   }
 
   /* ── 지표 ─────────────────────────────────────────────────────────────
    * ⚠️ DevTrail 개념만 센다. Meetings·Events·Focus 같은 것을 넣으면 볼트에
    *    그 개념이 없어 전부 0 이 뜬다(실측: meeting 0 · event 0 · task 0).
    *    0 만 늘어놓는 화면은 지어낸 화면이다. */
-  metrics(body, t, model, devlog) {
-    const strip = body.createEl('div', { cls: 'devtrail-cc-metrics' });
-    // [라벨, 값, 아이콘, 보조설명, 이동할 라우트, 주의 여부]
-    const items = [
-      [t.mDevlog,   devlog ? t.yes : t.no, 'calendar-days', t.hDevlog,   'today',    !devlog],
-      [t.mProjects, model.projects.length, 'folder-git-2', t.hProjects, 'projects', false],
-      [t.mInbox,    model.inbox.length,    'inbox',        t.hInbox,    'home',     model.inbox.length > 0],
-      [t.mWeek,     model.thisWeek,        'file-text',    t.hWeek,     'home',     false],
-      [t.mTrouble,  model.trouble.length,  'wrench',       t.hTrouble,  'home',     false],
-      [t.mOverdue,  model.overdue.length,  'alarm-clock',  t.hOverdue,  'reviews',  model.overdue.length > 0],
-    ];
-    for (const [label, value, ic, help, route, warn] of items) {
-      // ⚠️ 지표는 '눌러서 갈 곳' 이 있어야 숫자가 행동으로 이어진다.
-      const c = strip.createEl('button', { cls: 'devtrail-cc-metric' });
-      c.setAttr('aria-label', `${label}: ${value} — ${help}`);
-      c.setAttr('title', help);
-      if (warn) c.addClass('is-attention');
-      const head = c.createEl('div', { cls: 'devtrail-cc-metric-head' });
-      icon(head.createEl('span', { cls: 'devtrail-cc-metric-icon' }), ic);
-      head.createEl('span', { text: label, cls: 'devtrail-cc-metric-label' });
-      c.createEl('div', { text: String(value), cls: 'devtrail-cc-metric-value' });
-      c.createEl('div', { text: help, cls: 'devtrail-cc-metric-help' });
-      c.addEventListener('click', () => this.metricRoute(route));
-    }
-  }
 
   /* 지표에서 라우트로. 숫자를 보고 바로 갈 수 있어야 한다. */
-  metricRoute(route) {
-    if (!route || route === this.route) return;
-    this.route = route;
-    this.render();
-  }
 
   /* ── 빠른 기록 ────────────────────────────────────────────────────────
    * 기존 Templater 명령을 부른다. 여기서 노트를 만들지 않는다. */
@@ -660,65 +980,10 @@ class CommandCenterView extends obsidian.ItemView {
    *    그쪽이 더 낫다. 여기 있는 것은 '통로' 뿐이다 — 결과 목록을 흉내 내면
    *    없는 기능을 있는 척하게 된다.
    * ⚠️ 명령 id 를 짐작해서 부르지 않는다. 레지스트리에 있는지 먼저 확인한다. */
-  searchBar(root, t) {
-    const all = (this.app.commands && this.app.commands.commands) || {};
-    const pick = findSearchCommand(this.app);
-    let found = pick ? { id: pick, name: (all[pick] && all[pick].name) || pick } : null;
-    // 확신할 수 있는 검색 명령이 없으면 Obsidian 기본 검색으로 떨어진다 —
-    // 그것도 실제로 있을 때만.
-    if (!found && commandExists(this.app, CORE_SEARCH)) {
-      found = { id: CORE_SEARCH, name: t.searchCore };
-    }
-
-    const bar = root.createEl('div', { cls: 'devtrail-cc-search' });
-    const b = bar.createEl('button', { cls: 'devtrail-cc-search-btn' });
-    icon(b.createEl('span', { cls: 'devtrail-cc-search-icon' }), 'search');
-    b.createEl('span', {
-      text: found ? `${t.searchPlaceholder} — ${found.name}` : t.searchMissing,
-      cls: 'devtrail-cc-search-text',
-    });
-
-    if (!found) {
-      b.setAttr('disabled', 'true');
-      b.setAttr('title', t.searchMissingHelp);
-      bar.createEl('p', { text: t.searchMissingHelp, cls: 'devtrail-cc-muted' });
-      return;
-    }
-    // ⚠️ 도구설명에 명령 id(global-search:open)를 띄우지 않는다 — 사용자에게는
-    //    뜻 없는 문자열이다. 무엇이 실행되는지는 이름으로 말한다.
-    b.setAttr('aria-label', `${t.search}: ${found.name}`);
-    b.setAttr('title', found.name);
-    b.addEventListener('click', () => this.app.commands.executeCommandById(found.id));
-  }
 
   /* 자주 쓰는 기록으로 가는 아이콘 바. 검색 바로 아래 — 찾기 다음은 남기기다.
    *
    * ⚠️ 노트를 직접 만들지 않는다. 등록된 Templater 명령만 부른다. */
-  launchBar(root, t, data) {
-    const bar = root.createEl('div', { cls: 'devtrail-cc-launch' });
-    bar.setAttr('aria-label', t.quickCapture);
-    const labels = {
-      devlog: t.cDevlog, devnote: t.cDevnote, idea: t.cIdea,
-      worklog: t.cWorklog, report: t.cReport, project: t.cProject,
-    };
-    const icons = {
-      devlog: 'calendar-days', devnote: 'pencil', idea: 'lightbulb',
-      worklog: 'clock', report: 'rotate-ccw', project: 'folder-plus',
-    };
-    for (const c of CAPTURES) {
-      const id = templaterCommandId(data.paths, captureFile(c, data.lang));
-      const b = bar.createEl('button', { cls: 'devtrail-cc-launch-btn' });
-      icon(b.createEl('span'), icons[c.key] || 'file-plus');
-      b.createEl('span', { text: labels[c.key] || c.key });
-      if (!commandExists(this.app, id)) {
-        b.setAttr('disabled', 'true');
-        b.setAttr('title', t.actionMissing);
-        continue;
-      }
-      b.setAttr('title', labels[c.key] || c.key);
-      b.addEventListener('click', () => this.app.commands.executeCommandById(id));
-    }
-  }
 
   /* ── 네비게이션 ─────────────────────────────────────────────────────── */
   nav(root, t) {
@@ -1040,4 +1305,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { TEXT, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };

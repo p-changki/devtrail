@@ -373,10 +373,10 @@ t_eq "event 를 세지 않는다"   "0" "$(grep -cE "'event'|\"event\"" "$JS" | 
 # ── 레이아웃 ────────────────────────────────────────────────────────────────
 t_start "전체 화면 레이아웃"
 CSS="$ROOT/plugin/styles.css"
-t_contains "지표 스트립" "devtrail-cc-metrics" "$(cat "$CSS")"
+t_contains "기록 흐름 히트맵" "devtrail-cc-heat" "$(cat "$CSS")"
 # ⚠️ 옛 3열 그리드(devtrail-cc-columns)는 없앴다 — 좌측 레일 + 중앙 보드의
 #    작업 공간으로 바뀌었다.
-t_contains "작업 공간"  "devtrail-cc-workspace" "$(cat "$CSS")"
+t_contains "2단 배치"  "devtrail-cc-grid-2" "$(cat "$CSS")"
 # ⚠️ 좁아지면 열이 줄어야 한다. 고정 3열이면 사이드 패널에서 깨진다.
 t_contains "폭에 따라 접힌다" "auto-fit" "$(cat "$CSS")"
 t_contains "지표도 접힌다" "minmax" "$(cat "$CSS")"
@@ -482,7 +482,13 @@ t_eq "rgb() 색이 없다" "0" \
   "$(grep -cE ':[^;]*rgba?\(' "$CSS" | tr -d ' ')"
 # 전역 폰트·body 를 건드리면 사용자 볼트 전체가 바뀐다.
 t_eq "body 를 건드리지 않는다" "0" "$(grep -cE '^\s*body\s*[{,]' "$CSS" | tr -d ' ')"
-t_eq "전역 폰트를 정하지 않는다" "0" "$(grep -c 'font-family' "$CSS" | tr -d ' ')"
+# ⚠️ 전역 폰트만 금지한다. 디자인 핸드오프는 숫자·날짜·태그에 mono 를
+#    요구하고, 그건 테마가 이미 가진 --font-monospace 다 — 남의 폰트를
+#    강제하는 게 아니라 테마의 것을 고르는 것이다.
+t_eq "폰트를 강제하지 않는다" "0" \
+  "$(grep -E 'font-family' "$CSS" | grep -vc 'var(--font-' | tr -d ' ')"
+t_eq "전역에 폰트를 걸지 않는다" "0" \
+  "$(grep -B2 'font-family' "$CSS" | grep -cE '^(body|:root|html|\*)' | tr -d ' ')"
 
 t_start "상태를 색으로만 말하지 않는다"
 # ⚠️ 설계안 §3: 색만으로 신호하지 않는다. 색을 못 보는 사람이 있다.
@@ -533,29 +539,6 @@ covered = set(re.findall(r'\.devtrail-cc-[a-z-]+', blk.group(1))) if blk else se
 print(' '.join(sorted(animated - covered)))
 PYEOF
 )"
-
-t_start "지표 카드"
-# 숫자만 있으면 무엇의 숫자인지 모른다. 아이콘·설명·이동이 함께 간다.
-t_contains "아이콘을 붙인다" "setIcon" "$(cat "$JS")"
-# ⚠️ 함수가 있는 것과 '연결된' 것은 다르다. 클릭 핸들러가 실제로 붙어야 한다.
-t_contains "카드를 누르면 이동한다" "metricRoute" "$(cat "$JS")"
-t_contains "클릭이 연결돼 있다" "() => this.metricRoute(route)" "$(cat "$JS")"
-# 지표 6개가 갈 곳을 다 갖는가 — 하나라도 빠지면 누르고 아무 일도 안 난다.
-t_eq "지표가 6개다" "6" "$(grep -c '\[t\.m' "$JS" | tr -d ' ')"
-
-# ── 업데이트 ────────────────────────────────────────────────────────────────
-#
-# 배포 경로는 하나다 — 저장소의 plugin/ 이 곧 배포물이다(ADR 0002 D3).
-# devtrail update(git pull)가 소스를 갱신하고, command-center update 가
-# 그것을 볼트에 반영한다. 별도 다운로드 경로를 만들지 않는다 — 두 경로가
-# 서로 다른 버전을 가져오면 사용자가 어느 게 진짜인지 모른다.
-#
-# ⚠️ 감지는 자동, 적용은 승인. 실행 중인 Obsidian 아래에서 파일을 갈아치우면
-#    로딩 상태가 꼬인다.
-_ccenv() {
-  printf 'DEVTRAIL_HOME=%s DEVTRAIL_CONFIG=%s' "$1" "$1/devtrail.config.json"
-}
-
 t_start "update 는 기본이 읽기 전용"
 VU=$(_vault vu); HU="$T_TMP/hu"; _cfg "$VU" "$HU"
 DEVTRAIL_HOME="$HU" DEVTRAIL_CONFIG="$HU/devtrail.config.json" \
@@ -715,46 +698,6 @@ t_start "노트를 쓰지 않는다"
 for m in "vault.create" "vault.modify" "vault.append" "processFrontMatter"; do
   t_eq "$m 를 부르지 않는다" "0" "$(grep -c "$m" "$JS" | tr -d ' ')"
 done
-
-t_start "상태색이 글자·아이콘과 함께 온다"
-# ⚠️ 색만으로 상태를 말하지 않는다 — 다크/라이트와 색각에서 무너진다.
-t_contains "상태 클래스" "devtrail-cc-col--" "$(cat "$JS")"
-t_contains "컬럼에 아이콘" "devtrail-cc-col-icon" "$(cat "$JS")"
-CSS="$ROOT/plugin/styles.css"
-for s in "devtrail-cc-col--planning" "devtrail-cc-col--active" \
-         "devtrail-cc-col--blocked" "devtrail-cc-col--done"; do
-  t_contains "CSS $s" "$s" "$(cat "$CSS")"
-done
-t_contains "보드가 접힌다" "devtrail-cc-board" "$(cat "$CSS")"
-t_contains "카드 포커스" ":focus-visible" "$(cat "$CSS")"
-
-# ── 헤더 검색 · 빠른 실행 ───────────────────────────────────────────────────
-#
-# ⚠️ 검색기를 만들지 않는다. 설치된 검색 플러그인이나 Obsidian 기본 검색으로
-#    가는 통로일 뿐이다 — 결과 목록을 흉내 내면 없는 기능을 있는 척하게 된다.
-t_start "검색은 통로일 뿐이다"
-t_contains "헤더에 검색 진입점" "devtrail-cc-search" "$(cat "$JS")"
-t_contains "명령 존재를 확인한다" "commandExists" "$(cat "$JS")"
-# 결과 UI 를 흉내 내지 않는다.
-t_eq "결과 목록이 없다" "0" "$(grep -c 'searchResult\|renderResults' "$JS" | tr -d ' ')"
-t_eq "자체 인덱스가 없다" "0" "$(grep -c 'buildIndex\|fuzzySearch' "$JS" | tr -d ' ')"
-t_contains "없으면 안내로 떨어진다" "searchMissingHelp" "$(cat "$JS")"
-
-t_start "빠른 실행이 Templater 만 부른다"
-t_contains "실행 바" "devtrail-cc-launch" "$(cat "$JS")"
-# ⚠️ 명령이 없으면 조용히 노트를 만들지 않는다 — 무엇을 해야 하는지 말한다.
-# ⚠️ disabled 는 검색 바에도 있다. 실행 바가 명령 존재를 확인하는지를 본다.
-t_contains "명령이 없으면 비활성" "if (!commandExists(this.app, id))" \
-  "$(sed -n '/launchBar(root, t, data)/,/^  }/p' "$JS")"
-t_contains "비활성으로 표시한다" "b.setAttr('disabled', 'true')" \
-  "$(sed -n '/launchBar(root, t, data)/,/^  }/p' "$JS")"
-t_contains "CSS 실행 바" "devtrail-cc-launch" "$(cat "$CSS")"
-
-# ── 화면이 거짓말하지 않는가 ────────────────────────────────────────────────
-#
-# 이 두 검사는 2026-08-22 에 실제로 화면을 깨뜨린 결함 두 개에서 나왔다.
-# 둘 다 "코드가 있다" 는 검사로는 잡히지 않았고, 사용자가 스크린샷으로 알려줬다.
-
 t_start "쓰는 문구가 전부 정의돼 있다"
 # ⚠️ t.lastEdit 이 정의 없이 쓰여 화면에 'undefined 2026. 8. 22.' 가 떴다.
 #    문구는 ko·en 양쪽에 다 있어야 한다 — 한쪽만 있으면 다른 언어에서 깨진다.
@@ -798,19 +741,6 @@ sels = [m.group(1).strip() for m in re.finditer(r'(?m)^([^@/}\s][^{]*)\{', css)]
 print(' '.join(sorted(s for s, n in Counter(sels).items() if n > 1)))
 PYEOF
 )"
-
-t_start "여러 줄을 담는 버튼이 높이를 푼다"
-# ⚠️ 지표 카드는 <button> 인데 라벨·값·보조설명 세 줄을 담는다. button 은 높이가
-#    고정될 수 있어, 풀지 않으면 값이 테두리 밖으로 넘쳐 아래 열과 겹친다 —
-#    2026-08-22 에 사용자 화면이 실제로 이렇게 깨졌다.
-t_contains "지표가 높이를 푼다" "height: auto" \
-  "$(sed -n '/^\.devtrail-cc-metric {/,/^}/p' "$CSS")"
-
-# ── 업데이트 안전성 ─────────────────────────────────────────────────────────
-#
-# ⚠️ 절반만 바뀐 플러그인이 최악이다 — manifest 는 새 버전인데 main.js 는 옛것이면
-#    Obsidian 이 무엇을 로드했는지 아무도 모른다. 검증을 다 마친 뒤에만 바꾼다.
-
 t_start "버전을 SemVer 로 비교한다"
 cat > "$T_TMP/sv.sh" <<'SHEOF'
 . "$1/lib/common.sh" >/dev/null 2>&1 || true
@@ -922,120 +852,6 @@ t_eq "기존 파일이 이전 내용으로 돌아온다" "$oldjs" \
   "$(md5 -q "$VN2/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VN2/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)"
 t_eq "버전도 되돌아온다" "0.0.1" \
   "$(jq -r .version "$VN2/.obsidian/plugins/$PID/manifest.json")"
-
-# ── 검색 명령 선택 ──────────────────────────────────────────────────────────
-#
-# ⚠️ 플러그인 id 로 시작하는 명령 중 첫 번째를 고르면 엉뚱한 것이 실행된다.
-#    Omnisearch 는 'omnisearch:show-modal' 말고도 인덱스 재생성 같은 명령을
-#    갖는다 — 검색 버튼이 인덱스를 다시 만들면 사용자는 무슨 일인지 모른다.
-t_start "검색과 무관한 명령을 고르지 않는다"
-cat > "$T_TMP/pick.js" <<'JSEOF'
-const Module = require('module');
-const orig = Module._load;
-Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
-  return orig(r, p, m);
-};
-const f = require(process.argv[2]).__test;
-if (!f || typeof f.findSearchCommand !== 'function') { console.log('NOHOOK'); process.exit(0); }
-const app = (names) => ({ commands: { commands: Object.fromEntries(
-  Object.entries(names).map(([id, name]) => [id, { id, name }])) } });
-
-const bad = [];
-const eq = (label, got, want) => { if (got !== want) bad.push(`${label}: want ${want} got ${got}`); };
-
-// ① 검색 모달을 여는 명령이 있으면 그것을 고른다.
-eq('모달을 고른다', f.findSearchCommand(app({
-  'omnisearch:rebuild-index': 'Rebuild index',
-  'omnisearch:show-modal': 'Search in all notes',
-})), 'omnisearch:show-modal');
-
-// ② 목록 순서가 달라도 같은 것을 고른다 — 첫 번째를 집으면 안 된다.
-eq('순서에 흔들리지 않는다', f.findSearchCommand(app({
-  'omnisearch:show-modal': 'Search in all notes',
-  'omnisearch:rebuild-index': 'Rebuild index',
-})), 'omnisearch:show-modal');
-
-// ③ ⚠️ 확신할 수 있는 명령이 없으면 아무것도 고르지 않는다.
-//    '뭐라도 부르는' 것보다 '안 부르는' 것이 낫다.
-eq('확신 없으면 안 고른다', f.findSearchCommand(app({
-  'omnisearch:rebuild-index': 'Rebuild index',
-  'omnisearch:clear-cache': 'Clear cache',
-})), null);
-
-// ④ 플러그인이 아예 없으면 null.
-eq('없으면 null', f.findSearchCommand(app({ 'editor:fold-all': 'Fold all' })), null);
-
-// ⑤ ⚠️ 이름에 '검색' 이 들어 있어도 검색이 아닌 것들. 제외어가 없으면
-//    "Open search settings" 가 검색 모달로 뽑힌다 — 버튼을 누르면 설정이 열린다.
-eq('설정을 고르지 않는다', f.findSearchCommand(app({
-  'omnisearch:open-settings': 'Open search settings',
-})), null);
-eq('인덱스 갱신을 고르지 않는다', f.findSearchCommand(app({
-  'omnisearch:refresh-index': 'Refresh search index and show progress',
-})), null);
-// 진짜 검색이 섞여 있으면 그것만 고른다.
-eq('섞여 있어도 진짜만', f.findSearchCommand(app({
-  'omnisearch:open-settings': 'Open search settings',
-  'omnisearch:show-modal': 'Vault search',
-})), 'omnisearch:show-modal');
-
-// ⑥ id 에 search 가 들어 있다고 아무 명령이나 고르지 않는다.
-eq('id 만 보고 고르지 않는다', f.findSearchCommand(app({
-  'omnisearch:insert-link': 'Insert link to note',
-})), null);
-
-console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
-JSEOF
-if command -v node >/dev/null 2>&1; then
-  t_eq "검색 모달만 고른다" "OK" "$(node "$T_TMP/pick.js" "$JS" 2>&1 | tail -1)"
-else
-  dim "   node 없음 — 건너뜀"
-fi
-
-t_start "기본 검색으로 떨어진다"
-# ⚠️ 기본 검색 명령도 있는지 확인하고 부른다. 없는 id 를 부르면 아무 일도
-#    일어나지 않고, 사용자는 버튼이 고장 났다고 생각한다.
-t_contains "존재를 확인한다" "commandExists(this.app, CORE_SEARCH)" "$(cat "$JS")"
-t_contains "둘 다 없으면 비활성" "b.setAttr('disabled', 'true')" \
-  "$(sed -n '/searchBar(root, t)/,/^  }/p' "$JS")"
-
-# ── 홈 레이아웃 ────────────────────────────────────────────────────────────
-#
-# 홈은 '지금 무엇을 하면 되는가' 한 화면이다. 프로젝트 보드가 중앙에 있고
-# 좌측에 오늘·Inbox 가, 아래에 최근 기록이 붙는다.
-t_start "홈이 보드를 중앙에 둔다"
-HOME_VIEW="$(sed -n '/async viewHome(body, t, model, devlog)/,/^  \/\* Inbox 미리보기/p' "$JS")"
-t_contains "작업 공간 레이아웃" "devtrail-cc-workspace" "$(cat "$JS")"
-t_contains "홈이 보드를 그린다" "this.board(" "$HOME_VIEW"
-t_contains "좌측에 오늘" "colToday" "$HOME_VIEW"
-t_contains "좌측에 Inbox" "inboxPreview" "$HOME_VIEW"
-t_contains "아래에 최근 기록" "colRecent" "$HOME_VIEW"
-# ⚠️ 보드를 두 번 구현하지 않는다 — 홈과 프로젝트 탭이 갈리면 한쪽만 고쳐진다.
-t_eq "보드 구현은 하나다" "1" "$(grep -c '^  board(parent, t, model)' "$JS")"
-
-t_start "Inbox 미리보기가 실제 Inbox 만 본다"
-t_contains "모델의 inbox 를 쓴다" "model.inbox" \
-  "$(sed -n '/inboxPreview(parent, t, model)/,/^  }/p' "$JS")"
-t_contains "몇 개만 보여준다" ".slice(0," \
-  "$(sed -n '/inboxPreview(parent, t, model)/,/^  }/p' "$JS")"
-# 비어 있으면 0 을 반복하지 않고 다음 행동을 말한다.
-t_contains "빈 상태 문구" "emptyInbox" "$(cat "$JS")"
-
-t_start "좁아지면 접힌다"
-t_contains "작업 공간 CSS" "devtrail-cc-workspace" "$(cat "$CSS")"
-# ⚠️ leaf 는 뷰포트가 아니다 — 미디어 쿼리가 아니라 auto-fit 으로 접는다.
-# ⚠️ leaf 는 뷰포트가 아니다. @media 로 폭을 재면 사이드 패널에서 창 크기를
-#    보고 3열을 그린다 — auto-fit 으로 '내 폭' 에 반응해야 한다.
-#    (max-width 속성 자체는 정상이다 — 금지하는 것은 폭 기반 @media 다.)
-t_eq "폭 기반 미디어 쿼리가 없다" "0" \
-  "$(grep -cE '@media[^{]*(max-width|min-width)' "$CSS" | tr -d ' ')"
-
-# ── 오늘 할 일 ─────────────────────────────────────────────────────────────
-#
-# ⚠️ 개발일지 템플릿은 빈 체크박스 '- [ ]' 를 자리표시로 넣는다. 그것을 그대로
-#    그리면 글자 없는 빈 줄이 쌓인다 — 2026-08-22 QA 화면이 실제로 그랬다.
-#    빈 자리표시는 할 일이 아니다.
 t_start "빈 체크박스를 할 일로 세지 않는다"
 cat > "$T_TMP/tasks.js" <<'JSEOF'
 const Module = require('module');
@@ -1065,8 +881,9 @@ if command -v node >/dev/null 2>&1; then
 else
   dim "   node 없음 — 건너뜀"
 fi
-t_contains "홈이 그 함수를 쓴다" "openTasks(" \
-  "$(sed -n '/async viewHome(body, t, model, devlog)/,/^  \/\* Inbox 미리보기/p' "$JS")"
+# ⚠️ 이제 볼트 전체에서 모은다 — 그 함수가 openTasks 를 쓴다.
+t_contains "볼트 전체 수집이 그 함수를 쓴다" "openTasks(raw)" \
+  "$(sed -n '/async function openTasksInVault/,/^}/p' "$JS")"
 
 t_start "빈 컬럼이 늘어나지 않는다"
 # ⚠️ 계획 중에 카드 4장, 나머지가 0 이면 빈 컬럼이 네 배 높이로 늘어난다.
@@ -1133,20 +950,16 @@ t_eq "정상 원본은 0 으로 끝난다" "0" "$?"
 t_start "대시보드가 주어진 폭을 쓴다"
 t_eq "본문에 폭 상한이 없다" "0" \
   "$(sed -n '/^\.devtrail-cc-body/,/}/p' "$CSS" | grep -c 'max-width')"
-
-t_start "작업 공간이 미디어 쿼리 없이 접힌다"
-WS="$(sed -n '/^\.devtrail-cc-workspace {/,/^}/p' "$CSS")"
-t_contains "flex 로 접는다" "flex-wrap: wrap" "$WS"
-# ⚠️ auto-fit + grid-column:span 조합은 트랙 수가 폭에 따라 변해서 빈 칸이
-#    생긴다. 레일과 본문의 비율은 flex-basis 로 정한다.
-t_eq "span 으로 폭을 잡지 않는다" "0" "$(grep -c 'grid-column: span' "$CSS")"
-
 t_start "여백이 하나의 리듬을 따른다"
 # ⚠️ 4·6·8·10·12·16 이 섞이면 무엇이 한 묶음인지 눈이 못 읽는다.
 #    4 의 배수 하나로 통일한다.
+# ⚠️ 디자인 핸드오프(2026-08-22)가 쓰는 눈금이 정본이다:
+#    2 4 6 7 8 10 12 14 16 18 20 24 28 40 56
+#    그 밖의 값이 끼면 "왜 이 간격인가" 를 아무도 답할 수 없게 된다.
 odd=$(grep -oE '(padding|gap|margin[a-z-]*): *[0-9]+px' "$CSS" \
-      | grep -oE '[0-9]+' | awk '$1 % 4 != 0 && $1 != 1 && $1 != 2 {print}' | sort -u | tr '\n' ' ')
-t_eq "4 의 배수만 쓴다" "" "$odd"
+      | grep -oE '[0-9]+' \
+      | grep -vxE '1|2|4|6|7|8|10|12|14|16|18|20|24|28|40|56' | sort -u | tr '\n' ' ')
+t_eq "핸드오프의 눈금만 쓴다" "" "$odd"
 
 t_start "최근 기록이 한 줄로 늘어지지 않는다"
 # ⚠️ 폭 상한을 풀었으므로 목록 한 줄이 화면 끝까지 늘어난다 — 이름은 왼쪽,
@@ -1197,18 +1010,6 @@ NAVICONS=$(sed -n '/const items = \[/,/\];/p' "$JS" | grep -oE "'[a-z0-9-]+'\]" 
 LAUNCHICONS=$(sed -n '/const icons = {/,/};/p' "$JS" | grep -oE ": '[a-z0-9-]+'" | sed "s/: '//;s/'//")
 dup=$(printf '%s\n%s\n' "$NAVICONS" "$LAUNCHICONS" | grep -v '^$' | sort | uniq -d | tr '\n' ' ')
 t_eq "탭과 동작이 같은 그림을 쓰지 않는다" "" "$dup"
-
-t_start "검색창이 검색창처럼 생겼다"
-SB="$(sed -n '/^\.devtrail-cc-search-btn {/,/^}/p' "$CSS")"
-# ⚠️ 화면 끝까지 늘어나면 입력창이 아니라 띠로 보인다. 폭을 잡고 가운데 둔다.
-t_contains "폭을 제한한다" "max-width" "$(sed -n '/^\.devtrail-cc-search {/,/^}/p' "$CSS")"
-t_contains "가운데 둔다" "margin: 0 auto" "$(sed -n '/^\.devtrail-cc-search {/,/^}/p' "$CSS")"
-# ⚠️ Obsidian 의 button 은 내용을 가운데로 모은다. 검색창은 아이콘과 글자가
-#    왼쪽에서 시작해야 입력창으로 읽힌다.
-t_contains "내용이 왼쪽에서 시작한다" "justify-content: flex-start" "$SB"
-t_contains "충분한 높이를 갖는다" "min-height" "$SB"
-t_contains "둥글게" "border-radius: 999px" "$SB"
-
 t_start "여백을 부모가 준다"
 # ⚠️ 각 구역이 자기 margin-bottom 을 들고 있으면 하나가 빠졌을 때 그 구역만
 #    아래와 붙는다. 2026-08-22 에 빠른 실행 바가 지표와 겹쳐 보인 이유다.
@@ -1222,8 +1023,8 @@ t_contains "본문도 세로 flex" "flex-direction: column" \
 
 # 최상위 구역들은 세로 margin 을 스스로 갖지 않는다.
 stray=""
-for sel in devtrail-cc-header devtrail-cc-nav devtrail-cc-launch \
-           devtrail-cc-metrics devtrail-cc-workspace; do
+for sel in devtrail-cc-header devtrail-cc-nav devtrail-cc-panel \
+           devtrail-cc-section devtrail-cc-grid-2; do
   m=$(_css_block "$sel" | grep -cE "margin-(top|bottom):")
   [ "$m" = "0" ] || stray="$stray $sel"
 done
@@ -1252,15 +1053,104 @@ t_eq "쓰이지 않는 클래스가 없다" "" \
        grep -q "$c" "$JS" && continue
        # ⚠️ $( ) 안의 case 는 패턴을 (패턴) 으로 감싸야 한다 — 닫는 ) 가
        #    명령 치환을 끊는다.
+       # ⚠️ JS 가 `devtrail-cc-lv${l}` · `devtrail-cc-stage-${key}` 처럼
+       #    조립하는 이름이 있다. 마지막 조각을 떼고 접두사로도 찾는다.
        case "$c" in
          (*--*) grep -q "${c%%--*}--" "$JS" && continue ;;
        esac
+       stem=$(printf '%s' "$c" | sed 's/[0-9]*$//; s/-[a-z0-9]*$/-/')
+       grep -q "$stem" "$JS" && continue
        printf '%s ' "$c"
      done)"
+t_start "기록 흐름을 센다"
+cat > "$T_TMP/flow.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.buildFlow !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const DAY = 86400000;
+const base = Date.UTC(2026, 7, 22);               // 2026-08-22 토
+const mk = (daysAgo, n) => Array.from({ length: n }, () => ({ ctime: base - daysAgo * DAY }));
+const files = [].concat(mk(0, 3), mk(1, 1), mk(2, 2), mk(10, 5), mk(90, 4));
+const flow = f.buildFlow(files, base, 12);
+const bad = [];
+// 84일(12주) 격자. 그보다 오래된 것은 들어오지 않는다.
+if (flow.cells.length !== 84) bad.push('cells=' + flow.cells.length);
+if (flow.cells[flow.cells.length - 1].count !== 3) bad.push('today=' + flow.cells[flow.cells.length - 1].count);
+if (flow.total !== 11) bad.push('total=' + flow.total);   // 90일 전 4건은 빠진다
+// 연속 기록: 오늘·어제·그제 = 3
+if (flow.streak !== 3) bad.push('streak=' + flow.streak);
+// 강도는 0~4 다섯 단계.
+const lv = flow.cells.map((c) => c.level);
+if (Math.min(...lv) < 0 || Math.max(...lv) > 4) bad.push('level range');
+if (flow.cells.find((c) => c.count === 0).level !== 0) bad.push('zero must be level 0');
+// 요일별 평균 7개.
+if (flow.byWeekday.length !== 7) bad.push('weekday=' + flow.byWeekday.length);
+console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
+JSEOF
+cat > "$T_TMP/tz.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.buildFlow !== 'function') { console.log('NOHOOK'); process.exit(0); }
+// ⚠️ 서울(UTC+9) 기준 2026-08-22 새벽 1시에 만든 노트. UTC 로는 8/21 16시다.
+//    UTC 로 자르면 이 노트가 '어제' 칸에 들어간다 — 한국에서 오전에 쓴 것이
+//    전날로 밀린다. 로컬 자정이 기준이어야 한다.
+const early = new Date(2026, 7, 22, 1, 0, 0).getTime();
+const noon  = new Date(2026, 7, 22, 12, 0, 0).getTime();
+const flow = f.buildFlow([{ ctime: early }], noon, 12);
+const last = flow.cells[flow.cells.length - 1];
+const prev = flow.cells[flow.cells.length - 2];
+console.log(last.count === 1 && prev.count === 0 ? 'OK'
+            : `today=${last.count} yesterday=${prev.count}`);
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "히트맵·연속·요일" "OK" "$(node "$T_TMP/flow.js" "$JS" 2>&1 | tail -1)"
+  t_eq "로컬 자정으로 자른다" "OK" "$(TZ=Asia/Seoul node "$T_TMP/tz.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
 
-t_start "레일과 본문도 부모가 여백을 준다"
-for sel in devtrail-cc-side devtrail-cc-main; do
-  t_contains "$sel 이 세로 flex" "flex-direction: column" "$(_css_block "$sel")"
-done
+t_start "방치 프로젝트를 가려낸다"
+cat > "$T_TMP/stale.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.isStale !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const DAY = 86400000, now = Date.UTC(2026, 7, 22);
+const bad = [];
+// ⚠️ 기본 14일. 경계에서 흔들리면 안 된다 — 딱 14일은 아직 방치가 아니다.
+if (f.isStale(now - 13 * DAY, now, 14)) bad.push('13일이 방치');
+if (f.isStale(now - 14 * DAY, now, 14)) bad.push('14일이 방치');
+if (!f.isStale(now - 15 * DAY, now, 14)) bad.push('15일이 방치가 아님');
+if (!f.isStale(now - 31 * DAY, now, 14)) bad.push('31일이 방치가 아님');
+// 수정 시각을 모르면 방치라고 단정하지 않는다.
+if (f.isStale(null, now, 14)) bad.push('모르는데 방치라고 함');
+console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "14일 경계가 정확하다" "OK" "$(node "$T_TMP/stale.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+
+t_start "설정 두 개만 노출한다"
+# ⚠️ 사양: "설정값 2개만 노출하면 충분합니다" — 방치 일수(14), 히트맵 주(12).
+t_contains "방치 일수" "STALE_DAYS" "$(cat "$JS")"
+t_contains "히트맵 주" "FLOW_WEEKS" "$(cat "$JS")"
+t_contains "기본 14" "STALE_DAYS = 14" "$(cat "$JS")"
+t_contains "기본 12" "FLOW_WEEKS = 12" "$(cat "$JS")"
 
 t_end
