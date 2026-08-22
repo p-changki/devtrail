@@ -593,6 +593,35 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
       name: 'Open DevTrail Command Center',
       callback: () => this.activate(),
     });
+
+    // ⚠️ Obsidian 은 시작할 때 workspace.json 의 레이아웃을 복원한다.
+    //    예전 버전이 사이드독에 열어둔 뷰가 거기 저장돼 있어서, 재시작하면
+    //    activate() 를 거치지 않고 사이드에 그대로 되살아난다.
+    //    실측: workspace.json 의 right 에 뷰가 1개 있었다(2026-08-22).
+    //    레이아웃이 준비되는 시점에 스스로 옮긴다.
+    this.app.workspace.onLayoutReady(() => this.relocateIfSide());
+  }
+
+  /* 사이드독에 복원된 뷰를 메인 탭으로 옮긴다.
+   *
+   * ⚠️ 사용자가 일부러 사이드로 끌어다 놓았을 수도 있다. 그래서 '열려 있던
+   *    것을 옮기는' 것은 한 번뿐이고(설정에 기록), 그 뒤에는 존중한다. */
+  async relocateIfSide() {
+    const { workspace } = this.app;
+    const open = workspace.getLeavesOfType(VIEW_TYPE);
+    if (open.length === 0) return;
+    if (open.some((l) => isMainLeaf(l, workspace.rootSplit))) return;
+
+    const data = (await this.loadData()) || {};
+    if (data.relocated) return;              // 한 번만. 그 뒤엔 사용자 뜻이다.
+
+    for (const l of open) l.detach();
+    const leaf = workspace.getLeaf('tab');
+    if (leaf) {
+      await leaf.setViewState({ type: VIEW_TYPE, active: true });
+      workspace.revealLeaf(leaf);
+    }
+    await this.saveData(Object.assign({}, data, { relocated: true }));
   }
 
   onunload() {

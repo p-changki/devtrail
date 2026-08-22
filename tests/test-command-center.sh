@@ -333,6 +333,14 @@ t_eq "아무 leaf 나 재사용하지 않는다" "0" \
 # 사이드에 남은 것은 닫아야 같은 화면이 둘이 되지 않는다.
 t_contains "남은 뷰를 닫는다" "l.detach()" "$(cat "$JS")"
 
+# ⚠️ 회귀: Obsidian 은 시작할 때 workspace.json 의 레이아웃을 복원한다.
+#    예전 버전이 사이드독에 열어둔 뷰가 거기 저장돼 있어서, 재시작하면
+#    activate() 를 거치지 않고 사이드에 그대로 되살아난다.
+#    실측: workspace.json 의 right 에 뷰가 1개 있었다(2026-08-22).
+#    레이아웃이 준비되면 스스로 옮겨야 한다.
+t_contains "레이아웃 준비 후 정리한다" "onLayoutReady" "$(cat "$JS")"
+t_contains "복원된 사이드 뷰를 옮긴다" "relocateIfSide" "$(cat "$JS")"
+
 cat > "$T_TMP/leaf.js" <<'JSEOF'
 const Module = require('module'); const orig = Module._load;
 Module._load = (r,p,m) => r === 'obsidian' ? { Plugin: class{}, ItemView: class{} } : orig(r,p,m);
