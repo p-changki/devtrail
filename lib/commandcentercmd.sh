@@ -495,6 +495,69 @@ EOF
   jr_end
 }
 
+# ── Snapshot ─────────────────────────────────────────────────────────────────
+#
+# Obsidian 이 꺼져 있어도 답한다. 메뉴바 앱이 이것만 소비하고, Markdown 이나
+# 경로 규칙을 스스로 해석하지 않는다.
+#
+# ⚠️ 읽기 전용이다. 네트워크도 쓰지 않는다.
+# ⚠️ 모르는 것은 unknown 이나 null 이다. 0 이나 false 로 사실을 꾸며내면
+#    화면이 "확인해 봤더니 없다" 고 말하게 되는데, 실은 못 본 것이다.
+_cc_snapshot() {
+  local limit=5
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) : ;;
+      --limit) shift; limit="${1:-5}" ;;
+      *) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
+    esac
+    shift
+  done
+  require_config; require_bins jq python3
+
+  local root today devlog_rel devlog_path tpl_rel
+  root=$(vault_root)
+  today=$(date +%F)
+  # 경로는 dt_dir 하나에서만 온다.
+  tpl_rel=$(dt_dir templates)
+  devlog_rel=$(dt_dir devlog)
+  devlog_path=""
+  [ -n "$devlog_rel" ] && devlog_path="$root/$devlog_rel/$today devlog.md"
+
+  local vault_state
+  vault_state=$(python3 "$DEVTRAIL_ROOT/lib/snapshot.py" \
+    "$(jq -nc --arg r "$root" --arg t "$tpl_rel" --arg d "$devlog_path" \
+         --arg today "$today" --argjson lim "$limit" \
+         '{root:$r, templates_rel:$t, devlog_path:$d, today:$today, limit:$lim}')" \
+    2>/dev/null) || vault_state=""
+  [ -n "$vault_state" ] || vault_state='{"available":false}'
+
+  # Command Center 와 Obsidian 상태는 이미 있는 것을 재사용한다.
+  local cc; cc=$(_cc_status --json 2>/dev/null) || cc='{}'
+  . "$DEVTRAIL_ROOT/lib/obsidian_app.sh"
+  local running=false; oa_running && running=true
+
+  jq -n --argjson vault "$vault_state" --argjson cc "$cc" \
+        --argjson running "$running" --arg root "$root" '{
+    configured: true,
+    vault: { available: ($vault.available // false), path: $root },
+    today: ($vault.today // null),
+    projects: ($vault.projects // null),
+    inbox: ($vault.inbox // null),
+    notes: ($vault.notes // null),
+    recent: ($vault.recent // null),
+    command_center: {
+      installed: ($cc.installed // "unknown"),
+      enabled: ($cc.enabled // "unknown"),
+      installed_version: ($cc.installed_version // "unknown"),
+      available_version: ($cc.available_version // "unknown"),
+      update_state: ($cc.update_state // "unknown"),
+      restart_recommended: ($cc.restart_required // false)
+    },
+    obsidian: { running: $running }
+  }'
+}
+
 command_center_cmd() {
   local sub="${1:-status}"
   [ $# -gt 0 ] && shift
@@ -504,7 +567,8 @@ command_center_cmd() {
     enable)    _cc_enable "$@" ;;
     disable)   _cc_disable "$@" ;;
     status)    _cc_status "$@" ;;
+    snapshot)  _cc_snapshot "$@" ;;
     uninstall) _cc_uninstall "$@" ;;
-    *) die "$(L "알 수 없는 하위 명령" "Unknown subcommand"): $sub  (install|update|enable|disable|status|uninstall)" ;;
+    *) die "$(L "알 수 없는 하위 명령" "Unknown subcommand"): $sub  (install|update|enable|disable|status|snapshot|uninstall)" ;;
   esac
 }
