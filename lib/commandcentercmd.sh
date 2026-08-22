@@ -28,7 +28,7 @@ _cc_dest() { printf '%s/plugins/%s' "$(_cc_dot)" "$DT_CC_ID"; }
 # 배포물 목록. manifest 와 main 은 필수, styles 는 있으면 함께 간다.
 _cc_files() {
   local f
-  for f in manifest.json main.js styles.css; do
+  for f in ${DT_CC_FILES_OVERRIDE:-manifest.json main.js styles.css}; do
     [ -f "$DT_CC_SRC/$f" ] && printf '%s\n' "$f"
   done
 }
@@ -190,6 +190,49 @@ _cc_disable() {
 # ⚠️ 감지는 쉽게, 적용은 승인 후에만. 실행 중인 Obsidian 아래에서 파일을
 #    갈아치우면 로딩 상태가 꼬인다.
 
+# 버전을 자릿수로 비교한다.
+#
+# ⚠️ 문자열 비교로는 1.10.0 이 1.9.0 보다 작다고 나온다. 실제로 다음 릴리스에서
+#    바로 틀릴 수 있는 종류의 버그다.
+# ⚠️ bash 3.2 다 — 배열 없이 IFS 로 자른다.
+#
+# -1 (a<b) · 0 (a=b) · 1 (a>b)
+_cc_semver_cmp() {
+  local a="$1" b="$2" i x y oldifs
+  oldifs="$IFS"
+  for i in 1 2 3; do
+    IFS='.'; set -- $a; eval "x=\${$i:-0}"
+    set -- $b; eval "y=\${$i:-0}"
+    IFS="$oldifs"
+    # 숫자가 아닌 자리(프리릴리스 등)는 0 으로 본다 — 짐작해서 순서를 만들지 않는다.
+    case "$x" in ''|*[!0-9]*) x=0 ;; esac
+    case "$y" in ''|*[!0-9]*) y=0 ;; esac
+    [ "$x" -gt "$y" ] && { IFS="$oldifs"; printf '1\n'; return 0; }
+    [ "$x" -lt "$y" ] && { IFS="$oldifs"; printf -- '-1\n'; return 0; }
+  done
+  IFS="$oldifs"
+  printf '0\n'
+}
+
+# 원본이 통째로 멀쩡한가. 하나라도 어긋나면 설치본을 건드리지 않는다.
+_cc_validate_src() {
+  _cc_require_src
+  jq empty "$DT_CC_SRC/manifest.json" >/dev/null 2>&1 \
+    || die "$(L "manifest 가 올바른 JSON 이 아닙니다" "The manifest is not valid JSON"): $DT_CC_SRC/manifest.json"
+  local v; v=$(jq -r '.version // ""' "$DT_CC_SRC/manifest.json" 2>/dev/null)
+  [ -n "$v" ] \
+    || die "$(L "manifest 에 version 이 없습니다 — 무엇으로 바꾸는지 알 수 없습니다" \
+               "The manifest has no version — there is no way to tell what this would install")"
+  # 필수 파일이 다 있고 읽히는가.
+  local f
+  for f in manifest.json main.js styles.css; do
+    [ -r "$DT_CC_SRC/$f" ] \
+      || die "$(L "원본에 필수 파일이 없습니다 — 절반만 바꾸지 않습니다" \
+                 "The source is missing a required file — refusing a partial update"): $f"
+  done
+  printf '%s\n' "$v"
+}
+
 _cc_src_version()  { jq -r '.version // ""' "$DT_CC_SRC/manifest.json" 2>/dev/null; }
 _cc_inst_version() { jq -r '.version // ""' "$(_cc_dest)/manifest.json" 2>/dev/null; }
 
@@ -204,7 +247,11 @@ _cc_update() {
     shift
   done
   require_config; require_bins jq
-  _cc_require_src
+
+  # ⚠️ 원본을 통째로 검증한 뒤에만 진행한다. 절반만 바뀐 플러그인이 최악이다 —
+  #    manifest 는 새 버전인데 코드는 옛것이면 Obsidian 이 무엇을 로드했는지
+  #    아무도 모른다.
+  local want; want=$(_cc_validate_src)
 
   local dest; dest=$(_cc_dest)
   step "$(L "Command Center 업데이트" "Update Command Center")"
@@ -215,16 +262,28 @@ _cc_update() {
     return 0
   fi
 
-  local have want
-  have=$(_cc_inst_version); want=$(_cc_src_version)
+  local have; have=$(_cc_inst_version)
   info "  $(L "설치됨" "Installed"): ${have:-unknown}"
-  info "  $(L "저장소" "Repository"): ${want:-unknown}"
+  info "  $(L "저장소" "Repository"): ${want}"
 
-  # ⚠️ 버전이 같아도 파일이 다를 수 있다(개발 중 수정). 그래도 같은 버전이면
-  #    바꾸지 않는다 — 사용자가 고친 것을 말없이 되돌리면 안 된다.
-  if [ -n "$have" ] && [ "$have" = "$want" ]; then
+  if [ -z "$have" ]; then
+    warn "$(L "설치본의 버전을 읽을 수 없습니다" "Cannot read the installed version")"
+    dim "   $(L "다시 설치하세요" "Reinstall"): devtrail command-center install --apply"
+    return 0
+  fi
+
+  local cmp; cmp=$(_cc_semver_cmp "$want" "$have")
+  if [ "$cmp" = "0" ]; then
+    echo; ok "$(L "최신입니다" "Already up to date")"
+    return 0
+  fi
+  # ⚠️ 설치본이 더 새로우면 되돌리지 않는다. 사용자가 손으로 넣었을 수도 있고,
+  #    말없이 낮추면 그 사람이 쓰던 기능이 사라진다.
+  if [ "$cmp" = "-1" ]; then
     echo
-    ok "$(L "최신입니다" "Already up to date")"
+    warn "$(L "설치본이 더 새롭습니다 — 낮추지 않습니다" \
+             "The installed copy is newer — not downgrading")"
+    dim "   ${have} > ${want}"
     return 0
   fi
 
@@ -241,23 +300,57 @@ _cc_update() {
     return 0
   fi
 
-  jr_begin command-center-update
-  local n=0
+  # ── 스테이징 ──────────────────────────────────────────────────────────────
+  # 새 파일 전체를 임시 자리에 먼저 모아 읽히는지 확인한다. 여기서 실패하면
+  # 설치 폴더는 손도 대지 않은 상태다.
+  local stage; stage=$(mktemp -d "${TMPDIR:-/tmp}/devtrail-cc.XXXXXX") \
+    || die "$(L "임시 폴더를 만들지 못했습니다" "Could not create a temporary directory")"
+  local staged=0
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    if [ -f "$dest/$f" ]; then
-      jr_backup "$dest/$f" >/dev/null \
-        || { jr_end; die "$(L "백업 실패 — 원본을 건드리지 않습니다" \
-                             "Backup failed — leaving the original alone"): $dest/$f"; }
-    fi
-    cp "$DT_CC_SRC/$f" "$dest/$f" || { jr_end; die "$(L "복사 실패" "Copy failed"): $f"; }
-    [ -f "$dest/$f" ] || jr_created "$dest/$f"
-    n=$((n + 1))
+    cp "$DT_CC_SRC/$f" "$stage/$f" 2>/dev/null || {
+      rm -rf "$stage"
+      die "$(L "원본을 읽지 못했습니다 — 설치본을 건드리지 않았습니다" \
+               "Could not read the source — the installed copy was left alone"): $f"
+    }
+    staged=$((staged + 1))
   done <<EOF
 $(_cc_files)
 EOF
+  [ "$staged" -gt 0 ] || { rm -rf "$stage"; die "$(L "옮길 파일이 없습니다" "Nothing to install")"; }
 
-  ok "$(L "${have:-?} → ${want} · 파일 ${n}개" "${have:-?} → ${want} · ${n} files")"
+  # ── 교체 ──────────────────────────────────────────────────────────────────
+  jr_begin command-center-update
+  local failed=""
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if [ -f "$dest/$f" ]; then
+      jr_backup "$dest/$f" >/dev/null || { failed="$f"; break; }
+    else
+      # ⚠️ 없던 파일은 created 로 남긴다 — 그래야 undo 가 지울 수 있다.
+      #    백업만 남기면 undo 가 '되돌릴 내용' 을 못 찾아 새 파일이 살아남는다.
+      jr_created "$dest/$f"
+    fi
+    cp "$stage/$f" "$dest/$f" || { failed="$f"; break; }
+  done <<EOF
+$(_cc_files)
+EOF
+  rm -rf "$stage"
+
+  if [ -n "$failed" ]; then
+    # 여기까지 바꾼 것을 되돌린다 — 부분 업데이트 상태로 두지 않는다.
+    warn "$(L "교체 중 실패했습니다 — 되돌립니다" "The swap failed — rolling back"): $failed"
+    # ⚠️ 지금 job 을 그대로 되감는다. 부분 업데이트 상태로 두면 manifest 와
+    #    코드가 어긋난 채 남는다.
+    local job="$DT_JOB"
+    jr_end
+    jr_undo "$job" --apply >/dev/null 2>&1 \
+      || warn "$(L "되돌리기도 실패했습니다" "The rollback failed too"): devtrail undo $job"
+    die "$(L "업데이트하지 못했습니다. 설치본은 그대로입니다" \
+             "Could not update. The installed copy is unchanged")"
+  fi
+
+  ok "$(L "${have} → ${want}" "${have} → ${want}")"
   oa_warn_if_running || dim "   $(L "다음에 Obsidian 을 열면 적용됩니다" "It applies next time you open Obsidian")"
   dim "   $(L "되돌리기" "Undo"): devtrail undo"
   jr_end
@@ -289,9 +382,15 @@ _cc_status() {
   minapp=$(jq -r '.minAppVersion // ""' "$DT_CC_SRC/manifest.json" 2>/dev/null)
   [ -n "$minapp" ] || minapp=unknown
 
-  local upd=unknown
+  # ⚠️ '다르다' 와 '더 새롭다' 는 다른 사실이다. 설치본이 앞서 있는데
+  #    update_available: true 라고 말하면 화면이 거짓을 말한다.
+  local upd=unknown state=unknown
   if [ "$have" != unknown ] && [ "$want" != unknown ]; then
-    [ "$have" = "$want" ] && upd=false || upd=true
+    case "$(_cc_semver_cmp "$want" "$have")" in
+      0)  upd=false; state=up_to_date ;;
+      1)  upd=true;  state=update_available ;;
+      -1) upd=false; state=installed_newer ;;
+    esac
   fi
 
   # 실행 중이면 지금 바꾼 것이 아직 안 보인다.
@@ -311,6 +410,7 @@ _cc_status() {
     jq -n --arg id "$DT_CC_ID" \
       --argjson i "$installed" --argjson e "$enabled" \
       --arg have "$have" --arg want "$want" --arg upd "$upd" \
+      --arg state "$state" \
       --arg minapp "$minapp" --argjson restart "$restart" \
       --arg tpl "$tpl" --arg omni "$omni" --arg dest "$dest" '{
         id: $id,
@@ -319,6 +419,7 @@ _cc_status() {
         installed_version: $have,
         available_version: $want,
         update_available: (if $upd == "unknown" then "unknown" else ($upd == "true") end),
+        update_state: $state,
         min_app_version: $minapp,
         restart_required: $restart,
         install_path: $dest,
@@ -338,6 +439,9 @@ _cc_status() {
   if [ "$upd" = true ]; then
     warn "$(L "업데이트 있음" "Update available"): ${have} → ${want}"
     dim "   devtrail command-center update"
+  elif [ "$state" = installed_newer ]; then
+    warn "$(L "설치본이 더 새롭습니다" "The installed copy is newer"): ${have} > ${want}"
+    dim "   $(L "낮추지 않습니다" "Not downgrading")"
   elif [ "$upd" = false ]; then
     ok "$(L "최신" "Up to date")"
   fi

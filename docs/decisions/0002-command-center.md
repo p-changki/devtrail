@@ -128,14 +128,21 @@ D2·D3 이 만나면 릴리스 다운로드가 필요 없어진다. 빌드가 �
 
 | | 누가 | 언제 |
 |---|---|---|
-| 감지 | `devtrail doctor` · `command-center status` | 자동·수시 |
+| 감지 | `devtrail doctor` · `command-center status` | **그 명령을 실행할 때** |
 | 적용 | `command-center update --apply` | **사용자 승인 후에만** |
 | 화면 | Command Center | 상태 안내만. 스스로 받거나 바꾸지 않는다 |
 
 ⚠️ 실행 중인 Obsidian 아래에서 플러그인 파일을 갈아치우면 로딩 상태가
 꼬인다. 적용은 되지만 반영은 재시작 뒤다 — 그 사실을 반드시 말한다.
 
-**호환성은 감지까지만 자동이다.** Obsidian 이 API 를 바꾸면 코드 수정이
+⚠️ **Obsidian 을 켤 때 자동으로 도는 것은 없다.** 백그라운드 검사도, 주기적
+확인도 없다. `devtrail doctor` 나 `command-center status` 를 **사용자가 실행할
+때** 비교한다. "자동 감지" 라고 쓰면 없는 기능을 있다고 말하는 것이다.
+
+Command Center 화면은 네트워크 요청도, 자동 다운로드도, 자동 파일 교체도
+하지 않는다.
+
+**호환성은 감지까지가 전부다.** Obsidian 이 API 를 바꾸면 코드 수정이
 필요하고, 그건 자동화할 수 없다. 대신 없는 명령·없는 플러그인을 만나면
 그 버튼만 끄고 안내한다(graceful degradation). 화면 전체를 죽이지 않는다.
 

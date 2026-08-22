@@ -207,17 +207,40 @@ function captureFile(c, lang) {
  * ⚠️ 없으면 null 을 준다. 비슷한 명령을 대신 실행하지 않는다 — 검색을
  *    눌렀는데 다른 것이 열리는 편이 아무 일도 안 일어나는 것보다 나쁘다.
  */
-function findCommandByPluginId(app, pluginId) {
+/* 설치된 검색 플러그인에서 '검색 모달을 여는' 명령 하나를 고른다.
+ *
+ * ⚠️ id 로 시작하는 명령 중 첫 번째를 집으면 안 된다. Omnisearch 는 검색 말고도
+ *    인덱스 재생성·캐시 비우기·링크 삽입 같은 명령을 갖는다 — 검색 버튼이
+ *    인덱스를 다시 만들면 사용자는 무슨 일이 일어났는지 모른다.
+ *
+ * ⚠️ 확신할 수 없으면 null 을 돌려준다. '뭐라도 부르는' 것보다 '안 부르는' 것이
+ *    낫다. 화면은 그때 기본 검색으로 떨어지거나 버튼을 끈다.
+ *
+ * ⚠️ 명령 id 를 하드코딩하지 않는다. 이름과 접미사를 함께 보고 판별한다 —
+ *    플러그인이 id 를 바꿔도 견디고, 엉뚱한 명령은 걸러진다.
+ */
+const SEARCH_VERBS = /(^|[-_ ])(search|find|query)([-_ ]|$)/i;
+const SEARCH_TARGETS = /(modal|palette|open|show|all[-_ ]?notes|vault|everything)/i;
+/* 검색처럼 보이지만 검색이 아닌 것들. */
+const SEARCH_EXCLUDE = /(index|cache|rebuild|reindex|insert|link|copy|toggle|setting|refresh)/i;
+
+function findSearchCommand(app, pluginIds) {
   const all = (app.commands && app.commands.commands) || {};
-  const ids = Object.keys(all).filter((id) => id.startsWith(pluginId + ':'));
-  if (ids.length === 0) return null;
-  // 검색 플러그인의 주 명령을 고른다. 이름으로 고르는 것이라 id 가 바뀌어도
-  // 견딘다. 못 고르면 첫 번째를 쓰고, 무엇을 실행할지 화면에 보여준다.
-  const preferred =
-    ids.find((id) => /(^|:)open/.test(id)) ||
-    ids.find((id) => /search/i.test(id)) ||
-    ids[0];
-  return { id: preferred, name: (all[preferred] && all[preferred].name) || preferred };
+  const ids = pluginIds || SEARCH_PLUGINS;
+  for (const pid of ids) {
+    const prefix = pid + ':';
+    for (const id of Object.keys(all)) {
+      if (!id.startsWith(prefix)) continue;
+      const suffix = id.slice(prefix.length);
+      const name = (all[id] && all[id].name) || '';
+      // 이름과 접미사 어느 쪽에서도 제외어가 보이면 거른다.
+      if (SEARCH_EXCLUDE.test(suffix) || SEARCH_EXCLUDE.test(name)) continue;
+      // 검색을 뜻하는 낱말이 있고, 무엇을 여는지도 드러나야 고른다.
+      const hay = suffix + ' ' + name;
+      if (SEARCH_VERBS.test(hay) && SEARCH_TARGETS.test(hay)) return id;
+    }
+  }
+  return null;
 }
 
 /* ── 프로젝트 보드 ──────────────────────────────────────────────────────────
@@ -328,7 +351,7 @@ const TEXT = {
     week: '주차',
     mDevlog: '오늘 일지', mProjects: '활성 프로젝트', mInbox: 'Inbox',
     mWeek: '이번 주 노트', mTrouble: '트러블슈팅', mOverdue: '다시 볼 것',
-    colToday: '오늘 현황', lastEdit: '마지막 수정', colProjects: '활성 프로젝트', colRecent: '최근 기록',
+    colToday: '오늘 현황', devlogMake: '기록 탭의 [개발일지] 로 만드세요.', lastEdit: '마지막 수정', colProjects: '활성 프로젝트', colRecent: '최근 기록',
     hDevlog: '오늘 개발일지가 있는지', hProjects: 'status 가 active 인 프로젝트',
     hInbox: '아직 정리하지 않은 포착물', hWeek: '최근 7일에 만든 노트',
     hTrouble: '기록해 둔 트러블슈팅', hOverdue: 'review_at 이 지난 노트',
@@ -393,7 +416,7 @@ const TEXT = {
     week: 'Week',
     mDevlog: "Today's log", mProjects: 'Active projects', mInbox: 'Inbox',
     mWeek: 'Notes this week', mTrouble: 'Troubleshooting', mOverdue: 'To revisit',
-    colToday: 'Today', lastEdit: 'Last edit', colProjects: 'Active projects', colRecent: 'Recent',
+    colToday: 'Today', devlogMake: 'Create one from [Devlog] on the Capture tab.', lastEdit: 'Last edit', colProjects: 'Active projects', colRecent: 'Recent',
     hDevlog: 'Whether today has a devlog', hProjects: 'Projects with status active',
     hInbox: 'Captures you have not sorted yet', hWeek: 'Notes created in the last 7 days',
     hTrouble: 'Troubleshooting notes you kept', hOverdue: 'Notes past their review_at',
@@ -483,24 +506,62 @@ class CommandCenterView extends obsidian.ItemView {
       return;
     }
 
+    return this.viewHome(body, t, model, devlog);
+  }
+
+  /* ── 홈 ───────────────────────────────────────────────────────────────
+   *
+   * 한 화면에서 '지금 무엇을 하면 되는가' 에 답한다.
+   *
+   *   지표     오늘·프로젝트·Inbox·이번주·트러블·다시볼것
+   *   좌측     오늘 현황 · Inbox 미리보기
+   *   중앙     프로젝트 보드            ← 화면의 중심
+   *   아래     최근 기록
+   *
+   * ⚠️ 보드는 프로젝트 탭과 같은 함수를 쓴다. 두 벌로 나뉘면 한쪽만 고쳐진다 —
+   *    이 저장소가 dirs.devlog 로 이미 세 번 겪은 일이다. */
+  async viewHome(body, t, model, devlog) {
     this.metrics(body, t, model, devlog);
 
-    // 3열. 좁아지면 CSS 가 열을 줄인다 — 사이드 패널에서도 깨지지 않는다.
-    const cols = body.createEl('div', { cls: 'devtrail-cc-columns' });
+    // ⚠️ 오늘 할 일은 개발일지의 체크박스다. 보드로 복제하지 않는다 —
+    //    같은 일을 두 곳에 적으면 어느 쪽도 믿을 수 없게 된다.
+    //    viewToday 와 같은 방식으로 읽는다.
+    let open = [];
+    if (devlog) {
+      try {
+        const raw = await this.app.vault.read(devlog);
+        open = raw.split('\n').filter((l) => /^\s*- \[ \]/.test(l));
+      } catch (e) { open = []; }
+    }
 
-    this.card(cols, t.colToday, devlog ? 1 : 0, (list) => {
-      if (!devlog) { list.createEl('p', { text: t.devlogNo, cls: 'devtrail-cc-muted' }); return; }
-      this.row(list, devlog.basename, devlog, t.open);
-    });
+    const ws = body.createEl('div', { cls: 'devtrail-cc-workspace' });
 
-    this.card(cols, t.colProjects, model.projects.length, (list) => {
-      if (model.projects.length === 0) {
-        list.createEl('p', { text: t.emptyProjects, cls: 'devtrail-cc-muted' }); return;
+    // 좌측 — 좁은 정보 열.
+    const side = ws.createEl('div', { cls: 'devtrail-cc-side' });
+    this.card(side, t.colToday, devlog ? 1 : 0, (list) => {
+      if (!devlog) {
+        list.createEl('p', { text: t.devlogNo, cls: 'devtrail-cc-muted' });
+        list.createEl('p', { text: t.devlogMake, cls: 'devtrail-cc-muted' });
+        return;
       }
-      for (const p of model.projects.slice(0, 6)) this.projectRow(list, t, p);
+      this.row(list, devlog.basename, devlog, t.open);
+      for (const line of open.slice(0, 5)) {
+        list.createEl('div', {
+          text: '☐ ' + line.replace(/^\s*- \[ \]\s*/, ''),
+          cls: 'devtrail-cc-row devtrail-cc-muted',
+        });
+      }
     });
+    this.inboxPreview(side, t, model);
 
-    this.card(cols, t.colRecent, model.recent.length, (list) => {
+    // 중앙 — 프로젝트 보드.
+    const main = ws.createEl('div', { cls: 'devtrail-cc-main' });
+    const h = main.createEl('div', { cls: 'devtrail-cc-card-head' });
+    h.createEl('h3', { text: t.colProjects });
+    this.board(main, t, model);
+
+    // 아래 — 최근 기록.
+    this.card(body, t.colRecent, model.recent.length, (list) => {
       for (const r of model.recent.slice(0, 8)) {
         const el = list.createEl('div', { cls: 'devtrail-cc-row' });
         const a = el.createEl('a', { text: r.file.basename, cls: 'devtrail-cc-link' });
@@ -513,7 +574,21 @@ class CommandCenterView extends obsidian.ItemView {
         if (r.type) this.badge(el, r.type, 'type');
       }
     });
+  }
 
+  /* Inbox 미리보기. 숫자만 보여주면 무엇이 쌓였는지 알 수 없다.
+   *
+   * ⚠️ 여기서 분류하거나 상태를 바꾸지 않는다 — 열어서 사용자가 정한다. */
+  inboxPreview(parent, t, model) {
+    this.card(parent, t.mInbox, model.inbox.length, (list) => {
+      if (model.inbox.length === 0) {
+        list.createEl('p', { text: t.emptyInbox, cls: 'devtrail-cc-muted' });
+        return;
+      }
+      for (const i of model.inbox.slice(0, 5)) {
+        this.row(list, i.file.basename, i.file, t.open);
+      }
+    });
   }
 
   /* ── 지표 ─────────────────────────────────────────────────────────────
@@ -567,12 +642,11 @@ class CommandCenterView extends obsidian.ItemView {
    *    없는 기능을 있는 척하게 된다.
    * ⚠️ 명령 id 를 짐작해서 부르지 않는다. 레지스트리에 있는지 먼저 확인한다. */
   searchBar(root, t) {
-    let found = null;
-    for (const pid of SEARCH_PLUGINS) {
-      found = findCommandByPluginId(this.app, pid);
-      if (found) break;
-    }
-    // Omnisearch 가 없으면 Obsidian 기본 검색으로 떨어진다 — 있을 때만.
+    const all = (this.app.commands && this.app.commands.commands) || {};
+    const pick = findSearchCommand(this.app);
+    let found = pick ? { id: pick, name: (all[pick] && all[pick].name) || pick } : null;
+    // 확신할 수 있는 검색 명령이 없으면 Obsidian 기본 검색으로 떨어진다 —
+    // 그것도 실제로 있을 때만.
     if (!found && commandExists(this.app, CORE_SEARCH)) {
       found = { id: CORE_SEARCH, name: t.searchCore };
     }
@@ -699,14 +773,21 @@ class CommandCenterView extends obsidian.ItemView {
    * 넷으로 나누고, 어디에도 못 넣은 것은 따로 모은다. 빈 컬럼에 0 을
    * 늘어놓지 않는다 — 무엇을 하면 채워지는지 말한다. */
   viewProjects(body, t, model) {
+    this.board(body, t, model);
+  }
+
+  /* ── 프로젝트 보드 ─────────────────────────────────────────────────
+   *
+   * 홈의 중앙과 프로젝트 탭이 **같은 함수**를 쓴다. 두 벌로 나뉘면 한쪽만
+   * 고쳐지고, 그 순간 두 화면이 서로 다른 말을 한다. */
+  board(parent, t, model) {
     if (model.projects.length === 0) {
-      const e = body.createEl('div', { cls: 'devtrail-cc-empty' });
+      const e = parent.createEl('div', { cls: 'devtrail-cc-empty' });
       e.createEl('p', { text: t.emptyProjects });
       e.createEl('p', { text: t.emptyProjectsHelp, cls: 'devtrail-cc-muted' });
       return;
     }
 
-    // 한 번만 훑어 컬럼별로 나눈다.
     const buckets = { planning: [], active: [], blocked: [], done: [] };
     const unstaged = [];
     for (const p of model.projects) {
@@ -717,7 +798,7 @@ class CommandCenterView extends obsidian.ItemView {
     // ⚠️ 단계 미지정은 다섯 번째 컬럼이 아니다. 상태가 아니라 '빠진 것' 이므로
     //    보드 위에 두어 먼저 눈에 띄게 한다.
     if (unstaged.length > 0) {
-      const box = body.createEl('div', { cls: 'devtrail-cc-unstaged' });
+      const box = parent.createEl('div', { cls: 'devtrail-cc-unstaged' });
       const h = box.createEl('div', { cls: 'devtrail-cc-unstaged-head' });
       icon(h.createEl('span'), 'help-circle');
       h.createEl('strong', { text: `${t.unstaged} ${unstaged.length}` });
@@ -726,7 +807,7 @@ class CommandCenterView extends obsidian.ItemView {
       for (const p of unstaged) this.projectCard(list, t, p, null);
     }
 
-    const board = body.createEl('div', { cls: 'devtrail-cc-board' });
+    const board = parent.createEl('div', { cls: 'devtrail-cc-board' });
     for (const [key, ic] of BOARD_COLUMNS) {
       const items = buckets[key];
       const col = board.createEl('section', { cls: `devtrail-cc-col devtrail-cc-col--${key}` });
@@ -950,4 +1031,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { TEXT, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findCommandByPluginId, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };

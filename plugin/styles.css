@@ -531,3 +531,24 @@
 /* ⚠️ 명령이 없으면 눌리지 않는다 — 조용히 다른 노트를 만들지 않기 위해서다. */
 .devtrail-cc-launch-btn:disabled { cursor: not-allowed; opacity: 0.5; }
 .devtrail-cc-launch-btn .svg-icon { width: 14px; height: 14px; }
+
+/* ── 작업 공간 ──────────────────────────────────────────────────────────────
+ *
+ * 좌측에 좁은 정보 열, 중앙에 프로젝트 보드. 보드가 화면의 중심이다.
+ *
+ * ⚠️ leaf 는 뷰포트가 아니다 — 미디어 쿼리가 아니라 auto-fit 으로 접는다.
+ *    사이드 패널로 끌어다 놓으면 창이 넓어도 1열이 되어야 한다.
+ */
+.devtrail-cc-workspace {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+/* 중앙이 남는 폭을 다 가져간다 — 보드가 넓게 펼쳐져야 읽힌다. */
+.devtrail-cc-main { grid-column: span 3; min-width: 0; }
+.devtrail-cc-side { min-width: 0; }
+
+.devtrail-cc-main > .devtrail-cc-card-head { margin-bottom: 8px; }

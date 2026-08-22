@@ -454,7 +454,9 @@ t_eq "Omnisearch 를 스펙에 박지 않는다" "0" \
 
 t_start "검색: 없으면 안내만 한다"
 # (d) Omnisearch 가 없으면 버튼이 안전하게 비활성화되고 안내가 뜬다
-t_contains "플러그인 id 로 명령을 찾는다" "findCommandByPluginId" "$(cat "$JS")"
+# ⚠️ 옛 계약은 'id 로 시작하는 첫 명령' 이었다. 그건 인덱스 재생성 같은 것을
+#    검색 버튼에 물릴 수 있어 바꿨다 — 이름과 접미사를 함께 본다.
+t_contains "검색 명령을 가려서 찾는다" "findSearchCommand" "$(cat "$JS")"
 t_eq "명령 id 를 하드코딩하지 않는다" "0" \
   "$(grep -cE \"omnisearch:[a-z-]+\" "$JS" | tr -d ' ')"
 t_contains "설치 안내 문구가 있다" "searchMissing" "$(cat "$JS")"
@@ -550,7 +552,9 @@ out2=$(DEVTRAIL_HOME="$HU" DEVTRAIL_CONFIG="$HU/devtrail.config.json" \
        "$DT" command-center update --apply 2>&1)
 a2=$(md5 -q "$VU/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VU/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
 t_eq "파일 그대로" "$b2" "$a2"
-t_contains "최신이라고 말한다" "$(L "최신" "up to date")" "$out2"
+# ⚠️ L 은 CLI 안에서만 사는 함수다. 테스트에서 부르면 빈 문자열이 되어
+#    단언이 공허하게 통과한다 — 실제 문구를 그대로 적는다.
+t_contains "최신이라고 말한다" "최신입니다" "$out2"
 
 t_start "검증 실패 시 기존 설치를 보존한다"
 # ⚠️ 원본이 깨졌으면 아무것도 하지 않는다. 절반만 바꾼 플러그인이 최악이다.
@@ -752,5 +756,230 @@ t_start "여러 줄을 담는 버튼이 높이를 푼다"
 #    2026-08-22 에 사용자 화면이 실제로 이렇게 깨졌다.
 t_contains "지표가 높이를 푼다" "height: auto" \
   "$(sed -n '/^\.devtrail-cc-metric {/,/^}/p' "$CSS")"
+
+# ── 업데이트 안전성 ─────────────────────────────────────────────────────────
+#
+# ⚠️ 절반만 바뀐 플러그인이 최악이다 — manifest 는 새 버전인데 main.js 는 옛것이면
+#    Obsidian 이 무엇을 로드했는지 아무도 모른다. 검증을 다 마친 뒤에만 바꾼다.
+
+t_start "버전을 SemVer 로 비교한다"
+cat > "$T_TMP/sv.sh" <<'SHEOF'
+. "$1/lib/common.sh" >/dev/null 2>&1 || true
+. "$1/lib/commandcentercmd.sh"
+bad=0
+chk() { got=$(_cc_semver_cmp "$1" "$2"); [ "$got" = "$3" ] || { echo "MISMATCH $1 $2 want $3 got $got"; bad=1; }; }
+chk 1.0.0 1.0.0 0
+chk 1.0.1 1.0.0 1
+chk 1.0.0 1.0.1 -1
+chk 1.10.0 1.9.0 1        # 문자열 비교였다면 틀린다
+chk 0.2.10 0.2.9 1
+chk 2.0.0 1.99.99 1
+chk 1.2 1.2.0 0           # 자리가 모자라면 0 으로 채운다
+[ $bad = 0 ] && echo OK || echo FAIL
+SHEOF
+t_eq "자릿수를 숫자로 본다" "OK" "$(bash "$T_TMP/sv.sh" "$ROOT" 2>&1 | tail -1)"
+
+t_start "다운그레이드하지 않는다"
+VD=$(_vault vd); HD="$T_TMP/hd"; _cfg "$VD" "$HD"
+DEVTRAIL_HOME="$HD" DEVTRAIL_CONFIG="$HD/devtrail.config.json" \
+  "$DT" command-center install --apply >/dev/null 2>&1
+# 설치본을 저장소보다 새 버전으로 만든다.
+python3 - "$VD/.obsidian/plugins/$PID/manifest.json" <<'PYEOF'
+import json, io, sys
+p = sys.argv[1]
+d = json.load(io.open(p, encoding='utf-8')); d['version'] = '99.0.0'
+json.dump(d, io.open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+PYEOF
+keep=$(md5 -q "$VD/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VD/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
+out=$(DEVTRAIL_HOME="$HD" DEVTRAIL_CONFIG="$HD/devtrail.config.json" \
+      "$DT" command-center update --apply 2>&1)
+now=$(md5 -q "$VD/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VD/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
+t_eq "설치본이 더 새로우면 안 바꾼다" "$keep" "$now"
+t_eq "버전도 그대로" "99.0.0" "$(jq -r .version "$VD/.obsidian/plugins/$PID/manifest.json")"
+t_contains "왜 안 바꿨는지 말한다" "설치본이 더 새롭" "$out"
+st=$(DEVTRAIL_HOME="$HD" DEVTRAIL_CONFIG="$HD/devtrail.config.json" \
+     "$DT" command-center status --json 2>/dev/null)
+printf '%s' "$st" > "$T_TMP/newer.json"
+t_eq "status 가 사실대로 말한다" "installed_newer" \
+  "$(jq -r '.update_state' "$T_TMP/newer.json")"
+t_eq "업데이트 있다고 하지 않는다" "false" \
+  "$(jq -r '.update_available | tostring' "$T_TMP/newer.json")"
+
+t_start "version 없는 원본을 거부한다"
+NOV="$T_TMP/nover"; mkdir -p "$NOV"
+printf '%s' '{"id":"devtrail-command-center","name":"x"}' > "$NOV/manifest.json"
+cp "$ROOT/plugin/main.js" "$NOV/main.js"; cp "$ROOT/plugin/styles.css" "$NOV/styles.css"
+keep2=$(jq -r .version "$VD/.obsidian/plugins/$PID/manifest.json")
+out=$(DT_CC_SRC_OVERRIDE="$NOV" DEVTRAIL_HOME="$HD" \
+      DEVTRAIL_CONFIG="$HD/devtrail.config.json" "$DT" command-center update --apply 2>&1)
+t_eq "설치본을 건드리지 않는다" "$keep2" \
+  "$(jq -r .version "$VD/.obsidian/plugins/$PID/manifest.json")"
+t_contains "version 이 없다고 말한다" "version" "$out"
+
+t_start "깨진 JSON 원본을 거부한다"
+BJ="$T_TMP/badjson"; mkdir -p "$BJ"
+printf '%s' '{"id": broken' > "$BJ/manifest.json"
+cp "$ROOT/plugin/main.js" "$BJ/main.js"; cp "$ROOT/plugin/styles.css" "$BJ/styles.css"
+out=$(DT_CC_SRC_OVERRIDE="$BJ" DEVTRAIL_HOME="$HD" \
+      DEVTRAIL_CONFIG="$HD/devtrail.config.json" "$DT" command-center update --apply 2>&1)
+t_eq "여전히 그대로" "$keep2" \
+  "$(jq -r .version "$VD/.obsidian/plugins/$PID/manifest.json")"
+
+t_start "부분 업데이트가 남지 않는다"
+# ⚠️ 필수 파일 하나가 없는 원본. manifest 만 새 버전으로 갈아치우고 끝나면
+#    Obsidian 이 새 manifest + 옛 코드를 로드한다 — 아무도 모르는 상태다.
+HALF="$T_TMP/half"; mkdir -p "$HALF"
+python3 - "$ROOT/plugin/manifest.json" "$HALF/manifest.json" <<'PYEOF'
+import json, io, sys
+d = json.load(io.open(sys.argv[1], encoding='utf-8')); d['version'] = '99.99.99'
+json.dump(d, io.open(sys.argv[2], 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+PYEOF
+cp "$ROOT/plugin/main.js" "$HALF/main.js"   # styles.css 를 일부러 빼둔다
+before=$(jq -r .version "$VD/.obsidian/plugins/$PID/manifest.json")
+out=$(DT_CC_SRC_OVERRIDE="$HALF" DEVTRAIL_HOME="$HD" \
+      DEVTRAIL_CONFIG="$HD/devtrail.config.json" "$DT" command-center update --apply 2>&1)
+t_eq "manifest 가 앞서 나가지 않는다" "$before" \
+  "$(jq -r .version "$VD/.obsidian/plugins/$PID/manifest.json")"
+t_eq "styles.css 가 남아 있다" "yes" \
+  "$([ -f "$VD/.obsidian/plugins/$PID/styles.css" ] && echo yes || echo no)"
+
+t_start "undo 가 신규 파일까지 지운다"
+VN2=$(_vault vn2); HN2="$T_TMP/hn2"; _cfg "$VN2" "$HN2"
+DEVTRAIL_HOME="$HN2" DEVTRAIL_CONFIG="$HN2/devtrail.config.json" \
+  "$DT" command-center install --apply >/dev/null 2>&1
+python3 - "$VN2/.obsidian/plugins/$PID/manifest.json" <<'PYEOF'
+import json, io, sys
+p = sys.argv[1]; d = json.load(io.open(p, encoding='utf-8')); d['version'] = '0.0.1'
+json.dump(d, io.open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+PYEOF
+# 새 릴리스가 파일 하나를 더 들고 온다.
+NEWSRC="$T_TMP/newsrc"; mkdir -p "$NEWSRC"
+cp "$ROOT/plugin/manifest.json" "$ROOT/plugin/main.js" "$ROOT/plugin/styles.css" "$NEWSRC/"
+printf '/* 새 릴리스가 들고 온 파일 */
+' > "$NEWSRC/extra.js"
+oldjs=$(md5 -q "$VN2/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VN2/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
+DT_CC_SRC_OVERRIDE="$NEWSRC" DT_CC_FILES_OVERRIDE="manifest.json main.js styles.css extra.js" \
+  DEVTRAIL_HOME="$HN2" DEVTRAIL_CONFIG="$HN2/devtrail.config.json" \
+  "$DT" command-center update --apply >/dev/null 2>&1
+t_eq "새 파일이 들어왔다" "yes" \
+  "$([ -f "$VN2/.obsidian/plugins/$PID/extra.js" ] && echo yes || echo no)"
+job=$(ls -1 "$HN2/journal" | tail -1)
+DEVTRAIL_HOME="$HN2" DEVTRAIL_CONFIG="$HN2/devtrail.config.json" \
+  "$DT" undo "$job" --apply >/dev/null 2>&1
+# ⚠️ 저널이 생겼는지가 아니라, undo 가 실제로 되돌렸는지를 본다.
+t_eq "undo 가 새 파일을 지운다" "no" \
+  "$([ -f "$VN2/.obsidian/plugins/$PID/extra.js" ] && echo yes || echo no)"
+t_eq "기존 파일이 이전 내용으로 돌아온다" "$oldjs" \
+  "$(md5 -q "$VN2/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VN2/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)"
+t_eq "버전도 되돌아온다" "0.0.1" \
+  "$(jq -r .version "$VN2/.obsidian/plugins/$PID/manifest.json")"
+
+# ── 검색 명령 선택 ──────────────────────────────────────────────────────────
+#
+# ⚠️ 플러그인 id 로 시작하는 명령 중 첫 번째를 고르면 엉뚱한 것이 실행된다.
+#    Omnisearch 는 'omnisearch:show-modal' 말고도 인덱스 재생성 같은 명령을
+#    갖는다 — 검색 버튼이 인덱스를 다시 만들면 사용자는 무슨 일인지 모른다.
+t_start "검색과 무관한 명령을 고르지 않는다"
+cat > "$T_TMP/pick.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.findSearchCommand !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const app = (names) => ({ commands: { commands: Object.fromEntries(
+  Object.entries(names).map(([id, name]) => [id, { id, name }])) } });
+
+const bad = [];
+const eq = (label, got, want) => { if (got !== want) bad.push(`${label}: want ${want} got ${got}`); };
+
+// ① 검색 모달을 여는 명령이 있으면 그것을 고른다.
+eq('모달을 고른다', f.findSearchCommand(app({
+  'omnisearch:rebuild-index': 'Rebuild index',
+  'omnisearch:show-modal': 'Search in all notes',
+})), 'omnisearch:show-modal');
+
+// ② 목록 순서가 달라도 같은 것을 고른다 — 첫 번째를 집으면 안 된다.
+eq('순서에 흔들리지 않는다', f.findSearchCommand(app({
+  'omnisearch:show-modal': 'Search in all notes',
+  'omnisearch:rebuild-index': 'Rebuild index',
+})), 'omnisearch:show-modal');
+
+// ③ ⚠️ 확신할 수 있는 명령이 없으면 아무것도 고르지 않는다.
+//    '뭐라도 부르는' 것보다 '안 부르는' 것이 낫다.
+eq('확신 없으면 안 고른다', f.findSearchCommand(app({
+  'omnisearch:rebuild-index': 'Rebuild index',
+  'omnisearch:clear-cache': 'Clear cache',
+})), null);
+
+// ④ 플러그인이 아예 없으면 null.
+eq('없으면 null', f.findSearchCommand(app({ 'editor:fold-all': 'Fold all' })), null);
+
+// ⑤ ⚠️ 이름에 '검색' 이 들어 있어도 검색이 아닌 것들. 제외어가 없으면
+//    "Open search settings" 가 검색 모달로 뽑힌다 — 버튼을 누르면 설정이 열린다.
+eq('설정을 고르지 않는다', f.findSearchCommand(app({
+  'omnisearch:open-settings': 'Open search settings',
+})), null);
+eq('인덱스 갱신을 고르지 않는다', f.findSearchCommand(app({
+  'omnisearch:refresh-index': 'Refresh search index and show progress',
+})), null);
+// 진짜 검색이 섞여 있으면 그것만 고른다.
+eq('섞여 있어도 진짜만', f.findSearchCommand(app({
+  'omnisearch:open-settings': 'Open search settings',
+  'omnisearch:show-modal': 'Vault search',
+})), 'omnisearch:show-modal');
+
+// ⑥ id 에 search 가 들어 있다고 아무 명령이나 고르지 않는다.
+eq('id 만 보고 고르지 않는다', f.findSearchCommand(app({
+  'omnisearch:insert-link': 'Insert link to note',
+})), null);
+
+console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "검색 모달만 고른다" "OK" "$(node "$T_TMP/pick.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+
+t_start "기본 검색으로 떨어진다"
+# ⚠️ 기본 검색 명령도 있는지 확인하고 부른다. 없는 id 를 부르면 아무 일도
+#    일어나지 않고, 사용자는 버튼이 고장 났다고 생각한다.
+t_contains "존재를 확인한다" "commandExists(this.app, CORE_SEARCH)" "$(cat "$JS")"
+t_contains "둘 다 없으면 비활성" "b.setAttr('disabled', 'true')" \
+  "$(sed -n '/searchBar(root, t)/,/^  }/p' "$JS")"
+
+# ── 홈 레이아웃 ────────────────────────────────────────────────────────────
+#
+# 홈은 '지금 무엇을 하면 되는가' 한 화면이다. 프로젝트 보드가 중앙에 있고
+# 좌측에 오늘·Inbox 가, 아래에 최근 기록이 붙는다.
+t_start "홈이 보드를 중앙에 둔다"
+HOME_VIEW="$(sed -n '/async viewHome(body, t, model, devlog)/,/^  \/\* Inbox 미리보기/p' "$JS")"
+t_contains "작업 공간 레이아웃" "devtrail-cc-workspace" "$(cat "$JS")"
+t_contains "홈이 보드를 그린다" "this.board(" "$HOME_VIEW"
+t_contains "좌측에 오늘" "colToday" "$HOME_VIEW"
+t_contains "좌측에 Inbox" "inboxPreview" "$HOME_VIEW"
+t_contains "아래에 최근 기록" "colRecent" "$HOME_VIEW"
+# ⚠️ 보드를 두 번 구현하지 않는다 — 홈과 프로젝트 탭이 갈리면 한쪽만 고쳐진다.
+t_eq "보드 구현은 하나다" "1" "$(grep -c '^  board(parent, t, model)' "$JS")"
+
+t_start "Inbox 미리보기가 실제 Inbox 만 본다"
+t_contains "모델의 inbox 를 쓴다" "model.inbox" \
+  "$(sed -n '/inboxPreview(parent, t, model)/,/^  }/p' "$JS")"
+t_contains "몇 개만 보여준다" ".slice(0," \
+  "$(sed -n '/inboxPreview(parent, t, model)/,/^  }/p' "$JS")"
+# 비어 있으면 0 을 반복하지 않고 다음 행동을 말한다.
+t_contains "빈 상태 문구" "emptyInbox" "$(cat "$JS")"
+
+t_start "좁아지면 접힌다"
+t_contains "작업 공간 CSS" "devtrail-cc-workspace" "$(cat "$CSS")"
+# ⚠️ leaf 는 뷰포트가 아니다 — 미디어 쿼리가 아니라 auto-fit 으로 접는다.
+# ⚠️ leaf 는 뷰포트가 아니다. @media 로 폭을 재면 사이드 패널에서 창 크기를
+#    보고 3열을 그린다 — auto-fit 으로 '내 폭' 에 반응해야 한다.
+#    (max-width 속성 자체는 정상이다 — 금지하는 것은 폭 기반 @media 다.)
+t_eq "폭 기반 미디어 쿼리가 없다" "0" \
+  "$(grep -cE '@media[^{]*(max-width|min-width)' "$CSS" | tr -d ' ')"
 
 t_end

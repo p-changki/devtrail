@@ -98,6 +98,37 @@ DevTrail 은 **검색기를 만들지 않습니다.** 화면 위 검색 버튼�
 명령이 없으면 버튼이 **눌리지 않습니다.** 조용히 다른 노트를 만드는 대신
 `devtrail obsidian` 실행과 Obsidian 재시작을 안내합니다.
 
+## 업데이트
+
+```
+devtrail command-center status     지금 상태
+devtrail doctor                    설치·버전·업데이트 여부
+devtrail command-center update     무엇이 바뀌는지만 (파일 안 바꿈)
+devtrail command-center update --apply
+devtrail undo <작업> --apply       되돌리기
+```
+
+⚠️ **Obsidian 을 켤 때 자동으로 검사하지 않습니다.** 위 명령을 실행할 때만
+비교합니다. 화면이 스스로 무언가를 받아오는 일도 없습니다.
+
+⚠️ **적용 뒤에는 Obsidian 을 완전히 종료(`⌘Q`)했다가 다시 열어야 합니다.**
+Obsidian 은 시작할 때만 플러그인을 읽습니다 — 실행 중에 파일을 바꿔도 화면은
+옛 코드 그대로입니다. 화면이 소스와 달라 보이면 **십중팔구 이것**입니다.
+
+설치본과 저장소 버전이 같은지 확인하려면:
+
+```
+devtrail command-center status --json | jq '{installed_version, available_version, update_state}'
+```
+
+`update_state` 는 셋 중 하나입니다:
+
+| | |
+|---|---|
+| `up_to_date` | 같음 |
+| `update_available` | 저장소가 더 새로움 |
+| `installed_newer` | **설치본이 더 새로움** — 낮추지 않습니다 |
+
 ## 이번 버전에 없는 것
 
 | | 이유 |

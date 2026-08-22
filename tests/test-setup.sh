@@ -95,7 +95,9 @@ out=$(DEVTRAIL_HOME="$H0" DEVTRAIL_CONFIG="$H0/devtrail.config.json" \
       "$DT" setup apply --input "$T_TMP/spec0.json" 2>&1)
 # ⚠️ --apply 없이 부르면 plan 과 같은 화면을 낸다. dry-run 화면을 따로
 #    만들면 "미리 본 것" 과 "실제로 되는 것" 이 갈린다.
-t_contains "무엇이 바뀌는지 보여준다" "$(L "적용하면 이렇게 됩니다" "Here is what would change")" "$out"
+# ⚠️ L 은 CLI 안에서만 사는 함수다. 테스트에서 부르면 빈 문자열이 되어
+#    단언이 아무것도 검사하지 않는다 — 실제 문구를 그대로 적는다.
+t_contains "무엇이 바뀌는지 보여준다" "적용하면 이렇게 됩니다" "$out"
 t_contains "적용 방법을 알려준다" "--apply" "$out"
 t_no_file "설정을 쓰지 않는다" "$H0/devtrail.config.json"
 t_no_file "볼트를 만들지 않는다" "$V0/notes"
