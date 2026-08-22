@@ -1,0 +1,10 @@
+{
+  "_why": "DevTrail Command Center 배포물의 단일 정본. 설치·업데이트·undo·테스트가 모두 이 목록만 읽는다. 글롭으로 훑지 않는 이유는 ADR 0004 에 있다 — 글롭은 제거된 파일을 다루지 못한다. files.json 자신도 목록에 있다: 숨은 추가를 두지 않는다. 이 파일이 설치본에 있어야 다음 업데이트가 '이전에 무엇을 깔았나' 를 안다.",
+  "schema": 1,
+  "files": [
+    "manifest.json",
+    "main.js",
+    "styles.css",
+    "files.json"
+  ]
+}

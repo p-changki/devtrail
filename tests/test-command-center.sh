@@ -865,9 +865,11 @@ NEWSRC="$T_TMP/newsrc"; mkdir -p "$NEWSRC"
 cp "$ROOT/plugin/manifest.json" "$ROOT/plugin/main.js" "$ROOT/plugin/styles.css" "$NEWSRC/"
 printf '/* 새 릴리스가 들고 온 파일 */
 ' > "$NEWSRC/extra.js"
+# ⚠️ 목록도 함께 바꾼다. 배포물은 files.json 이 정한다 — 환경변수로
+#    갈아끼우던 길(DT_CC_FILES_OVERRIDE)은 없앴다.
+jq '.files += ["extra.js"]' "$ROOT/plugin/files.json" > "$NEWSRC/files.json"
 oldjs=$(md5 -q "$VN2/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VN2/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
-DT_CC_SRC_OVERRIDE="$NEWSRC" DT_CC_FILES_OVERRIDE="manifest.json main.js styles.css extra.js" \
-  DEVTRAIL_HOME="$HN2" DEVTRAIL_CONFIG="$HN2/devtrail.config.json" \
+DT_CC_SRC_OVERRIDE="$NEWSRC" DEVTRAIL_HOME="$HN2" DEVTRAIL_CONFIG="$HN2/devtrail.config.json" \
   "$DT" command-center update --apply >/dev/null 2>&1
 t_eq "새 파일이 들어왔다" "yes" \
   "$([ -f "$VN2/.obsidian/plugins/$PID/extra.js" ] && echo yes || echo no)"
@@ -940,6 +942,9 @@ _bad_src() {
   printf '%s' "$2" > "$d/manifest.json"
   cp "$ROOT/plugin/main.js" "$d/main.js"
   [ "$3" = "styles.css" ] || cp "$ROOT/plugin/styles.css" "$d/styles.css"
+  # ⚠️ 배포 목록은 항상 넣는다. 목록이 없으면 '목록 없음' 으로 거부되어
+  #    정작 시험하려던 것(파일 누락·id 불일치)을 못 본다.
+  cp "$ROOT/plugin/files.json" "$d/files.json"
   printf '%s' "$d"
 }
 
