@@ -100,6 +100,8 @@ case "$cmd" in
     . "$DEVTRAIL_ROOT/lib/plugins.sh"; plugins_cmd "$@" ;;
   command-center)
     . "$DEVTRAIL_ROOT/lib/commandcentercmd.sh"; command_center_cmd "$@" ;;
+  capture)
+    . "$DEVTRAIL_ROOT/lib/capturecmd.sh"; capture_cmd "$@" ;;
   app)
     . "$DEVTRAIL_ROOT/lib/appcmd.sh"; app_cmd "$@" ;;
   dashboard)

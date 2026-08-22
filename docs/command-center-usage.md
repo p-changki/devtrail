@@ -129,6 +129,31 @@ devtrail command-center status --json | jq '{installed_version, available_versio
 | `update_available` | 저장소가 더 새로움 |
 | `installed_newer` | **설치본이 더 새로움** — 낮추지 않습니다 |
 
+## Obsidian 없이 링크 받아두기
+
+```
+devtrail capture youtube --url "https://youtu.be/…"          # 무엇이 생길지만
+devtrail capture youtube --url "https://youtu.be/…" --apply  # 실제로 만든다
+devtrail undo <작업> --apply                                  # 되돌리기
+```
+
+Obsidian 이 꺼져 있어도 됩니다. 다음에 열면 노트가 보입니다.
+
+**받는 주소:** `watch?v=…` · `youtu.be/…` · `shorts/…` (파라미터가 붙어도 됩니다)
+채널·재생목록 주소는 받지 않습니다 — 무엇을 저장할지 정할 수 없기 때문입니다.
+
+**같은 영상을 다시 넣으면** 새 노트를 만들지 않고 기존 노트가 어디 있는지
+알려줍니다. 영상 id 로 판별하므로 `youtu.be` 든 `watch?v=` 든 같은 것으로 봅니다.
+
+⚠️ **요약과 적용점은 비어 있습니다.** 캡처는 받아두는 일이고, 자막을 읽고
+`tl_dr_oneline` 과 `key_for_me` 를 채우는 것은 유튜브 스킬이 합니다.
+빈 칸은 "아직 안 했다" 는 사실입니다 — 그럴듯한 문장으로 채우지 않습니다.
+노트의 `status` 가 `inbox` 인 이유가 이것입니다.
+
+⚠️ **네트워크는 저장할 때만 씁니다.** URL 을 넣는 것만으로 요청하지 않고,
+제목·채널만 가져옵니다. 실패해도 URL 로 저장합니다 — 링크를 잃는 것보다 낫습니다.
+자막 전문은 노트에 옮기지 않습니다.
+
 ## 이번 버전에 없는 것
 
 | | 이유 |

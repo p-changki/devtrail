@@ -304,6 +304,7 @@ run behav "프로젝트 키"   ./tests/test-project-keys.sh
 run behav "부트스트랩"     ./tests/test-bootstrap.sh
 run behav "setup 계약"     ./tests/test-setup.sh
 run behav "command center" ./tests/test-command-center.sh
+run behav "capture"        ./tests/test-capture.sh
 
 [ "$GROUP" = all ] && run swift "swift 빌드" \
   sh -c 'cd app && swift build -c release 2>&1 | tail -1'
