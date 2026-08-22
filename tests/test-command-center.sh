@@ -28,6 +28,60 @@ export DEVTRAIL_OBSIDIAN_REGISTRY="$T_TMP/no-registry.json"
 PID=devtrail-command-center
 
 # ── 플러그인 자체 ────────────────────────────────────────────────────────────
+# ⚠️ $( ) 안에 heredoc 을 쓰지 않는다. bash 가 종료어를 제대로 못 찾아
+#    파이썬이 그 줄까지 읽고 NameError 를 낸다 — 결과가 비면 개수를 세는
+#    단언은 0 을 얻어 **조용히 통과**한다. 2026-08-22 에 네 곳이 그랬다.
+#    스크립트를 파일로 두고 부른다.
+_run_py() {
+  local name="$1"; shift
+  python3 "$T_TMP/py/$name.py" "$@"
+}
+mkdir -p "$T_TMP/py"
+cat > "$T_TMP/py/_pyck1.py" <<'PYSRC'
+import re, sys
+css = open(sys.argv[1], encoding='utf-8').read()
+blk = css.find('@media (prefers-reduced-motion: reduce)')
+if blk < 0:
+    print('no'); raise SystemExit
+# 블록 앞쪽에서 마지막으로 transition 을 선언한 자리
+before = css[:blk]
+last = before.rfind('transition:')
+# 블록 뒤에 transition 선언이 남아 있으면 그것이 이긴다 — 실패다.
+after = css[blk:]
+end = after.find('\n}\n')
+tail = after[end:] if end > 0 else ''
+print('no' if 'transition:' in tail else 'yes')
+PYSRC
+cat > "$T_TMP/py/_pyck2.py" <<'PYSRC'
+import re, sys
+css = open(sys.argv[1], encoding='utf-8').read()
+# transition 을 선언한 최상위 선택자들
+animated = set()
+for m in re.finditer(r'(?m)^(\.devtrail-cc-[a-z-]+)[^{]*\{([^}]*)\}', css):
+    if 'transition:' in m.group(2):
+        animated.add(m.group(1))
+blk = re.search(r'@media \(prefers-reduced-motion: reduce\) \{(.*?)\n\}', css, re.S)
+covered = set(re.findall(r'\.devtrail-cc-[a-z-]+', blk.group(1))) if blk else set()
+print(' '.join(sorted(animated - covered)))
+PYSRC
+cat > "$T_TMP/py/_pyck3.py" <<'PYSRC'
+import re, sys
+from collections import Counter
+css = open(sys.argv[1], encoding='utf-8').read()
+sels = [m.group(1).strip() for m in re.finditer(r'(?m)^([^@/}\s][^{]*)\{', css)]
+print(' '.join(sorted(s for s, n in Counter(sels).items() if n > 1)))
+PYSRC
+cat > "$T_TMP/py/_pyck4.py" <<'PYSRC'
+import re, sys
+css = open(sys.argv[1], encoding='utf-8').read()
+bad = []
+for m in re.finditer(r'(?m)^(\.[a-z-]+[^{]*)\{([^}]*)\}', css):
+    props = [p.split(':')[0].strip() for p in m.group(2).split(';') if ':' in p]
+    if any(props.count(x) > 1 for x in set(props)):
+        bad.append(m.group(1).strip())
+print(' '.join(bad))
+PYSRC
+
 t_start "플러그인 파일"
 t_file "manifest.json" "$ROOT/plugin/manifest.json"
 t_file "main.js"       "$ROOT/plugin/main.js"
@@ -504,41 +558,13 @@ t_contains "현재 탭을 알린다" "aria-current" "$(cat "$JS")"
 # ⚠️ 블록이 '있다' 와 '듣는다' 는 다르다. 같은 특정도라면 **나중 규칙이 이긴다** —
 #    감소된 모션 블록이 transition 선언보다 앞에 있으면 아무 효과가 없다.
 #    2026-08-22 에 실제로 그랬고, 개수만 세던 이 검사는 그것을 못 봤다.
-t_eq "감소된 모션 블록은 하나다" "1" \
-  "$(grep -c 'prefers-reduced-motion' "$CSS" | tr -d ' ')"
-t_eq "그 블록이 마지막 transition 뒤에 온다" "yes" \
-  "$(python3 - "$CSS" <<'"'"'PYEOF'"'"'
-import re, sys
-css = open(sys.argv[1], encoding='utf-8').read()
-blk = css.find('@media (prefers-reduced-motion: reduce)')
-if blk < 0:
-    print('no'); raise SystemExit
-# 블록 앞쪽에서 마지막으로 transition 을 선언한 자리
-before = css[:blk]
-last = before.rfind('transition:')
-# 블록 뒤에 transition 선언이 남아 있으면 그것이 이긴다 — 실패다.
-after = css[blk:]
-end = after.find('\n}\n')
-tail = after[end:] if end > 0 else ''
-print('no' if 'transition:' in tail else 'yes')
-PYEOF
-)"
-# ⚠️ 그리고 실제로 움직이는 것을 겨냥해야 한다. 이름을 바꾼 뒤 옛 이름이 남으면
-#    블록은 멀쩡해 보이는데 아무것도 끄지 않는다.
-t_eq "움직이는 것을 다 겨냥한다" "" \
-  "$(python3 - "$CSS" <<'"'"'PYEOF'"'"'
-import re, sys
-css = open(sys.argv[1], encoding='utf-8').read()
-# transition 을 선언한 최상위 선택자들
-animated = set()
-for m in re.finditer(r'(?m)^(\.devtrail-cc-[a-z-]+)[^{]*\{([^}]*)\}', css):
-    if 'transition:' in m.group(2):
-        animated.add(m.group(1))
-blk = re.search(r'@media \(prefers-reduced-motion: reduce\) \{(.*?)\n\}', css, re.S)
-covered = set(re.findall(r'\.devtrail-cc-[a-z-]+', blk.group(1))) if blk else set()
-print(' '.join(sorted(animated - covered)))
-PYEOF
-)"
+# ⚠️ 디자인 핸드오프(2026-08-22): "애니메이션 없음. transition 없음."
+#    움직이는 것이 없으면 줄일 모션도 없다 — 블록 자체가 필요 없다.
+#    (예전엔 블록이 transition 선언보다 앞에 있어 아무 효과가 없었다.
+#     같은 함정을 다시 만들지 않으려면 애초에 움직이지 않는 게 낫다.)
+t_eq "움직이지 않는다" "0" "$(grep -c 'transition:' "$CSS" | tr -d ' ')"
+t_eq "animation 도 없다" "0" "$(grep -cE '^\s*animation:' "$CSS" | tr -d ' ')"
+
 t_start "update 는 기본이 읽기 전용"
 VU=$(_vault vu); HU="$T_TMP/hu"; _cfg "$VU" "$HU"
 DEVTRAIL_HOME="$HU" DEVTRAIL_CONFIG="$HU/devtrail.config.json" \
@@ -733,14 +759,8 @@ t_start "CSS 클래스가 두 번 선언되지 않는다"
 #    (접두사가 다르다) 와 .devtrail-cc-header h2 (자손 선택자) 의 중복을
 #    놓쳤고, 루트 블록이 두 번 선언된 채로 지나갔다. 선택자 전부를 본다.
 t_eq "중복 선언이 없다" "" \
-  "$(python3 - "$CSS" <<'"'"'PYEOF'"'"'
-import re, sys
-from collections import Counter
-css = open(sys.argv[1], encoding='utf-8').read()
-sels = [m.group(1).strip() for m in re.finditer(r'(?m)^([^@/}\s][^{]*)\{', css)]
-print(' '.join(sorted(s for s, n in Counter(sels).items() if n > 1)))
-PYEOF
-)"
+  "$(_run_py "_pyck3" "$CSS")"
+# --- _pyck3 ---
 t_start "버전을 SemVer 로 비교한다"
 cat > "$T_TMP/sv.sh" <<'SHEOF'
 . "$1/lib/common.sh" >/dev/null 2>&1 || true
@@ -1034,17 +1054,8 @@ t_start "죽은 CSS 선언이 없다"
 # ⚠️ 한 블록에 같은 속성이 두 번 있으면 앞의 것은 죽은 선언이다. 읽는 사람은
 #    앞의 값이 쓰인다고 믿는다 — 블록을 합칠 때 실제로 생겼다.
 t_eq "같은 속성을 두 번 쓰지 않는다" "" \
-  "$(python3 - "$CSS" <<'"'"'PYEOF'"'"'
-import re, sys
-css = open(sys.argv[1], encoding='utf-8').read()
-bad = []
-for m in re.finditer(r'(?m)^(\.[a-z-]+[^{]*)\{([^}]*)\}', css):
-    props = [p.split(':')[0].strip() for p in m.group(2).split(';') if ':' in p]
-    if any(props.count(x) > 1 for x in set(props)):
-        bad.append(m.group(1).strip())
-print(' '.join(bad))
-PYEOF
-)"
+  "$(_run_py "_pyck4" "$CSS")"
+# --- _pyck4 ---
 # ⚠️ 쓰이지 않는 클래스는 지운다 — 남겨두면 다음 사람이 살아 있다고 믿는다.
 t_eq "쓰이지 않는 클래스가 없다" "" \
   "$(for c in $(grep -oE '^\.devtrail-cc-[a-z-]+ [{]' "$CSS" | sed 's/^\.//;s/ [{]//' | sort -u); do
