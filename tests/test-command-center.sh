@@ -1505,4 +1505,59 @@ t_start "빠른 기록에 기본 단축키가 있다"
 t_contains "프리셋에 등록" "devtrail-command-center:quick-capture" \
   "$(cat "$ROOT/preset/obsidian/hotkeys.tmpl.json")"
 
+# ── 코어 검색 켜기 ─────────────────────────────────────────────────────────
+#
+# ⚠️ 사용자의 Obsidian 설정을 우리가 건드리는 자리다. 규칙 하나로 못박는다:
+#
+#      키가 없다  → 정한 적 없다 → 켠다
+#      false 다   → 끈 것이다   → **되돌리지 않는다**
+#
+#    "우리가 필요하니까" 로 남의 결정을 뒤집으면, 다음에 또 뒤집는다.
+t_start "코어 검색은 정한 적 없을 때만 켠다"
+CPV=$(_vault cp); CPH="$T_TMP/cph"; _cfg "$CPV" "$CPH"
+cprun() { DEVTRAIL_HOME="$CPH" DEVTRAIL_CONFIG="$CPH/devtrail.config.json" "$DT" "$@"; }
+CPF="$CPV/.obsidian/core-plugins.json"
+
+# ① 파일이 없다 → 만들고 켠다
+rm -f "$CPF"
+cprun command-center install --apply >/dev/null 2>&1
+t_eq "없으면 만들어 켠다" "true" "$(jq -r '."global-search" // false' "$CPF" 2>/dev/null)"
+
+# ② 키가 없다 → 켠다. 다른 키는 건드리지 않는다.
+printf '%s' '{"file-explorer":true,"graph":false}' > "$CPF"
+cprun command-center install --apply >/dev/null 2>&1
+t_eq "정한 적 없으면 켠다" "true" "$(jq -r '."global-search"' "$CPF")"
+t_eq "남의 true 를 지키다" "true" "$(jq -r '."file-explorer"' "$CPF")"
+t_eq "남의 false 도 지킨다" "false" "$(jq -r '."graph"' "$CPF")"
+
+# ③ ⚠️ false 다 → 사용자가 끈 것이다. 되돌리지 않는다.
+printf '%s' '{"global-search":false}' > "$CPF"
+cprun command-center install --apply >/dev/null 2>&1
+t_eq "끈 것을 되돌리지 않는다" "false" "$(jq -r '."global-search"' "$CPF")"
+
+# ⑤ ⚠️ 옛 Obsidian 은 core-plugins.json 이 **배열**이다. 우리가 모르는 형식을
+#    고쳐 쓰면 설정을 망가뜨린다 — 그대로 둔다.
+printf '%s' '["file-explorer","graph"]' > "$CPF"
+cprun command-center install --apply >/dev/null 2>&1
+t_eq "배열은 건드리지 않는다" "true" \
+  "$(jq -c '. == ["file-explorer","graph"]' "$CPF" 2>/dev/null)"
+
+# ④ 되돌릴 수 있어야 한다
+printf '%s' '{"file-explorer":true}' > "$CPF"
+cprun command-center install --apply >/dev/null 2>&1
+job=$(ls -1 "$CPH/journal" | tail -1)
+cprun undo "$job" --apply >/dev/null 2>&1
+t_eq "undo 로 원래대로" "null" "$(jq -r '."global-search" // "null"' "$CPF")"
+
+t_start "검색창이 단축키를 알려준다"
+# ⚠️ 여기도 손으로 박지 않는다. 사용자가 ⌘⇧F 를 다른 것으로 바꿨을 수 있고,
+#    그러면 화면이 또 거짓을 말한다.
+NAVSRC3="$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS")"
+t_contains "검색 단축키도 읽는다" "hotkeyLabel(this.app, CORE_SEARCH)" "$NAVSRC3"
+t_contains "입력창 안에 둔다" "devtrail-cc-searchkbd" "$NAVSRC3"
+t_contains "CSS 도 있다" "devtrail-cc-searchkbd" "$(cat "$CSS")"
+# 배정이 없으면 아무것도 안 보여준다 — hotkeyLabel 이 이미 그렇게 한다.
+t_eq "검색창에도 키를 박지 않는다" "0" \
+  "$(printf '%s' "$NAVSRC3" | grep -cE "'(⌘|⇧|⌥|⌃|Ctrl|Cmd)" | tr -d ' ')"
+
 t_end

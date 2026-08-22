@@ -79,6 +79,11 @@ _cc_install() {
    $(L "먼저" "Run first"): devtrail obsidian"
 
   jr_begin command-center-install
+  # ⚠️ 검색은 Obsidian 코어가 한다. 정한 적 없으면 켜 준다 — 끈 사람의
+  #    결정은 되돌리지 않는다(pl_core_enable).
+  pl_core_enable "$dot" global-search || \
+    warn "$(L "코어 검색을 켜지 못했습니다 — 설정에서 직접 켜세요" \
+             "Could not enable core search — turn it on in settings")"
   jr_mkdir "$dest" || { jr_end; die "$(L "폴더 생성 실패" "Could not create folder"): $dest"; }
 
   local ok_n=0

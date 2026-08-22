@@ -1287,3 +1287,13 @@
   outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
 }
+
+/* 검색창 안의 단축키 — 배정된 것을 읽어 보여준다. 없으면 아예 안 그린다. */
+.devtrail-cc-searchkbd {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-faint);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 1px 4px;
+}

@@ -1279,6 +1279,13 @@ class CommandCenterView extends obsidian.ItemView {
     input.setAttr('placeholder', t.searchPlaceholder);
     input.setAttr('aria-label', t.searchPlaceholder);
 
+    // 검색 단축키를 입력창 안에 보여준다 — 여기서도 배정된 것을 읽는다.
+    //
+    // ⚠️ ⌘⇧F 를 박지 않는다. 사용자가 바꿨을 수 있고, 그러면 화면이 또
+    //    거짓을 말한다. 배정이 없으면 아무것도 보여주지 않는다.
+    const skey = hotkeyLabel(this.app, CORE_SEARCH);
+    if (skey) box.createEl('span', { text: skey, cls: 'devtrail-cc-searchkbd devtrail-cc-mono' });
+
     const run = searchRunner(this.app);
     const help = right.createEl('span', { cls: 'devtrail-cc-searchhelp' });
     if (run) {
