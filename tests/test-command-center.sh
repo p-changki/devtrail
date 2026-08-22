@@ -378,4 +378,89 @@ t_contains "3열 그리드"  "devtrail-cc-columns" "$(cat "$CSS")"
 t_contains "폭에 따라 접힌다" "auto-fit" "$(cat "$CSS")"
 t_contains "지표도 접힌다" "minmax" "$(cat "$CSS")"
 
+# ── 단축키 ───────────────────────────────────────────────────────────────────
+#
+# ⚠️ 남의 단축키를 덮어쓰는 것은 되돌리기 어려운 피해다. 사용자는 자기가
+#    무엇을 잃었는지도 모른다. 기존 hotkeys.json 은 전부 보존한다.
+#
+# ⚠️ 별도의 덮어쓰기 구현을 만들지 않는다. 기존 병합 구조(lib/gen/hotkeys.py
+#    의 place())가 이미 충돌을 처리한다 — 이미 배정된 것은 유지하고, 점유된
+#    조합은 대체를 찾거나 건너뛰며 보고한다.
+t_start "단축키: 사용자 것을 보존한다"
+HKSPEC="$ROOT/preset/obsidian/hotkeys.tmpl.json"
+PATHS2="$T_TMP/hk-paths.json"
+jq -n '{paths: {templates: "notes/템플릿", devlog: "notes/개발/개발일지"}}' > "$PATHS2"
+
+# 사용자가 쓰던 단축키 — 우리와 무관한 것 + 우리가 원하는 조합을 이미 점유한 것
+MINE="$T_TMP/mine-hotkeys.json"
+jq -n '{
+  "workspace:split-vertical": [{"modifiers":["Mod"],"key":"\\"}],
+  "editor:toggle-bold":       [{"modifiers":["Mod"],"key":"B"}]
+}' > "$MINE"
+
+OUT=$(DT_TEMPLATES_DIR="$ROOT/preset/templates/ko" \
+      python3 "$ROOT/lib/gen/hotkeys.py" hotkeys "$HKSPEC" "$PATHS2" "$MINE" "" 2>/dev/null)
+printf '%s' "$OUT" > "$T_TMP/hk-out.json"
+t_json "결과가 유효한 JSON" "$T_TMP/hk-out.json"
+
+# (a) 기존 사용자 단축키가 그대로 남는다
+t_eq "쓰던 단축키 1 유지" '[{"modifiers":["Mod"],"key":"\\"}]' \
+  "$(jq -c '."workspace:split-vertical"' "$T_TMP/hk-out.json")"
+t_eq "쓰던 단축키 2 유지" '[{"modifiers":["Mod"],"key":"B"}]' \
+  "$(jq -c '."editor:toggle-bold"' "$T_TMP/hk-out.json")"
+
+t_start "단축키: 충돌을 덮어쓰지 않는다"
+# 우리가 쓰려는 조합(Mod+Shift+D)을 사용자가 이미 점유하고 있다면?
+BUSY="$T_TMP/busy.json"
+jq -n '{"my:own-command": [{"modifiers":["Mod","Shift"],"key":"D"}]}' > "$BUSY"
+OUT2=$(DT_TEMPLATES_DIR="$ROOT/preset/templates/ko" \
+       python3 "$ROOT/lib/gen/hotkeys.py" hotkeys "$HKSPEC" "$PATHS2" "$BUSY" "" 2>/dev/null)
+printf '%s' "$OUT2" > "$T_TMP/hk-busy.json"
+t_eq "점유한 조합은 그대로" '[{"modifiers":["Mod","Shift"],"key":"D"}]' \
+  "$(jq -c '."my:own-command"' "$T_TMP/hk-busy.json")"
+# 우리 명령은 다른 키로 가거나 배정되지 않는다 — 같은 조합을 쓰면 안 된다.
+t_eq "같은 조합을 두 명령에 주지 않는다" "1" \
+  "$(jq '[to_entries[] | .value[] | (.modifiers|sort|join("+")) + "+" + .key]
+        | map(select(. == "Mod+Shift+D")) | length' "$T_TMP/hk-busy.json")"
+
+# ⚠️ 우리가 먼저 배정한 키를 사용자가 나중에 다른 명령에 준 경우.
+#    place() 는 '이미 우리 것' 이라 유지하고 넘어가는데, 그러면 두 명령이
+#    같은 조합을 갖고도 아무도 모른다. 고쳐주지는 않는다 — 사용자 선택일 수
+#    있다 — 대신 반드시 말한다(2026-08-22 실물에서 실제로 발생).
+t_start "단축키: 뒤늦은 충돌을 말해준다"
+LATE="$T_TMP/late.json"
+jq -n '{
+  "obsidian-shellcommands:shell-command-devtrail-activity-force":
+    [{"modifiers":["Mod","Shift"],"key":"J"}],
+  "my:precious": [{"modifiers":["Mod","Shift"],"key":"J"}]
+}' > "$LATE"
+ERR=$(DT_TEMPLATES_DIR="$ROOT/preset/templates/ko" \
+      python3 "$ROOT/lib/gen/hotkeys.py" hotkeys "$HKSPEC" "$PATHS2" "$LATE" "" 2>&1 >/dev/null)
+t_contains "겹친다고 알려준다" "Mod+Shift+J" "$ERR"
+t_contains "어느 명령인지 말한다" "my:precious" "$ERR"
+
+t_start "단축키: Command Center"
+# (c) 실제 존재하는 명령만 가리킨다 — 우리 플러그인의 command id 는
+#     manifest id + ':' + addCommand 의 id 다.
+CCID="$(jq -r '.id' "$ROOT/plugin/manifest.json"):open"
+t_contains "스펙에 Command Center 가 있다" "$CCID" "$(cat "$HKSPEC")"
+t_contains "플러그인이 그 명령을 만든다" "id: 'open'" "$(cat "$JS")"
+t_ne "단축키가 배정된다" "null" "$(jq -r --arg c "$CCID" '.[$c]' "$T_TMP/hk-out.json")"
+
+# ⚠️ 외부 플러그인 명령은 스펙에 박지 않는다. 설치 여부도, 명령 id 도
+#    실행 시점에만 알 수 있다.
+t_eq "Omnisearch 를 스펙에 박지 않는다" "0" \
+  "$(grep -ci 'omnisearch' "$HKSPEC" | tr -d ' ')"
+
+t_start "검색: 없으면 안내만 한다"
+# (d) Omnisearch 가 없으면 버튼이 안전하게 비활성화되고 안내가 뜬다
+t_contains "플러그인 id 로 명령을 찾는다" "findCommandByPluginId" "$(cat "$JS")"
+t_eq "명령 id 를 하드코딩하지 않는다" "0" \
+  "$(grep -cE \"omnisearch:[a-z-]+\" "$JS" | tr -d ' ')"
+t_contains "설치 안내 문구가 있다" "searchMissing" "$(cat "$JS")"
+
+# (e) 명령 실행이 파일을 만들지 않는다 — 이미 위에서 보지만 검색에도 해당한다
+t_eq "검색 버튼이 파일을 만들지 않는다" "0" \
+  "$(grep -cE 'vault\.create\(|vault\.modify\(' "$JS" | tr -d ' ')"
+
 t_end

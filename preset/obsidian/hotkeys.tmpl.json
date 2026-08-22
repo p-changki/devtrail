@@ -124,6 +124,15 @@
         "Mod",
         "Shift"
       ]
+    },
+    {
+      "command": "devtrail-command-center:open",
+      "key": "J",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ],
+      "_why": "DevTrail Command Center 열기. 우리 플러그인이라 명령 id 가 확정적이다."
     }
   ],
   "fallback_keys": [

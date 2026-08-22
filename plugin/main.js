@@ -192,6 +192,32 @@ function captureFile(c, lang) {
   return lang === 'en' ? c.en : c.ko;
 }
 
+/* 설치된 플러그인의 명령을 레지스트리에서 찾는다.
+ *
+ * ⚠️ 명령 id 를 박지 않는다. 외부 플러그인의 id 는 버전에 따라 바뀌고,
+ *    박아두면 바뀐 날 조용히 죽는다. 우리가 아는 것은 '플러그인 id' 뿐이고
+ *    그건 사용자가 설치할 때 고르는 이름이라 안정적이다.
+ *
+ * ⚠️ 없으면 null 을 준다. 비슷한 명령을 대신 실행하지 않는다 — 검색을
+ *    눌렀는데 다른 것이 열리는 편이 아무 일도 안 일어나는 것보다 나쁘다.
+ */
+function findCommandByPluginId(app, pluginId) {
+  const all = (app.commands && app.commands.commands) || {};
+  const ids = Object.keys(all).filter((id) => id.startsWith(pluginId + ':'));
+  if (ids.length === 0) return null;
+  // 검색 플러그인의 주 명령을 고른다. 이름으로 고르는 것이라 id 가 바뀌어도
+  // 견딘다. 못 고르면 첫 번째를 쓰고, 무엇을 실행할지 화면에 보여준다.
+  const preferred =
+    ids.find((id) => /(^|:)open/.test(id)) ||
+    ids.find((id) => /search/i.test(id)) ||
+    ids[0];
+  return { id: preferred, name: (all[preferred] && all[preferred].name) || preferred };
+}
+
+/* 검색은 Obsidian 이 이미 갖고 있다(⌘O · ⌘⇧F). 여기서 제공하는 것은
+ * '설치된 검색 플러그인으로 가는 통로' 뿐이다 — 검색기를 새로 만들지 않는다. */
+const SEARCH_PLUGINS = ['omnisearch'];
+
 /* 그 명령이 실제로 있는가. 없으면 조용히 다른 노트를 만들지 않는다 —
  * 무엇을 해야 하는지 말한다. */
 function commandExists(app, id) {
@@ -246,6 +272,9 @@ const TEXT = {
     mWeek: '이번 주 노트', mTrouble: '트러블슈팅', mOverdue: '다시 볼 것',
     colToday: '오늘 현황', colProjects: '활성 프로젝트', colRecent: '최근 기록',
     quickCapture: '빠른 기록',
+    search: '검색',
+    searchMissing: 'Omnisearch 가 설치되어 있지 않습니다',
+    searchMissingHelp: 'Obsidian 설정 → 커뮤니티 플러그인에서 설치하면 여기에 연결됩니다. 기본 검색은 ⌘O · ⌘⇧F 입니다.',
     yes: '있음', no: '없음',
   },
   en: {
@@ -291,6 +320,9 @@ const TEXT = {
     mWeek: 'Notes this week', mTrouble: 'Troubleshooting', mOverdue: 'To revisit',
     colToday: 'Today', colProjects: 'Active projects', colRecent: 'Recent',
     quickCapture: 'Quick capture',
+    search: 'Search',
+    searchMissing: 'Omnisearch is not installed',
+    searchMissingHelp: 'Install it in Settings → Community plugins and it will be linked here. Built-in search is ⌘O · ⌘⇧F.',
     yes: 'yes', no: 'no',
   },
 };
@@ -435,6 +467,29 @@ class CommandCenterView extends obsidian.ItemView {
     for (const c of CAPTURES) {
       this.action(grid, labels[c.key] || c.key, templaterCommandId(data.paths, captureFile(c, data.lang)), t);
     }
+    this.searchRow(box, t);
+  }
+
+  /* 설치된 검색 플러그인으로 가는 통로.
+   *
+   * ⚠️ 없으면 아무것도 추측하지 않는다. 무엇을 설치하면 되는지, 그리고
+   *    그때까지 무엇을 쓰면 되는지(Obsidian 기본 검색)를 말한다. */
+  searchRow(box, t) {
+    let found = null;
+    for (const pid of SEARCH_PLUGINS) {
+      found = findCommandByPluginId(this.app, pid);
+      if (found) break;
+    }
+    const row = box.createEl('div', { cls: 'devtrail-cc-searchrow' });
+    if (!found) {
+      row.createEl('p', { text: t.searchMissing, cls: 'devtrail-cc-muted' });
+      row.createEl('p', { text: t.searchMissingHelp, cls: 'devtrail-cc-muted' });
+      return;
+    }
+    const b = row.createEl('button', { text: `${t.search} — ${found.name}`, cls: 'devtrail-cc-action' });
+    b.setAttr('aria-label', `${t.search}: ${found.name}`);
+    b.setAttr('title', found.id);
+    b.addEventListener('click', () => this.app.commands.executeCommandById(found.id));
   }
 
   /* ── 네비게이션 ─────────────────────────────────────────────────────── */
@@ -656,4 +711,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { isUserNote, templaterCommandId, captureFile, CAPTURES, isMainLeaf };
+module.exports.__test = { isUserNote, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findCommandByPluginId, SEARCH_PLUGINS };
