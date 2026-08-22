@@ -1223,4 +1223,43 @@ t_contains "기한 라벨" "devtrail-cc-due" "$(cat "$JS")"
 # 표는 5열이다 — 스파크라인 자리가 있어야 한다.
 t_contains "표가 5열" "1fr 84px 1fr 100px 96px" "$(cat "$CSS")"
 
+t_start "할 일은 DevTrail 노트에서만 온다"
+cat > "$T_TMP/tasksrc.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.bearsTasks !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const bad = [];
+const eq = (l, g, w) => { if (g !== w) bad.push(`${l}: want ${w} got ${g}`); };
+
+// ⚠️ type 이 없는 노트 = 가져온 레포 문서. 그 안의 체크박스는 설계안의
+//    항목이지 사용자의 할 일이 아니다. 이 볼트에 그런 노트가 106개 있고
+//    체크박스가 1200개 넘는다 — 세면 화면이 잡음으로 덮인다.
+eq('type 없음', f.bearsTasks({}), false);
+eq('type 빈값', f.bearsTasks({ type: '' }), false);
+
+// 문서를 설명하는 노트도 아니다. "내 언어로 재작성했다" 는 사용법 안내의
+// 확인 목록이지 할 일이 아니다.
+eq('guide', f.bearsTasks({ type: 'guide' }), false);
+eq('moc',   f.bearsTasks({ type: 'moc' }), false);
+eq('doc',   f.bearsTasks({ type: 'doc' }), false);
+
+// 사용자가 실제로 할 일을 적는 곳.
+for (const t of ['devlog', 'todo', 'project-home', 'weekly-review', 'worklog', 'trouble']) {
+  eq(t, f.bearsTasks({ type: t }), true);
+}
+console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "문서의 체크박스를 세지 않는다" "OK" "$(node "$T_TMP/tasksrc.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+t_contains "수집이 그 규칙을 쓴다" "bearsTasks(" \
+  "$(sed -n '/async function openTasksInVault/,/^}/p' "$JS")"
+
 t_end

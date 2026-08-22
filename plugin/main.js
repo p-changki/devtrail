@@ -243,6 +243,28 @@ function findSearchCommand(app, pluginIds) {
   return null;
 }
 
+/* 이 노트의 체크박스를 '할 일' 로 볼 것인가.
+ *
+ * ⚠️ 사양의 `TASK WHERE !completed` 는 DevTrail 노트만 있는 볼트를 가정했다.
+ *    실제 볼트에는 가져온 레포 문서가 섞여 있고, 그 안의 체크박스는 설계안·
+ *    체크리스트의 항목이지 사용자의 할 일이 아니다.
+ *
+ *    2026-08-22 실측: 열린 체크박스가 있는 노트 107개 중 **DevTrail 노트는
+ *    0개**였다. 106개는 type 이 없는 레포 문서, 1개는 사용법 안내였다.
+ *    화면의 "미완료 작업" 다섯 줄이 전부 잡음이었다.
+ *
+ * ⚠️ 그래서 두 가지를 요구한다:
+ *    1. type 이 있어야 한다 — 없으면 DevTrail 이 만든 노트가 아니다
+ *    2. 문서를 설명하는 타입은 뺀다 — 안내문의 "해봤다" 목록은 할 일이 아니다
+ */
+const DOC_TYPES = ['guide', 'moc', 'doc', 'library-note', 'book-note', 'asset-card'];
+
+function bearsTasks(meta) {
+  const type = meta && meta.type;
+  if (typeof type !== 'string' || !type) return false;
+  return DOC_TYPES.indexOf(type) < 0;
+}
+
 /* 볼트 전체의 열린 체크박스.
  *
  * ⚠️ 모든 파일을 읽지 않는다. metadataCache 의 listItems 가 이미 어느 파일에
@@ -257,6 +279,9 @@ async function openTasksInVault(app, paths, limit) {
   for (const f of files) {
     if (out.length >= limit) break;
     const cache = app.metadataCache.getFileCache(f);
+    // ⚠️ 먼저 '이 노트가 할 일을 담는 곳인가' 를 본다. 파일을 읽기 전에
+    //    거르면 볼트가 커져도 읽는 양이 늘지 않는다.
+    if (!bearsTasks((cache && cache.frontmatter) || {})) continue;
     const items = (cache && cache.listItems) || [];
     if (!items.some((i) => i.task === ' ')) continue;
     let raw = '';
@@ -1441,4 +1466,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { TEXT, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
