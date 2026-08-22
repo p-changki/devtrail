@@ -224,6 +224,37 @@ function captureFile(c, lang) {
  * ⚠️ 없으면 null 을 준다. 비슷한 명령을 대신 실행하지 않는다 — 검색을
  *    눌렀는데 다른 것이 열리는 편이 아무 일도 안 일어나는 것보다 나쁘다.
  */
+/* 검색을 실제로 여는 함수를 만든다. 없으면 null.
+ *
+ * ⚠️ 명령만 부르면 사용자가 친 글자가 버려진다. "devlog" 를 치고 Enter 를
+ *    눌렀는데 빈 검색창이 열리면 사용자는 검색이 고장 났다고 느낀다 —
+ *    2026-08-22 에 실제로 그랬다.
+ *
+ * ⚠️ 검색어를 실어 나르는 경로는 Obsidian 의 내부 검색뿐이다:
+ *
+ *      app.internalPlugins.getEnabledPluginById('global-search')
+ *         .openGlobalSearch(query)
+ *
+ *    Obsidian 자신이 태그 클릭·그래프에서 쓰는 관용구다(번들에서 확인).
+ *    Omnisearch 의 명령은 인자를 받지 않아 글자를 못 싣는다 — 그래서 글자를
+ *    지키는 쪽을 먼저 고른다.
+ *
+ * ⚠️ 둘 다 없으면 null 이다. 아무 명령이나 대신 부르지 않는다.
+ */
+function searchRunner(app) {
+  const ip = app.internalPlugins;
+  const core = ip && typeof ip.getEnabledPluginById === 'function'
+    ? ip.getEnabledPluginById('global-search') : null;
+  if (core && typeof core.openGlobalSearch === 'function') {
+    return (query) => core.openGlobalSearch(query);
+  }
+  // 글자는 못 싣지만, 검색 화면을 여는 것이 안 여는 것보다는 낫다.
+  const pick = findSearchCommand(app);
+  if (pick) return () => app.commands.executeCommandById(pick);
+  if (commandExists(app, CORE_SEARCH)) return () => app.commands.executeCommandById(CORE_SEARCH);
+  return null;
+}
+
 /* 설치된 검색 플러그인에서 '검색 모달을 여는' 명령 하나를 고른다.
  *
  * ⚠️ id 로 시작하는 명령 중 첫 번째를 집으면 안 된다. Omnisearch 는 검색 말고도
@@ -1231,11 +1262,10 @@ class CommandCenterView extends obsidian.ItemView {
     input.setAttr('placeholder', t.searchPlaceholder);
     input.setAttr('aria-label', t.searchPlaceholder);
 
-    const found = this.resolveSearch(t);
+    const run = searchRunner(this.app);
     const help = right.createEl('span', { cls: 'devtrail-cc-searchhelp' });
-    if (found) {
-      input.setAttr('title', found.name);
-      const go = () => this.app.commands.executeCommandById(found.id);
+    if (run) {
+      const go = () => run(input.value.trim());
       input.addEventListener('keydown', (ev) => {
         if (ev.key === 'Enter') { ev.preventDefault(); go(); }
       });
@@ -1269,17 +1299,7 @@ class CommandCenterView extends obsidian.ItemView {
     new QuickCaptureModal(this.app, t, { paths: this.paths, lang: this.lang || 'ko' }).open();
   }
 
-  /* 어떤 검색 명령을 부를 것인가.
-   *
-   * ⚠️ 확신할 수 있는 것만 고른다. 없으면 null 이고, 화면은 안내로 떨어진다 —
-   *    'index' 나 'settings' 를 검색이라고 부르느니 안 부르는 게 낫다. */
-  resolveSearch(t) {
-    const all = (this.app.commands && this.app.commands.commands) || {};
-    const pick = findSearchCommand(this.app);
-    if (pick) return { id: pick, name: (all[pick] && all[pick].name) || pick };
-    if (commandExists(this.app, CORE_SEARCH)) return { id: CORE_SEARCH, name: t.searchCore };
-    return null;
-  }
+
 
 
 
@@ -1661,4 +1681,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { TEXT, localDate, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, searchRunner, localDate, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };

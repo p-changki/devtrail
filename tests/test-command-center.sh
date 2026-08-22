@@ -1293,9 +1293,9 @@ t_contains "전체 검색이라고 말한다" "searchPlaceholder" "$(cat "$JS")"
 t_eq "거르기라고 하지 않는다" "0" "$(grep -c '태그로 거르기' "$JS" | tr -d ' ')"
 NAVSRC="$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS")"
 t_contains "Enter 로 실행한다" "ev.key === 'Enter'" "$NAVSRC"
-# 명령 해결은 resolveSearch 한 곳에 있고, nav 는 그것을 부른다.
-t_contains "nav 가 해결을 맡긴다" "this.resolveSearch(t)" "$NAVSRC"
-RESOLVE="$(sed -n '/^  resolveSearch(t) {/,/^  }/p' "$JS")"
+# 검색 실행은 searchRunner 한 곳에 있고, nav 는 그것을 부른다.
+t_contains "nav 가 실행기를 만든다" "searchRunner(this.app)" "$NAVSRC"
+RESOLVE="$(sed -n '/^function searchRunner(app) {/,/^}/p' "$JS")"
 t_contains "검색 명령을 가려 찾는다" "findSearchCommand" "$RESOLVE"
 t_contains "기본 검색으로 떨어진다" "CORE_SEARCH" "$RESOLVE"
 t_contains "존재를 확인하고 부른다" "commandExists" "$RESOLVE"
@@ -1408,5 +1408,58 @@ if command -v node >/dev/null 2>&1; then
 else
   dim "   node 없음 — 건너뜀"
 fi
+
+t_start "검색어가 실려 간다"
+# ⚠️ 명령만 부르면 사용자가 친 글자가 버려진다. "devlog" 를 치고 Enter 를
+#    눌렀는데 빈 검색창이 열리면, 사용자는 검색이 안 된다고 느낀다 —
+#    2026-08-22 에 실제로 그랬다.
+cat > "$T_TMP/searchq.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.searchRunner !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const bad = [];
+let got = null;
+// Obsidian 자신이 쓰는 관용구: getEnabledPluginById('global-search').openGlobalSearch(q)
+const withCore = {
+  internalPlugins: { getEnabledPluginById: (id) =>
+    id === 'global-search' ? { openGlobalSearch: (q) => { got = q; } } : null },
+  commands: { commands: {}, executeCommandById: () => { got = 'COMMAND'; } },
+};
+let r = f.searchRunner(withCore);
+if (!r) bad.push('core 있는데 null');
+else { r('devlog'); if (got !== 'devlog') bad.push('검색어가 안 실렸다: ' + got); }
+
+// 검색어가 비면 그래도 검색 화면은 연다.
+got = null; r(''); if (got !== '') bad.push('빈 검색어: ' + got);
+
+// core 가 없고 Omnisearch 명령만 있으면 그것을 부른다(검색어는 못 싣는다).
+got = null;
+const withOmni = {
+  internalPlugins: { getEnabledPluginById: () => null },
+  commands: {
+    commands: { 'omnisearch:show-modal': { id: 'omnisearch:show-modal', name: 'Vault search' } },
+    executeCommandById: (id) => { got = id; },
+  },
+};
+r = f.searchRunner(withOmni);
+if (!r) bad.push('omnisearch 있는데 null');
+else { r('devlog'); if (got !== 'omnisearch:show-modal') bad.push('omni: ' + got); }
+
+// ⚠️ 둘 다 없으면 null 이다. 아무 명령이나 부르지 않는다.
+if (f.searchRunner({ internalPlugins: { getEnabledPluginById: () => null },
+                     commands: { commands: {} } }) !== null) bad.push('없는데 뭔가 부른다');
+console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "친 글자가 그대로 간다" "OK" "$(node "$T_TMP/searchq.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+t_contains "화면이 그 실행기를 쓴다" "searchRunner(this.app)" "$(cat "$JS")"
 
 t_end
