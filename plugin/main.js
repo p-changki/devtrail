@@ -273,6 +273,25 @@ const STAGE_ALIASES = {
   done: 'done', completed: 'done', complete: 'done', archived: 'done',
 };
 
+/* 개발일지에서 **미완료이고 내용이 있는** 할 일만 고른다.
+ *
+ * ⚠️ 템플릿은 빈 체크박스 '- [ ]' 를 자리표시로 넣는다. 그것까지 그리면 글자
+ *    없는 빈 줄이 쌓인다 — 빈 자리표시는 할 일이 아니다. 2026-08-22 QA
+ *    화면에서 빈 상자 3개로 실제로 드러났다.
+ *
+ * ⚠️ 읽기만 한다. 체크박스를 고치는 것은 Obsidian 이 이미 잘 한다. */
+function openTasks(raw) {
+  if (typeof raw !== 'string') return [];
+  const out = [];
+  for (const line of raw.split('\n')) {
+    const m = line.match(/^\s*- \[ \]\s*(.*)$/);
+    if (!m) continue;
+    const text = m[1].trim();
+    if (text) out.push(text);
+  }
+  return out;
+}
+
 function normalizeStage(raw) {
   if (typeof raw !== 'string') return null;
   const key = raw.trim().toLowerCase();
@@ -529,8 +548,7 @@ class CommandCenterView extends obsidian.ItemView {
     let open = [];
     if (devlog) {
       try {
-        const raw = await this.app.vault.read(devlog);
-        open = raw.split('\n').filter((l) => /^\s*- \[ \]/.test(l));
+        open = openTasks(await this.app.vault.read(devlog));
       } catch (e) { open = []; }
     }
 
@@ -546,22 +564,24 @@ class CommandCenterView extends obsidian.ItemView {
       }
       this.row(list, devlog.basename, devlog, t.open);
       for (const line of open.slice(0, 5)) {
-        list.createEl('div', {
-          text: '☐ ' + line.replace(/^\s*- \[ \]\s*/, ''),
-          cls: 'devtrail-cc-row devtrail-cc-muted',
-        });
+        list.createEl('div', { text: '☐ ' + line, cls: 'devtrail-cc-row devtrail-cc-muted' });
       }
     });
     this.inboxPreview(side, t, model);
 
     // 중앙 — 프로젝트 보드.
+    // ⚠️ 제목을 따로 두지 않는다. 컬럼 헤더(계획 중·진행 중·막힘·완료)가 이미
+    //    무엇인지 말하고, 위 지표에도 '활성 프로젝트' 가 있다. 제목 한 줄이
+    //    좌측 카드와 높이를 어긋나게 만들어 보드가 아래로 밀렸다.
     const main = ws.createEl('div', { cls: 'devtrail-cc-main' });
-    const h = main.createEl('div', { cls: 'devtrail-cc-card-head' });
-    h.createEl('h3', { text: t.colProjects });
+    main.setAttr('aria-label', t.colProjects);
     this.board(main, t, model);
 
     // 아래 — 최근 기록.
-    this.card(body, t.colRecent, model.recent.length, (list) => {
+    this.card(body, t.colRecent, model.recent.length, (box) => {
+      // ⚠️ 폭이 넓어지면 한 줄짜리 목록은 이름과 배지가 화면 양끝으로 갈린다.
+      //    여러 열로 접어 눈길이 이어지게 한다.
+      const list = box.createEl('div', { cls: 'devtrail-cc-recent' });
       for (const r of model.recent.slice(0, 8)) {
         const el = list.createEl('div', { cls: 'devtrail-cc-row' });
         const a = el.createEl('a', { text: r.file.basename, cls: 'devtrail-cc-link' });
@@ -1031,4 +1051,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { TEXT, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };

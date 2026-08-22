@@ -215,6 +215,12 @@ _cc_semver_cmp() {
 }
 
 # 원본이 통째로 멀쩡한가. 하나라도 어긋나면 설치본을 건드리지 않는다.
+#
+# ⚠️ 값을 돌려주지 않는다. 값을 받으려면 호출부가 $( ) 를 써야 하는데, 그러면
+#    안에서 부른 die 가 **서브셸만** 죽이고 호출한 쪽은 계속 실행된다 —
+#    "거부했다" 는 메시지를 내면서 종료 코드 0 으로 끝난다.
+#    이 저장소는 setup 의 sp_validate 에서 같은 결함을 이미 한 번 고쳤다.
+#    버전이 필요하면 검증 뒤에 _cc_src_version 을 따로 부른다.
 _cc_validate_src() {
   _cc_require_src
   jq empty "$DT_CC_SRC/manifest.json" >/dev/null 2>&1 \
@@ -230,7 +236,6 @@ _cc_validate_src() {
       || die "$(L "원본에 필수 파일이 없습니다 — 절반만 바꾸지 않습니다" \
                  "The source is missing a required file — refusing a partial update"): $f"
   done
-  printf '%s\n' "$v"
 }
 
 _cc_src_version()  { jq -r '.version // ""' "$DT_CC_SRC/manifest.json" 2>/dev/null; }
@@ -251,7 +256,8 @@ _cc_update() {
   # ⚠️ 원본을 통째로 검증한 뒤에만 진행한다. 절반만 바뀐 플러그인이 최악이다 —
   #    manifest 는 새 버전인데 코드는 옛것이면 Obsidian 이 무엇을 로드했는지
   #    아무도 모른다.
-  local want; want=$(_cc_validate_src)
+  _cc_validate_src
+  local want; want=$(_cc_src_version)
 
   local dest; dest=$(_cc_dest)
   step "$(L "Command Center 업데이트" "Update Command Center")"

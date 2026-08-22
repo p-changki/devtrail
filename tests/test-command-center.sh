@@ -982,4 +982,128 @@ t_contains "작업 공간 CSS" "devtrail-cc-workspace" "$(cat "$CSS")"
 t_eq "폭 기반 미디어 쿼리가 없다" "0" \
   "$(grep -cE '@media[^{]*(max-width|min-width)' "$CSS" | tr -d ' ')"
 
+# ── 오늘 할 일 ─────────────────────────────────────────────────────────────
+#
+# ⚠️ 개발일지 템플릿은 빈 체크박스 '- [ ]' 를 자리표시로 넣는다. 그것을 그대로
+#    그리면 글자 없는 빈 줄이 쌓인다 — 2026-08-22 QA 화면이 실제로 그랬다.
+#    빈 자리표시는 할 일이 아니다.
+t_start "빈 체크박스를 할 일로 세지 않는다"
+cat > "$T_TMP/tasks.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.openTasks !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const raw = [
+  '# 오늘',
+  '- [ ] ',            // 템플릿 자리표시 — 글자 없음
+  '- [ ]',             // 공백조차 없음
+  '- [ ] 로그인 버그 고치기',
+  '- [x] 이미 끝낸 것',
+  '  - [ ] 들여쓴 할 일',
+  '- [ ]    ',         // 공백만
+].join('\n');
+const got = f.openTasks(raw);
+const want = ['로그인 버그 고치기', '들여쓴 할 일'];
+console.log(JSON.stringify(got) === JSON.stringify(want)
+  ? 'OK' : 'GOT ' + JSON.stringify(got));
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "글자 있는 것만 센다" "OK" "$(node "$T_TMP/tasks.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+t_contains "홈이 그 함수를 쓴다" "openTasks(" \
+  "$(sed -n '/async viewHome(body, t, model, devlog)/,/^  \/\* Inbox 미리보기/p' "$JS")"
+
+t_start "빈 컬럼이 늘어나지 않는다"
+# ⚠️ 계획 중에 카드 4장, 나머지가 0 이면 빈 컬럼이 네 배 높이로 늘어난다.
+#    한 줄짜리 안내가 500px 를 차지하면 화면이 망가져 보인다.
+t_contains "컬럼이 내용 높이를 갖는다" "align-items: start" \
+  "$(sed -n '/^\.devtrail-cc-board {/,/^}/p' "$CSS")"
+
+# ── 거부는 실패로 끝나야 한다 ───────────────────────────────────────────────
+#
+# ⚠️ die 를 명령 치환 $( ) 안에서 부르면 서브셸만 죽는다. 호출한 쪽은 아무 일도
+#    없던 것처럼 계속 실행되고 종료 코드 0 으로 끝난다 — 자동화도 사람도
+#    "안전하게 거부됐다" 고 잘못 읽는다.
+#
+#    이 저장소는 같은 결함을 setup 의 sp_validate 에서 이미 한 번 고쳤다.
+#    메시지만 보는 테스트는 이것을 못 잡는다 — 종료 코드를 봐야 한다.
+t_start "잘못된 원본은 실패 코드로 끝난다"
+VX=$(_vault vx); HX="$T_TMP/hx"; _cfg "$VX" "$HX"
+DEVTRAIL_HOME="$HX" DEVTRAIL_CONFIG="$HX/devtrail.config.json" \
+  "$DT" command-center install --apply >/dev/null 2>&1
+ref=$(md5 -q "$VX/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VX/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
+
+_bad_src() {
+  # $1 = 이름, $2 = manifest 내용, $3 = 파일을 빼면 그 이름
+  local d="$T_TMP/bad-$1"; mkdir -p "$d"
+  printf '%s' "$2" > "$d/manifest.json"
+  cp "$ROOT/plugin/main.js" "$d/main.js"
+  [ "$3" = "styles.css" ] || cp "$ROOT/plugin/styles.css" "$d/styles.css"
+  printf '%s' "$d"
+}
+
+for c in \
+  "version없음:{\"id\":\"$PID\",\"name\":\"x\"}:" \
+  "깨진JSON:{\"id\": broken:" \
+  "id불일치:{\"id\":\"someone-else\",\"version\":\"9.9.9\"}:" \
+  ; do
+  name=${c%%:*}; rest=${c#*:}; body=${rest%:*}
+  src=$(_bad_src "$name" "$body" "")
+  DT_CC_SRC_OVERRIDE="$src" DEVTRAIL_HOME="$HX" \
+    DEVTRAIL_CONFIG="$HX/devtrail.config.json" \
+    "$DT" command-center update --apply >/dev/null 2>&1
+  t_ne "$name — 0 으로 끝나지 않는다" "0" "$?"
+  t_eq "$name — 설치본 그대로" "$ref" \
+    "$(md5 -q "$VX/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VX/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)"
+done
+
+# 필수 파일 누락도 같다.
+src=$(_bad_src "파일누락" "$(cat "$ROOT/plugin/manifest.json")" "styles.css")
+DT_CC_SRC_OVERRIDE="$src" DEVTRAIL_HOME="$HX" \
+  DEVTRAIL_CONFIG="$HX/devtrail.config.json" \
+  "$DT" command-center update --apply >/dev/null 2>&1
+t_ne "파일누락 — 0 으로 끝나지 않는다" "0" "$?"
+t_eq "파일누락 — 설치본 그대로" "$ref" \
+  "$(md5 -q "$VX/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VX/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)"
+
+# 정상 원본은 0 으로 끝난다 — 게이트가 무조건 실패시키는 게 아니어야 한다.
+DEVTRAIL_HOME="$HX" DEVTRAIL_CONFIG="$HX/devtrail.config.json" \
+  "$DT" command-center update --apply >/dev/null 2>&1
+t_eq "정상 원본은 0 으로 끝난다" "0" "$?"
+
+# ── 설계 계약 ──────────────────────────────────────────────────────────────
+#
+# 대시보드는 읽는 물건이 아니라 훑는 물건이다. 글줄 길이를 위해 폭을 자르면
+# 넓은 화면에서 오른쪽이 통째로 죽는다 — 카드가 스스로 폭을 제한한다.
+t_start "대시보드가 주어진 폭을 쓴다"
+t_eq "본문에 폭 상한이 없다" "0" \
+  "$(sed -n '/^\.devtrail-cc-body/,/}/p' "$CSS" | grep -c 'max-width')"
+
+t_start "작업 공간이 미디어 쿼리 없이 접힌다"
+WS="$(sed -n '/^\.devtrail-cc-workspace {/,/^}/p' "$CSS")"
+t_contains "flex 로 접는다" "flex-wrap: wrap" "$WS"
+# ⚠️ auto-fit + grid-column:span 조합은 트랙 수가 폭에 따라 변해서 빈 칸이
+#    생긴다. 레일과 본문의 비율은 flex-basis 로 정한다.
+t_eq "span 으로 폭을 잡지 않는다" "0" "$(grep -c 'grid-column: span' "$CSS")"
+
+t_start "여백이 하나의 리듬을 따른다"
+# ⚠️ 4·6·8·10·12·16 이 섞이면 무엇이 한 묶음인지 눈이 못 읽는다.
+#    4 의 배수 하나로 통일한다.
+odd=$(grep -oE '(padding|gap|margin[a-z-]*): *[0-9]+px' "$CSS" \
+      | grep -oE '[0-9]+' | awk '$1 % 4 != 0 && $1 != 1 && $1 != 2 {print}' | sort -u | tr '\n' ' ')
+t_eq "4 의 배수만 쓴다" "" "$odd"
+
+t_start "최근 기록이 한 줄로 늘어지지 않는다"
+# ⚠️ 폭 상한을 풀었으므로 목록 한 줄이 화면 끝까지 늘어난다 — 이름은 왼쪽,
+#    배지는 저 멀리 오른쪽이 되어 둘을 잇는 눈길이 끊긴다. 여러 열로 접는다.
+t_contains "여러 열로 나눈다" "devtrail-cc-recent" "$(cat "$JS")"
+t_contains "CSS 가 열을 만든다" "auto-fit" \
+  "$(sed -n '/^\.devtrail-cc-recent {/,/^}/p' "$CSS")"
+
 t_end

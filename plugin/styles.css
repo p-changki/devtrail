@@ -30,7 +30,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
@@ -46,7 +46,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.devtrail-cc-list { padding: 6px 12px 10px; }
+.devtrail-cc-list { padding: 8px 12px 10px; }
 
 .devtrail-cc-row {
   display: flex;
@@ -56,7 +56,7 @@
   padding: 4px 0;
   /* 좁은 패널에서도 줄이 깨지지 않게 한다. */
   flex-wrap: wrap;
-  padding: 6px 0;
+  padding: 8px 0;
 }
 
 .devtrail-cc-link {
@@ -86,7 +86,7 @@
 }
 
 .devtrail-cc-tab {
-  padding: 4px 10px;
+  padding: 4px 8px;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
   background: var(--background-primary);
@@ -95,8 +95,8 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 8px 12px;
 }
 
 .devtrail-cc-tab:hover { color: var(--text-normal); }
@@ -122,7 +122,7 @@
 }
 
 .devtrail-cc-action {
-  padding: 10px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
   background: var(--background-secondary);
@@ -227,7 +227,10 @@
 }
 
 /* 넓은 화면에서 본문이 너무 늘어지지 않게 — 읽는 폭에는 한계가 있다. */
-.devtrail-cc-body { max-width: 1400px; }
+/* ⚠️ 폭을 자르지 않는다. 대시보드는 읽는 물건이 아니라 훑는 물건이라
+ *    글줄 길이가 기준이 아니다 — 1400px 로 자르면 넓은 화면에서 오른쪽이
+ *    통째로 죽는다. 긴 글이 생기는 곳은 카드가 스스로 제한한다. */
+.devtrail-cc-body { min-width: 0; }
 
 /* ══ 시각 규약 ═══════════════════════════════════════════════════════════════
  *
@@ -268,7 +271,7 @@
 .devtrail-cc-metric-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
@@ -322,7 +325,7 @@
 .devtrail-cc-row-meta { font-size: var(--font-ui-smaller); }
 
 /* ── 빠른 기록 ── 화면의 핵심 행동. 존재감을 준다. */
-.devtrail-cc-searchrow { padding: 10px 14px 12px; }
+.devtrail-cc-searchrow { padding: 8px 14px 12px; }
 
 /* ⚠️ 움직임에 민감한 사람이 있다. 전환을 끌 수 있어야 한다. */
 @media (prefers-reduced-motion: reduce) {
@@ -342,8 +345,14 @@
  * ⚠️ 색은 Obsidian 의 의미 변수에서만 가져온다. 테마를 이긴다고 생각하지
  *    않는다(docs/design-tokens.md 원칙 4).
  */
+/* 홈 안에서는 위쪽 여백이 필요 없다 — 좌측 카드와 같은 높이에서 시작한다. */
+.devtrail-cc-main > .devtrail-cc-board { margin-top: 0; }
+
 .devtrail-cc-board {
   display: grid;
+  /* ⚠️ 컬럼이 내용만큼만 높다. 계획 중에 4장, 나머지가 0 이면 빈 컬럼이 네 배
+   *    높이로 늘어나고, 한 줄짜리 안내가 화면 절반을 차지한다. */
+  align-items: start;
   /* leaf 는 뷰포트가 아니다 — 미디어 쿼리가 아니라 auto-fit 으로 접는다. */
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
@@ -540,15 +549,27 @@
  *    사이드 패널로 끌어다 놓으면 창이 넓어도 1열이 되어야 한다.
  */
 .devtrail-cc-workspace {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  /* ⚠️ auto-fit + grid-column:span 은 트랙 수가 폭에 따라 변해 빈 칸을 만든다.
+   *    flex 는 남는 폭을 본문이 가져가고, 좁아지면 스스로 줄바꿈한다 —
+   *    미디어 쿼리가 없어도 사이드 패널에서 1열이 된다. */
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: start;
   margin-bottom: 16px;
 }
 
 /* 중앙이 남는 폭을 다 가져간다 — 보드가 넓게 펼쳐져야 읽힌다. */
-.devtrail-cc-main { grid-column: span 3; min-width: 0; }
-.devtrail-cc-side { min-width: 0; }
+/* 레일은 좁게 고정, 본문이 남는 폭을 전부 가져간다.
+ * flex-basis 가 합보다 크면 줄바꿈한다 — 그때 둘 다 100% 가 된다. */
+.devtrail-cc-side { flex: 1 1 240px; max-width: 320px; min-width: 0; }
+.devtrail-cc-main { flex: 999 1 480px; min-width: 0; }
 
-.devtrail-cc-main > .devtrail-cc-card-head { margin-bottom: 8px; }
+/* ── 최근 기록 ──────────────────────────────────────────────────────────────
+ * 넓은 화면에서 한 줄이 끝까지 늘어나면 이름과 배지가 양끝으로 갈린다.
+ * 열로 접어 이름 → 배지가 한눈에 이어지게 한다. */
+.devtrail-cc-recent {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0 16px;
+}
