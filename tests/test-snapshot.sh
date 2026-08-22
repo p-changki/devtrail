@@ -115,7 +115,7 @@ cat > "$T_TMP/contract.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const fs = require('fs'), path = require('path');

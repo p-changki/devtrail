@@ -98,7 +98,16 @@ t_eq "소스가 한 파일" "1" "$(ls "$ROOT/plugin"/*.js 2>/dev/null | wc -l | 
 
 # 뒤집는 조건 중 하나 — 1500줄. 넘으면 ADR 을 다시 봐야 한다.
 n=$(wc -l < "$ROOT/plugin/main.js" | tr -d ' ')
-t_eq "소스가 1500줄 미만" "true" "$([ "$n" -lt 1500 ] && echo true || echo false)"
+# ⚠️ ADR 0002 D3 의 1500 은 **재검토 조건**이지 상한이 아니다("이 결정을 다시
+#    본다"). 하드 캡으로 바꾸면 정직하게 늘어난 코드를 막고, 그러면 사람은
+#    테스트를 지우거나 숫자를 올린다. 넘는 것을 막는 대신 **기록 없이 넘는
+#    것**을 막는다.
+if [ "$n" -lt 1500 ]; then
+  t_eq "1500줄 아래" "true" "true"
+else
+  t_contains "1500을 넘었으면 재검토가 기록돼 있다" "재검토 1" \
+    "$(cat "$ROOT/docs/decisions/0002-command-center.md")"
+fi
 
 # ── 명령 표면 ────────────────────────────────────────────────────────────────
 t_start "명령 표면"
@@ -259,7 +268,7 @@ cat > "$T_TMP/excl.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const P = require(process.argv[2]);
@@ -345,7 +354,7 @@ t_contains "없는 명령을 알려준다" "notReady" "$(cat "$JS")"
 t_start "명령 id 조립"
 cat > "$T_TMP/cmdid.js" <<'JSEOF'
 const Module = require('module'); const orig = Module._load;
-Module._load = (r,p,m) => r === 'obsidian' ? { Plugin: class{}, ItemView: class{} } : orig(r,p,m);
+Module._load = (r,p,m) => r === 'obsidian' ? { Plugin: class{}, ItemView: class{}, Modal: class { constructor() {} } } : orig(r,p,m);
 const P = require(process.argv[2]);
 const f = P.__test;
 if (!f || typeof f.templaterCommandId !== 'function') { console.log('NOHOOK'); process.exit(0); }
@@ -398,7 +407,7 @@ t_contains "복원된 사이드 뷰를 옮긴다" "relocateIfSide" "$(cat "$JS")
 
 cat > "$T_TMP/leaf.js" <<'JSEOF'
 const Module = require('module'); const orig = Module._load;
-Module._load = (r,p,m) => r === 'obsidian' ? { Plugin: class{}, ItemView: class{} } : orig(r,p,m);
+Module._load = (r,p,m) => r === 'obsidian' ? { Plugin: class{}, ItemView: class{}, Modal: class { constructor() {} } } : orig(r,p,m);
 const f = require(process.argv[2]).__test;
 if (!f || typeof f.isMainLeaf !== 'function') { console.log('NOHOOK'); process.exit(0); }
 // 메인 탭의 leaf 는 루트 컨테이너 아래에 있다. 사이드는 좌·우 split 아래다.
@@ -666,7 +675,7 @@ cat > "$T_TMP/stage.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const f = require(process.argv[2]).__test;
@@ -731,7 +740,7 @@ cat > "$T_TMP/i18n.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const fs = require('fs');
@@ -877,7 +886,7 @@ cat > "$T_TMP/tasks.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const f = require(process.argv[2]).__test;
@@ -1078,7 +1087,7 @@ cat > "$T_TMP/flow.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const f = require(process.argv[2]).__test;
@@ -1107,7 +1116,7 @@ cat > "$T_TMP/tz.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const f = require(process.argv[2]).__test;
@@ -1135,7 +1144,7 @@ cat > "$T_TMP/stale.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const f = require(process.argv[2]).__test;
@@ -1169,7 +1178,7 @@ cat > "$T_TMP/spark.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const f = require(process.argv[2]).__test;
@@ -1199,7 +1208,7 @@ cat > "$T_TMP/due.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const f = require(process.argv[2]).__test;
@@ -1223,7 +1232,8 @@ fi
 
 t_start "시안이 요구한 요소가 다 있다"
 # ⚠️ 처음 구현에서 여덟 개를 빠뜨렸다. 사양의 각 요소가 실제로 그려지는지 본다.
-t_contains "필터 입력" "devtrail-cc-filter" "$(cat "$JS")"
+# ⚠️ 시안의 그 자리는 이제 로컬 필터가 아니라 전체 검색이다 (§1).
+t_contains "상단 검색 입력" "devtrail-cc-searchinput" "$(cat "$JS")"
 t_contains "날짜 표시" "devtrail-cc-date" "$(cat "$JS")"
 t_contains "만들기 안내" "devtrail-cc-kbd" "$(cat "$JS")"
 t_contains "스파크라인" "devtrail-cc-spark" "$(cat "$JS")"
@@ -1239,7 +1249,7 @@ cat > "$T_TMP/tasksrc.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
 Module._load = function (r, p, m) {
-  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
   return orig(r, p, m);
 };
 const f = require(process.argv[2]).__test;
@@ -1272,5 +1282,131 @@ else
 fi
 t_contains "수집이 그 규칙을 쓴다" "bearsTasks(" \
   "$(sed -n '/async function openTasksInVault/,/^}/p' "$JS")"
+
+# ── 상단 입력창은 전체 검색이다 ─────────────────────────────────────────────
+#
+# ⚠️ 지금까지는 화면에 이미 그려진 행만 거르는 로컬 필터였다. 사용자는
+#    "제목, 태그로 거르기" 를 보고 볼트 전체를 찾을 거라 기대한다 — 기대와
+#    동작이 어긋나면 그 자리는 없느니만 못하다.
+t_start "상단 입력창이 전체 검색이다"
+t_contains "전체 검색이라고 말한다" "searchPlaceholder" "$(cat "$JS")"
+t_eq "거르기라고 하지 않는다" "0" "$(grep -c '태그로 거르기' "$JS" | tr -d ' ')"
+NAVSRC="$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS")"
+t_contains "Enter 로 실행한다" "ev.key === 'Enter'" "$NAVSRC"
+# 명령 해결은 resolveSearch 한 곳에 있고, nav 는 그것을 부른다.
+t_contains "nav 가 해결을 맡긴다" "this.resolveSearch(t)" "$NAVSRC"
+RESOLVE="$(sed -n '/^  resolveSearch(t) {/,/^  }/p' "$JS")"
+t_contains "검색 명령을 가려 찾는다" "findSearchCommand" "$RESOLVE"
+t_contains "기본 검색으로 떨어진다" "CORE_SEARCH" "$RESOLVE"
+t_contains "존재를 확인하고 부른다" "commandExists" "$RESOLVE"
+# ⚠️ 둘 다 없어도 끄지 않는다 — 왜 안 되는지, 무엇을 하면 되는지 말한다.
+t_contains "없으면 안내한다" "searchMissingHelp" "$(cat "$JS")"
+t_eq "명령 id 를 박지 않는다" "0" "$(grep -cE '"omnisearch:[a-z-]+"' "$JS" | tr -d ' ')"
+# 검색은 아무것도 만들지 않는다.
+t_eq "검색이 노트를 만들지 않는다" "0" \
+  "$(printf '%s' "$NAVSRC" | grep -cE 'templaterCommandId|vault\.(create|modify)')"
+
+t_start "로컬 필터를 전체 검색과 섞지 않는다"
+# ⚠️ 한 입력창이 두 가지를 하면 사용자는 무엇이 일어날지 모른다.
+#    이번 범위에서는 필터를 뺀다.
+t_eq "필터 클래스가 없다" "0" "$(grep -c 'devtrail-cc-filter' "$JS" | tr -d ' ')"
+t_eq "applyFilter 가 없다" "0" "$(grep -c 'applyFilter' "$JS" | tr -d ' ')"
+t_eq "data-filter 도 없다" "0" "$(grep -c 'data-filter' "$JS" | tr -d ' ')"
+
+# ── 전체 보기는 목록으로 간다 ───────────────────────────────────────────────
+#
+# ⚠️ 지금은 최신 노트 하나를 바로 열었다. 사용자는 목록을 기대하고 눌렀는데
+#    갑자기 편집기가 열린다 — 무엇이 일어났는지 모르고, 되돌아갈 길도 모른다.
+t_start "전체 보기가 목록을 연다"
+SEEALL="$(sed -n '/const more = card.createEl/,/});/p' "$JS")"
+t_eq "노트를 열지 않는다" "0" "$(printf '%s' "$SEEALL" | grep -c 'openFile')"
+t_contains "라우트로 간다" "this.route = 'recent'" "$SEEALL"
+t_contains "recent 라우트가 있다" "route === 'recent'" "$(cat "$JS")"
+
+t_start "목록 화면의 계약"
+VIEW="$(sed -n '/^  viewRecent(body, t, model) {/,/^  }/p' "$JS")"
+t_ne "화면이 있다" "" "$VIEW"
+# ⚠️ 큰 볼트에서 한 번에 다 그리면 화면이 멈춘다. 50개씩 늘린다.
+t_contains "처음 50개" "RECENT_PAGE" "$(cat "$JS")"
+t_contains "기본 50" "RECENT_PAGE = 50" "$(cat "$JS")"
+t_contains "더 보기" "loadMore" "$VIEW"
+# ⚠️ 더 보기를 눌러도 볼트를 다시 훑지 않는다 — 이미 모은 것에서 더 꺼낸다.
+t_eq "다시 스캔하지 않는다" "0" \
+  "$(printf '%s' "$VIEW" | grep -c 'getMarkdownFiles')"
+t_contains "수정 시각 내림차순" "recentAll" "$VIEW"
+t_contains "행마다 타입" "r.type" "$VIEW"
+t_contains "행마다 경로" "r.file.path" "$VIEW"
+t_contains "행마다 시각" "localDate(" "$VIEW"
+t_contains "행에서만 연다" "openFile" "$VIEW"
+t_contains "키보드로도 연다" "ev.key === 'Enter'" "$VIEW"
+t_contains "돌아갈 길" "backHome" "$VIEW"
+
+t_start "전체 목록이 전체를 담는다"
+# ⚠️ 홈의 '최근 기록' 은 10개만 본다. 전체 보기가 그 10개만 보여주면
+#    '전체' 가 거짓말이 된다.
+# 축약 표기(recentAll,)로 넘긴다 — collect 가 실제로 만드는지 본다.
+t_contains "모델이 전부를 싣는다" "const recentAll = files" "$(cat "$JS")"
+t_contains "반환에 실린다" "recentAll," "$(cat "$JS")"
+t_eq "홈은 여전히 10개" "1" "$(grep -c 'model.recent.slice(0, 10)' "$JS" | tr -d ' ')"
+
+# ── 노트 만들기는 전용 선택창이다 ───────────────────────────────────────────
+#
+# ⚠️ 지금은 Obsidian 전체 명령 팔레트를 열었다. 빠른 기록을 하려는 사람에게
+#    수백 개 명령을 보여주는 것은 도움이 아니다.
+t_start "빠른 기록 선택창"
+t_contains "모달을 연다" "QuickCaptureModal" "$(cat "$JS")"
+# ⚠️ 일반 명령 팔레트로 빠지지 않는다.
+t_eq "팔레트를 열지 않는다" "0" \
+  "$(grep -cE "command-palette|app\.setting\.open\(\)" "$JS" | tr -d ' ')"
+MODAL="$(sed -n '/^class QuickCaptureModal/,/^}/p' "$JS")"
+t_ne "모달이 있다" "" "$MODAL"
+# 실제로 등록된 명령만 보여준다 — id 를 짐작하지 않는다.
+t_contains "레지스트리를 확인한다" "commandExists" "$MODAL"
+t_contains "Templater 로 조립한다" "templaterCommandId" "$MODAL"
+t_contains "선택했을 때만 만든다" "executeCommandById" "$MODAL"
+# 키보드
+t_contains "위아래 이동" "ArrowDown" "$MODAL"
+t_contains "Enter 실행" "'Enter'" "$MODAL"
+t_contains "Esc 닫기" "close()" "$MODAL"
+# 없을 때 안내
+t_contains "없으면 이유를 말한다" "actionMissing" "$MODAL"
+t_contains "설정 안내" "templaterMissing" "$(cat "$JS")"
+# 각 항목의 설명
+t_contains "한 줄 설명" "captureHint" "$(cat "$JS")"
+
+t_start "빠른 기록은 팔레트 대신이다"
+NAVSRC2="$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS")"
+t_contains "버튼이다" "devtrail-cc-make" "$NAVSRC2"
+t_contains "눌러서 연다" "openQuickCapture" "$NAVSRC2"
+
+t_start "날짜를 UTC 로 보여주지 않는다"
+# ⚠️ toISOString() 은 UTC 다. 한국(UTC+9)에서 오전 9시 이전에 만든 노트가
+#    전날 날짜로 보인다 — 사용자가 "어제 쓴 게 아닌데" 하고 화면을 의심한다.
+#    히트맵 툴팁·aria-label 이 특히 그렇다.
+# (주석의 설명은 세지 않는다 — 왜 안 쓰는지 적어 둔 자리다.)
+t_eq "toISOString 을 쓰지 않는다" "0" \
+  "$(grep 'toISOString' "$JS" | grep -vcE '^\s*(\*|//|/\*)' | tr -d ' ')"
+t_contains "로컬 날짜 함수가 있다" "function localDate(ms)" "$(cat "$JS")"
+cat > "$T_TMP/tzdate.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.localDate !== 'function') { console.log('NOHOOK'); process.exit(0); }
+// 서울 새벽 1시 = UTC 로는 전날 16시.
+const early = new Date(2026, 7, 22, 1, 0, 0).getTime();
+const utc = new Date(early).toISOString().slice(0, 10);
+console.log(f.localDate(early) === '2026-08-22' && utc === '2026-08-21'
+  ? 'OK' : `local=${f.localDate(early)} utc=${utc}`);
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "서울 새벽이 전날로 밀리지 않는다" "OK" \
+    "$(TZ=Asia/Seoul node "$T_TMP/tzdate.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
 
 t_end

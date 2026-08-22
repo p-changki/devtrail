@@ -90,7 +90,7 @@ function collect(app, paths) {
   const inbox = [];
   const overdue = [];
   const trouble = [];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate(Date.now());
 
   for (const f of files) {
     const meta = fm(app, f);
@@ -135,7 +135,24 @@ function collect(app, paths) {
     .slice(0, 10)
     .map((f) => ({ file: f, type: fm(app, f).type || null, mtime: f.stat.mtime }));
 
-  return { projects, inbox, overdue, trouble, recent, thisWeek, total: files.length };
+  // ⚠️ 전체 목록을 따로 훑지 않는다. 이미 정렬한 것을 그대로 넘긴다 —
+  //    '더 보기' 를 누를 때마다 볼트를 다시 읽으면 큰 볼트에서 멈춘다.
+  const recentAll = files
+    .slice()
+    .sort((a, b) => b.stat.mtime - a.stat.mtime)
+    .map((f) => ({ file: f, type: fm(app, f).type || null, mtime: f.stat.mtime }));
+
+  return { projects, inbox, overdue, trouble, recent, recentAll,
+           thisWeek, total: files.length };
+}
+
+/* YYYY-MM-DD, 로컬 기준.
+ *
+ * ⚠️ toISOString() 은 UTC 다. 한국(UTC+9)에서 오전 9시 이전에 만든 노트가
+ *    전날 날짜로 보인다 — 사용자가 "어제 쓴 게 아닌데" 하고 의심하게 된다. */
+function localDate(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /* 오늘 개발일지. 경로는 맵에서만 온다 — 파일명 규칙도 맵이 갖고 있다. */
@@ -143,7 +160,7 @@ function todayDevlog(app, data) {
   const dir = data.paths && data.paths.devlog;
   if (!dir) return null;
   const pat = (data.naming && data.naming.devlog_file) || '{{DATE}} devlog.md';
-  const name = pat.replace('{{DATE}}', new Date().toISOString().slice(0, 10));
+  const name = pat.replace('{{DATE}}', localDate(Date.now()));
   const path = `${dir}/${name}`;
   return app.vault.getAbstractFileByPath(path) || null;
 }
@@ -303,6 +320,11 @@ async function openTasksInVault(app, paths, limit) {
 const STALE_DAYS = 14;
 const FLOW_WEEKS = 12;
 
+/* 전체 목록 한 번에 그리는 개수.
+ *
+ * ⚠️ 500개를 한 번에 그리면 화면이 멈춘다. 50개씩 늘린다. */
+const RECENT_PAGE = 50;
+
 const DAY_MS = 86400000;
 
 /* 로컬 기준 그 날의 0시. 히트맵 칸은 '날' 이 단위다.
@@ -419,6 +441,7 @@ function parseDue(text) {
  *
  * ⚠️ 절대 날짜를 쓰지 않는다 — 표에서 중요한 건 '얼마나 손을 놨나' 이지
  *    '언제였나' 가 아니다. */
+
 function relativeDays(mtime, nowMs, t) {
   if (typeof mtime !== 'number') return '—';
   const d = Math.floor((dayStart(nowMs) - dayStart(mtime)) / DAY_MS);
@@ -562,7 +585,14 @@ const TEXT = {
     mDevlog: '오늘 일지', mProjects: '활성 프로젝트', mInbox: 'Inbox',
     mWeek: '이번 주 노트', mTrouble: '트러블슈팅', mOverdue: '다시 볼 것',
     colToday: '오늘 현황', devlogMake: '기록 탭의 [개발일지] 로 만드세요.', lastEdit: '마지막 수정', colProjects: '활성 프로젝트', colRecent: '최근 기록',
-    filterPlaceholder: '제목, 태그로 거르기', makeNote: '노트 만들기',
+    templaterMissing: 'Templater 명령이 없습니다. 터미널에서 devtrail obsidian 을 실행하고 Obsidian 을 다시 여세요.',
+    captureHint: {
+      devlog: '오늘 무엇을 했는지', devnote: '지금 판단한 것',
+      idea: '떠오른 것 — 정리는 나중에', worklog: '한 일과 걸린 시간',
+      report: '한 주를 돌아보며', project: '새 프로젝트 폴더와 허브',
+    },
+    backHome: '← 홈', thType: '종류', thPath: '경로', loadMore: '더 보기',
+    searchPlaceholder: '전체 검색…', makeNote: '노트 만들기',
     weekdayUpper: ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'],
     noDue: '기한 없음', overdueBy: (n) => `${n}일 지남`,
     continueWrite: '이어쓰기', allTasks: '작업 전체', seeAll: '전체 보기',
@@ -643,7 +673,14 @@ const TEXT = {
     mDevlog: "Today's log", mProjects: 'Active projects', mInbox: 'Inbox',
     mWeek: 'Notes this week', mTrouble: 'Troubleshooting', mOverdue: 'To revisit',
     colToday: 'Today', devlogMake: 'Create one from [Devlog] on the Capture tab.', lastEdit: 'Last edit', colProjects: 'Active projects', colRecent: 'Recent',
-    filterPlaceholder: 'Filter by title or tag', makeNote: 'New note',
+    templaterMissing: 'No Templater commands found. Run devtrail obsidian, then reopen Obsidian.',
+    captureHint: {
+      devlog: 'What you did today', devnote: 'A decision you just made',
+      idea: 'Something that came up — sort it later', worklog: 'What you did and how long it took',
+      report: 'Looking back on the week', project: 'A new project folder and hub',
+    },
+    backHome: '← Home', thType: 'Type', thPath: 'Path', loadMore: 'Load more',
+    searchPlaceholder: 'Search your vault…', makeNote: 'New note',
     weekdayUpper: ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'],
     noDue: 'no due date', overdueBy: (n) => `${n}d overdue`,
     continueWrite: 'Continue', allTasks: 'All tasks', seeAll: 'See all',
@@ -731,12 +768,14 @@ class CommandCenterView extends obsidian.ItemView {
     this.nav(root, t);
 
     this.paths = map.data.paths;
+    this.lang = map.data.lang;
     const model = collect(this.app, map.data.paths);
     const devlog = todayDevlog(this.app, map.data);
     const body = root.createEl('div', { cls: 'devtrail-cc-body' });
 
     // 라우트마다 한 가지 질문에 답한다. 홈은 전체를 훑는다.
     if (this.route === 'today')    return this.viewToday(body, t, map.data, devlog);
+    if (this.route === 'recent')   return this.viewRecent(body, t, model);
     if (this.route === 'projects') return this.viewProjects(body, t, model);
     if (this.route === 'reviews')  return this.viewReviews(body, t, map.data, model);
 
@@ -808,8 +847,8 @@ class CommandCenterView extends obsidian.ItemView {
     for (let i = 0; i < pad; i++) grid.createEl('span', { cls: 'devtrail-cc-cell is-empty' });
     for (const c of flow.cells) {
       const el = grid.createEl('span', { cls: `devtrail-cc-cell devtrail-cc-lv${c.level}` });
-      el.setAttr('title', `${new Date(c.day).toISOString().slice(0, 10)} · ${c.count}`);
-      el.setAttr('aria-label', `${new Date(c.day).toISOString().slice(0, 10)} ${c.count}`);
+      el.setAttr('title', `${localDate(c.day)} · ${c.count}`);
+      el.setAttr('aria-label', `${localDate(c.day)} ${c.count}`);
     }
 
     // 지표 셋.
@@ -878,10 +917,9 @@ class CommandCenterView extends obsidian.ItemView {
       list.createEl('p', { text: t.noTasks, cls: 'devtrail-cc-muted' });
       return;
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDate(Date.now());
     for (const task of tasks) {
       const row = list.createEl('div', { cls: 'devtrail-cc-task' });
-      row.setAttr('data-filter', `${task.text} ${task.file.basename}`);
       row.createEl('span', { cls: 'devtrail-cc-checkbox' });
       const body = row.createEl('div', { cls: 'devtrail-cc-task-body' });
       body.createEl('div', { text: task.text.replace(/\s*(?:📅|\bdue::?)\s*\d{4}-\d{2}-\d{2}\s*\]?/, ''),
@@ -971,7 +1009,6 @@ class CommandCenterView extends obsidian.ItemView {
     }
     for (const r of rows) {
       const tr = table.createEl('div', { cls: 'devtrail-cc-tr' });
-      tr.setAttr('data-filter', `${r.p.name} ${r.p.stage || ''} ${r.p.next || ''}`);
       if (r.stale) tr.addClass('is-stale');
       tr.setAttr('role', 'button'); tr.setAttr('tabindex', '0');
       const name = tr.createEl('span', { cls: 'devtrail-cc-td-name' });
@@ -1059,14 +1096,68 @@ class CommandCenterView extends obsidian.ItemView {
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
       });
       if (r.type) row.createEl('span', { text: r.type, cls: 'devtrail-cc-mono devtrail-cc-faint' });
-      row.setAttr('data-filter', `${r.file.basename} ${r.type || ''}`);
     }
     // ⚠️ 볼트를 여는 통로다 — 여기서 목록을 더 늘리지 않는다.
+    // ⚠️ 노트를 열지 않는다. 목록을 기대하고 누른 사람에게 갑자기 편집기를
+    //    띄우면, 무엇이 일어났는지도 되돌아갈 길도 모른다.
     const more = card.createEl('button', { text: t.seeAll, cls: 'devtrail-cc-linkbtn' });
     more.addEventListener('click', () => {
-      const leaf = this.app.workspace.getLeaf(false);
-      if (model.recent[0]) leaf.openFile(model.recent[0].file);
+      this.route = 'recent';
+      this.recentShown = RECENT_PAGE;
+      this.render();
     });
+  }
+
+  /* ── 최근 기록 전체 ─────────────────────────────────────────────────
+   *
+   * ⚠️ 홈의 '최근 기록' 은 10개만 본다. 여기가 '전체' 다 — 10개만 보여주면
+   *    이름이 거짓말이 된다. */
+  viewRecent(body, t, model) {
+    const back = body.createEl('button', { cls: 'devtrail-cc-back', text: t.backHome });
+    back.addEventListener('click', () => { this.route = 'home'; this.render(); });
+
+    const rows = model.recentAll || model.recent;
+    const shown = Math.min(this.recentShown || RECENT_PAGE, rows.length);
+
+    const head = body.createEl('div', { cls: 'devtrail-cc-section-head' });
+    head.createEl('h2', { text: t.colRecent });
+    head.createEl('span', { text: `${shown} / ${rows.length}`,
+                            cls: 'devtrail-cc-mono devtrail-cc-faint' });
+
+    const table = body.createEl('div', { cls: 'devtrail-cc-table devtrail-cc-recent-table' });
+    const th = table.createEl('div', { cls: 'devtrail-cc-tr devtrail-cc-th' });
+    for (const label of [t.thName, t.thType, t.thUpdated, t.thPath]) {
+      th.createEl('span', { text: label });
+    }
+
+    for (const r of rows.slice(0, shown)) {
+      const tr = table.createEl('div', { cls: 'devtrail-cc-tr' });
+      tr.setAttr('role', 'button'); tr.setAttr('tabindex', '0');
+      tr.createEl('span', { text: r.file.basename, cls: 'devtrail-cc-td-name' });
+      tr.createEl('span', { text: r.type || '—', cls: 'devtrail-cc-mono devtrail-cc-faint' });
+      // ⚠️ 로컬 날짜로 보여준다. toISOString 은 UTC 라 한국에서 전날로 밀린다.
+      tr.createEl('span', { text: localDate(r.mtime),
+                            cls: 'devtrail-cc-mono devtrail-cc-faint' });
+      tr.createEl('span', { text: r.file.path, cls: 'devtrail-cc-td-path devtrail-cc-faint' });
+      // 행을 눌렀을 때만 연다.
+      const open = () => this.app.workspace.getLeaf(false).openFile(r.file);
+      tr.addEventListener('click', open);
+      tr.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+      });
+    }
+
+    if (shown < rows.length) {
+      const loadMore = body.createEl('button', {
+        cls: 'devtrail-cc-btn',
+        text: `${t.loadMore} (${Math.min(RECENT_PAGE, rows.length - shown)})`,
+      });
+      // ⚠️ 볼트를 다시 훑지 않는다. 이미 모은 목록에서 더 꺼낼 뿐이다.
+      loadMore.addEventListener('click', () => {
+        this.recentShown = shown + RECENT_PAGE;
+        this.render();
+      });
+    }
   }
 
   /* 프로젝트 폴더 안 노트들의 수정 시각.
@@ -1127,19 +1218,35 @@ class CommandCenterView extends obsidian.ItemView {
 
     const right = bar.createEl('div', { cls: 'devtrail-cc-nav-right' });
 
-    // 필터 — 제목·태그로 목록을 좁힌다.
+    // 전체 검색 — 볼트를 찾는다.
     //
-    // ⚠️ 검색이 아니다. 화면에 이미 있는 것을 좁힐 뿐, 볼트를 뒤지지 않는다.
-    //    전체 검색은 Obsidian 의 ⌘O · ⌘⇧F 가 한다.
-    const input = right.createEl('input', { cls: 'devtrail-cc-filter' });
+    // ⚠️ 화면을 거르는 필터가 아니다. 사용자는 이 자리에서 볼트 전체를 찾을
+    //    거라 기대하고, 기대와 동작이 어긋나면 그 자리는 없느니만 못하다.
+    // ⚠️ 검색기를 새로 만들지 않는다. Omnisearch 가 있으면 그것을, 없으면
+    //    Obsidian 기본 검색을 부른다. 명령 id 는 짐작하지 않는다.
+    const box = right.createEl('div', { cls: 'devtrail-cc-searchbox' });
+    icon(box.createEl('span', { cls: 'devtrail-cc-searchbox-icon' }), 'search');
+    const input = box.createEl('input', { cls: 'devtrail-cc-searchinput' });
     input.setAttr('type', 'text');
-    input.setAttr('placeholder', t.filterPlaceholder);
-    input.setAttr('aria-label', t.filterPlaceholder);
-    input.value = this.filter || '';
-    input.addEventListener('input', () => {
-      this.filter = input.value;
-      this.applyFilter();
-    });
+    input.setAttr('placeholder', t.searchPlaceholder);
+    input.setAttr('aria-label', t.searchPlaceholder);
+
+    const found = this.resolveSearch(t);
+    const help = right.createEl('span', { cls: 'devtrail-cc-searchhelp' });
+    if (found) {
+      input.setAttr('title', found.name);
+      const go = () => this.app.commands.executeCommandById(found.id);
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); go(); }
+      });
+      box.addEventListener('click', () => input.focus());
+      box.querySelector('.devtrail-cc-searchbox-icon')
+         .addEventListener('click', (ev) => { ev.stopPropagation(); go(); });
+    } else {
+      // ⚠️ 끄지 않는다. 왜 안 되는지, 무엇을 하면 되는지 말한다.
+      help.setText(t.searchMissingHelp);
+      input.setAttr('title', t.searchMissingHelp);
+    }
 
     // 날짜 — 2026-08-22 SAT
     const now = new Date();
@@ -1149,23 +1256,32 @@ class CommandCenterView extends obsidian.ItemView {
     });
 
     // 만들기는 명령 팔레트로 간다 — 생성 버튼을 화면 위에 늘어놓지 않는다.
-    const make = right.createEl('span', { cls: 'devtrail-cc-make' });
+    // ⚠️ 전체 명령 팔레트가 아니라 DevTrail 전용 선택창을 연다.
+    const make = right.createEl('button', { cls: 'devtrail-cc-make' });
     make.createEl('span', { text: t.makeNote });
     make.createEl('span', { text: '⌘P', cls: 'devtrail-cc-kbd devtrail-cc-mono' });
+    make.setAttr('aria-label', t.makeNote);
+    make.addEventListener('click', () => this.openQuickCapture(t));
   }
 
-  /* 필터를 다시 그리지 않고 적용한다.
-   *
-   * ⚠️ 매 글자마다 render() 를 부르면 볼트를 다시 훑는다. 이미 그린 행의
-   *    표시 여부만 바꾼다. */
-  applyFilter() {
-    const q = (this.filter || '').trim().toLowerCase();
-    const root = this.containerEl;
-    for (const el of Array.from(root.querySelectorAll('[data-filter]'))) {
-      const hay = (el.getAttr('data-filter') || '').toLowerCase();
-      el.style.display = (!q || hay.indexOf(q) >= 0) ? '' : 'none';
-    }
+  openQuickCapture(t) {
+    if (!this.paths) return;
+    new QuickCaptureModal(this.app, t, { paths: this.paths, lang: this.lang || 'ko' }).open();
   }
+
+  /* 어떤 검색 명령을 부를 것인가.
+   *
+   * ⚠️ 확신할 수 있는 것만 고른다. 없으면 null 이고, 화면은 안내로 떨어진다 —
+   *    'index' 나 'settings' 를 검색이라고 부르느니 안 부르는 게 낫다. */
+  resolveSearch(t) {
+    const all = (this.app.commands && this.app.commands.commands) || {};
+    const pick = findSearchCommand(this.app);
+    if (pick) return { id: pick, name: (all[pick] && all[pick].name) || pick };
+    if (commandExists(this.app, CORE_SEARCH)) return { id: CORE_SEARCH, name: t.searchCore };
+    return null;
+  }
+
+
 
 
   /* ── 오늘 ────────────────────────────────────────────────────────────
@@ -1286,7 +1402,7 @@ class CommandCenterView extends obsidian.ItemView {
     // 실제 파일 메타데이터를 쓴다. '오래됨' 기준을 임의로 만들지 않는다.
     if (p.file && p.file.stat && p.file.stat.mtime) {
       meta.createEl('span', {
-        text: new Date(p.file.stat.mtime).toISOString().slice(0, 10),
+        text: localDate(p.file.stat.mtime),
         cls: 'devtrail-cc-pcard-date',
       });
     }
@@ -1349,25 +1465,7 @@ class CommandCenterView extends obsidian.ItemView {
     fill(box.createEl('div', { cls: 'devtrail-cc-list' }));
   }
 
-  /* 프로젝트 한 줄 — 이름 · stage 배지 · 다음 행동 · 마지막 수정. */
-  projectRow(list, t, p) {
-    const el = list.createEl('div', { cls: 'devtrail-cc-row devtrail-cc-projectrow' });
-    const left = el.createEl('div', { cls: 'devtrail-cc-row-main' });
-    const a = left.createEl('a', { text: p.name, cls: 'devtrail-cc-link' });
-    a.setAttr('role', 'button');
-    a.setAttr('tabindex', '0');
-    const open = () => this.app.workspace.getLeaf(false).openFile(p.file);
-    a.addEventListener('click', open);
-    a.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
-    });
-    if (p.stage) this.badge(left, p.stage, 'stage');
-    if (p.next) el.createEl('div', { text: p.next, cls: 'devtrail-cc-muted' });
-    el.createEl('div', {
-      text: `${t.lastEdit} ${new Date(p.mtime).toLocaleDateString()}`,
-      cls: 'devtrail-cc-muted devtrail-cc-row-meta',
-    });
-  }
+
 
   /* 배지. 상태를 색으로만 말하지 않는다 — 글자를 함께 둔다.
    * 색을 못 보는 사람이 있고, 흑백 인쇄도 있다. */
@@ -1392,6 +1490,103 @@ class CommandCenterView extends obsidian.ItemView {
     if (meta) el.createEl('span', { text: meta, cls: 'devtrail-cc-muted' });
   }
 }
+
+/* ── 빠른 기록 ────────────────────────────────────────────────────────────────
+ *
+ * ⚠️ Obsidian 전체 명령 팔레트를 열지 않는다. 빠른 기록을 하려는 사람에게
+ *    수백 개 명령을 보여주는 것은 도움이 아니다.
+ *
+ * ⚠️ 노트를 여기서 만들지 않는다. 등록된 Templater 명령을 부를 뿐이다 —
+ *    형식이 두 곳에서 만들어지면 반드시 어긋난다 (ADR 0002).
+ *
+ * ⚠️ 명령 id 를 짐작하지 않는다. 레지스트리에 있는 것만 보여주고, 없는 것은
+ *    왜 없는지 말한다.
+ */
+class QuickCaptureModal extends obsidian.Modal {
+  constructor(app, t, data) {
+    super(app);
+    this.t = t;
+    this.data = data;
+    this.index = 0;
+  }
+
+  onOpen() {
+    const t = this.t;
+    const { contentEl } = this;
+    contentEl.addClass('devtrail-qc');
+    contentEl.createEl('div', { text: t.quickCapture, cls: 'devtrail-qc-title' });
+
+    const icons = {
+      devlog: 'calendar-days', devnote: 'pencil', idea: 'lightbulb',
+      worklog: 'clock', report: 'rotate-ccw', project: 'folder-plus',
+    };
+    const labels = {
+      devlog: t.cDevlog, devnote: t.cDevnote, idea: t.cIdea,
+      worklog: t.cWorklog, report: t.cReport, project: t.cProject,
+    };
+
+    this.rows = [];
+    const list = contentEl.createEl('div', { cls: 'devtrail-qc-list' });
+    for (const c of CAPTURES) {
+      const id = templaterCommandId(this.data.paths, captureFile(c, this.data.lang));
+      const ok = commandExists(this.app, id);
+      const row = list.createEl('div', { cls: 'devtrail-qc-row' });
+      if (!ok) row.addClass('is-off');
+      row.setAttr('role', 'button');
+      row.setAttr('tabindex', ok ? '0' : '-1');
+      icon(row.createEl('span', { cls: 'devtrail-qc-icon' }), icons[c.key] || 'file-plus');
+      const body = row.createEl('div', { cls: 'devtrail-qc-body' });
+      body.createEl('div', { text: labels[c.key] || c.key, cls: 'devtrail-qc-name' });
+      body.createEl('div', {
+        text: ok ? (t.captureHint[c.key] || '') : t.actionMissing,
+        cls: 'devtrail-qc-hint',
+      });
+      if (ok) {
+        this.rows.push({ el: row, id });
+        row.addEventListener('click', () => this.run(id));
+      }
+    }
+
+    if (this.rows.length === 0) {
+      // ⚠️ 일반 팔레트로 빠지지 않는다. 무엇을 하면 되는지 말한다.
+      contentEl.createEl('p', { text: t.templaterMissing, cls: 'devtrail-qc-empty' });
+      return;
+    }
+
+    this.highlight();
+    // ⚠️ 키보드만으로도 쓸 수 있어야 한다.
+    this.scope.register([], 'ArrowDown', (ev) => {
+      ev.preventDefault();
+      this.index = (this.index + 1) % this.rows.length;
+      this.highlight();
+    });
+    this.scope.register([], 'ArrowUp', (ev) => {
+      ev.preventDefault();
+      this.index = (this.index - 1 + this.rows.length) % this.rows.length;
+      this.highlight();
+    });
+    this.scope.register([], 'Enter', (ev) => {
+      ev.preventDefault();
+      this.run(this.rows[this.index].id);
+    });
+    // Esc 는 Obsidian 의 Modal 이 이미 닫는다.
+  }
+
+  highlight() {
+    this.rows.forEach((r, i) => {
+      if (i === this.index) r.el.addClass('is-on'); else r.el.removeClass('is-on');
+    });
+  }
+
+  /* 사용자가 골랐을 때만 실행한다. */
+  run(id) {
+    this.close();
+    this.app.commands.executeCommandById(id);
+  }
+
+  onClose() { this.contentEl.empty(); }
+}
+
 
 module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
   async onload() {
@@ -1466,4 +1661,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { TEXT, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, localDate, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
