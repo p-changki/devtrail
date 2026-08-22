@@ -354,6 +354,37 @@ function buildFlow(files, nowMs, weeks) {
            weeklyAvg: total / (weeks || FLOW_WEEKS) };
 }
 
+/* 최근 N주, 주별 개수. 마지막 칸이 이번 주다.
+ *
+ * ⚠️ 주는 '오늘로부터 7일씩' 이다. 달력의 주(월~일)가 아니다 — 표에서 묻는
+ *    것은 "최근에 얼마나 손댔나" 이지 "몇 주차였나" 가 아니다. */
+function weeklyBars(times, nowMs, weeks) {
+  const n = weeks || 4;
+  const bars = new Array(n).fill(0);
+  const today = dayStart(nowMs);
+  for (const ms of times) {
+    if (typeof ms !== 'number') continue;
+    const days = Math.floor((today - dayStart(ms)) / DAY_MS);
+    if (days < 0 || days >= n * 7) continue;
+    bars[n - 1 - Math.floor(days / 7)]++;
+  }
+  return bars;
+}
+
+/* 할 일 줄에서 기한을 읽는다. 흔히 쓰는 세 표기만 본다.
+ *
+ * ⚠️ 없으면 null 이다. 오늘 날짜나 아무 날짜를 채워 넣지 않는다 — 지어낸
+ *    기한은 사람을 잘못된 급함으로 몰아붙인다. */
+function parseDue(text) {
+  if (typeof text !== 'string') return null;
+  const m = text.match(/(?:📅|\bdue::?\s*)\s*(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  const mi = Number(mo), di = Number(d);
+  if (mi < 1 || mi > 12 || di < 1 || di > 31) return null;
+  return `${y}-${mo}-${d}`;
+}
+
 /* 손을 놓은 지 오래됐는가.
  *
  * ⚠️ 모르면 방치라고 하지 않는다. 수정 시각을 못 읽은 것과 오래 안 건드린
@@ -368,6 +399,10 @@ function relativeDays(mtime, nowMs, t) {
   const d = Math.floor((dayStart(nowMs) - dayStart(mtime)) / DAY_MS);
   if (d <= 0) return t.todayLabel;
   return t.daysAgo(d);
+}
+
+function daysBetween(a, b) {
+  return Math.round((Date.parse(b) - Date.parse(a)) / DAY_MS);
 }
 
 function isStale(mtime, nowMs, days) {
@@ -502,6 +537,11 @@ const TEXT = {
     mDevlog: '오늘 일지', mProjects: '활성 프로젝트', mInbox: 'Inbox',
     mWeek: '이번 주 노트', mTrouble: '트러블슈팅', mOverdue: '다시 볼 것',
     colToday: '오늘 현황', devlogMake: '기록 탭의 [개발일지] 로 만드세요.', lastEdit: '마지막 수정', colProjects: '활성 프로젝트', colRecent: '최근 기록',
+    filterPlaceholder: '제목, 태그로 거르기', makeNote: '노트 만들기',
+    weekdayUpper: ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'],
+    noDue: '기한 없음', overdueBy: (n) => `${n}일 지남`,
+    continueWrite: '이어쓰기', allTasks: '작업 전체', seeAll: '전체 보기',
+    thSpark: '최근 4주 기록',
     flowTitle: '기록 흐름', lastWeeks: (n) => `최근 ${n}주`,
     less: '적음', more: '많음',
     streak: '연속 기록', weeklyAvg: '주간 평균', dayUnit: '일',
@@ -578,6 +618,11 @@ const TEXT = {
     mDevlog: "Today's log", mProjects: 'Active projects', mInbox: 'Inbox',
     mWeek: 'Notes this week', mTrouble: 'Troubleshooting', mOverdue: 'To revisit',
     colToday: 'Today', devlogMake: 'Create one from [Devlog] on the Capture tab.', lastEdit: 'Last edit', colProjects: 'Active projects', colRecent: 'Recent',
+    filterPlaceholder: 'Filter by title or tag', makeNote: 'New note',
+    weekdayUpper: ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'],
+    noDue: 'no due date', overdueBy: (n) => `${n}d overdue`,
+    continueWrite: 'Continue', allTasks: 'All tasks', seeAll: 'See all',
+    thSpark: 'Last 4 weeks',
     flowTitle: 'Writing flow', lastWeeks: (n) => `last ${n} weeks`,
     less: 'less', more: 'more',
     streak: 'Streak', weeklyAvg: 'Weekly average', dayUnit: 'd',
@@ -808,11 +853,14 @@ class CommandCenterView extends obsidian.ItemView {
       list.createEl('p', { text: t.noTasks, cls: 'devtrail-cc-muted' });
       return;
     }
+    const today = new Date().toISOString().slice(0, 10);
     for (const task of tasks) {
       const row = list.createEl('div', { cls: 'devtrail-cc-task' });
+      row.setAttr('data-filter', `${task.text} ${task.file.basename}`);
       row.createEl('span', { cls: 'devtrail-cc-checkbox' });
       const body = row.createEl('div', { cls: 'devtrail-cc-task-body' });
-      body.createEl('div', { text: task.text, cls: 'devtrail-cc-task-text' });
+      body.createEl('div', { text: task.text.replace(/\s*(?:📅|\bdue::?)\s*\d{4}-\d{2}-\d{2}\s*\]?/, ''),
+                             cls: 'devtrail-cc-task-text' });
       const src = body.createEl('a', { text: task.file.basename, cls: 'devtrail-cc-task-src' });
       src.setAttr('role', 'button'); src.setAttr('tabindex', '0');
       const open = () => this.app.workspace.getLeaf(false).openFile(task.file);
@@ -820,7 +868,25 @@ class CommandCenterView extends obsidian.ItemView {
       src.addEventListener('keydown', (ev) => {
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
       });
+
+      // 기한 — 지났을 때만 색이 붙는다. 없으면 없다고 말한다.
+      const due = parseDue(task.text);
+      const label = row.createEl('span', { cls: 'devtrail-cc-due devtrail-cc-mono' });
+      if (!due) label.setText(t.noDue);
+      else if (due < today) { label.setText(t.overdueBy(daysBetween(due, today))); label.addClass('is-over'); }
+      else if (due === today) label.setText(t.todayLabel);
+      else label.setText(due.slice(5));
     }
+
+    // 하단 — 이어쓰기 · 작업 전체.
+    const foot = card.createEl('div', { cls: 'devtrail-cc-panel-foot' });
+    const cont = foot.createEl('button', { text: t.continueWrite, cls: 'devtrail-cc-btn' });
+    cont.disabled = !devlog;
+    if (devlog) {
+      cont.addEventListener('click', () => this.app.workspace.getLeaf(false).openFile(devlog));
+    }
+    const all = foot.createEl('button', { text: t.allTasks, cls: 'devtrail-cc-btn is-ghost' });
+    all.addEventListener('click', () => { this.route = 'today'; this.render(); });
   }
 
   /* 2. 프로젝트 — 단계 분포와 표. 방치만 색이 붙는다. */
@@ -875,17 +941,28 @@ class CommandCenterView extends obsidian.ItemView {
     // 표.
     const table = sec.createEl('div', { cls: 'devtrail-cc-table' });
     const th = table.createEl('div', { cls: 'devtrail-cc-tr devtrail-cc-th' });
-    for (const label of [t.thName, t.thStage, t.thNext, t.thUpdated]) {
+    for (const label of [t.thName, t.thStage, t.thSpark, t.thNext, t.thUpdated]) {
       th.createEl('span', { text: label });
     }
     for (const r of rows) {
       const tr = table.createEl('div', { cls: 'devtrail-cc-tr' });
+      tr.setAttr('data-filter', `${r.p.name} ${r.p.stage || ''} ${r.p.next || ''}`);
       if (r.stale) tr.addClass('is-stale');
       tr.setAttr('role', 'button'); tr.setAttr('tabindex', '0');
       const name = tr.createEl('span', { cls: 'devtrail-cc-td-name' });
       if (r.stale) name.createEl('span', { cls: 'devtrail-cc-dot devtrail-cc-warn-dot' });
       name.createEl('span', { text: r.p.name });
       tr.createEl('span', { text: r.p.stage || '—', cls: 'devtrail-cc-mono devtrail-cc-faint' });
+
+      // 최근 4주 기록 — 프로젝트 폴더 안 노트를 주별로 센다.
+      const spark = tr.createEl('span', { cls: 'devtrail-cc-spark' });
+      const bars = weeklyBars(this.projectNoteTimes(r.p), now, 4);
+      const peak = Math.max(...bars, 1);
+      for (const b of bars) {
+        const lvl = b === 0 ? 0 : Math.min(4, 1 + Math.round((b / peak) * 3));
+        spark.createEl('span', { cls: `devtrail-cc-spark-bar devtrail-cc-lv${lvl}` })
+             .setAttr('title', String(b));
+      }
       tr.createEl('span', { text: r.p.next || t.noNext,
                             cls: r.p.next ? '' : 'devtrail-cc-faint' });
       tr.createEl('span', {
@@ -957,7 +1034,24 @@ class CommandCenterView extends obsidian.ItemView {
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
       });
       if (r.type) row.createEl('span', { text: r.type, cls: 'devtrail-cc-mono devtrail-cc-faint' });
+      row.setAttr('data-filter', `${r.file.basename} ${r.type || ''}`);
     }
+    // ⚠️ 볼트를 여는 통로다 — 여기서 목록을 더 늘리지 않는다.
+    const more = card.createEl('button', { text: t.seeAll, cls: 'devtrail-cc-linkbtn' });
+    more.addEventListener('click', () => {
+      const leaf = this.app.workspace.getLeaf(false);
+      if (model.recent[0]) leaf.openFile(model.recent[0].file);
+    });
+  }
+
+  /* 프로젝트 폴더 안 노트들의 수정 시각.
+   *
+   * ⚠️ 태그가 아니라 폴더로 본다 — 이 볼트는 프로젝트를 폴더로 나눈다. */
+  projectNoteTimes(p) {
+    const dir = p.file.path.slice(0, p.file.path.lastIndexOf('/'));
+    return this.app.vault.getMarkdownFiles()
+      .filter((f) => f.path.startsWith(dir + '/'))
+      .map((f) => f.stat.mtime);
   }
 
   /* ── 지표 ─────────────────────────────────────────────────────────────
@@ -987,25 +1081,67 @@ class CommandCenterView extends obsidian.ItemView {
 
   /* ── 네비게이션 ─────────────────────────────────────────────────────── */
   nav(root, t) {
-    const bar = root.createEl('nav', { cls: 'devtrail-cc-nav' });
+    const bar = root.createEl('div', { cls: 'devtrail-cc-nav' });
     bar.setAttr('aria-label', t.title);
+
+    const tabs = bar.createEl('nav', { cls: 'devtrail-cc-tabs' });
     const items = [
       ['home', t.navHome, 'layout-dashboard'],
       ['today', t.navToday, 'sun'],
       ['projects', t.navProjects, 'folder-git-2'],
       ['reviews', t.navReviews, 'history'],
     ];
-    for (const [key, label, ic] of items) {
-      const b = bar.createEl('button', { cls: 'devtrail-cc-tab' });
-      icon(b.createEl('span', { cls: 'devtrail-cc-tab-icon' }), ic);
-      b.createEl('span', { text: label });
+    for (const [key, label] of items) {
+      const b = tabs.createEl('button', { cls: 'devtrail-cc-tab', text: label });
       if (this.route === key) {
         b.addClass('is-active');
         b.setAttr('aria-current', 'page');
       }
       b.addEventListener('click', () => { this.route = key; this.render(); });
     }
+
+    const right = bar.createEl('div', { cls: 'devtrail-cc-nav-right' });
+
+    // 필터 — 제목·태그로 목록을 좁힌다.
+    //
+    // ⚠️ 검색이 아니다. 화면에 이미 있는 것을 좁힐 뿐, 볼트를 뒤지지 않는다.
+    //    전체 검색은 Obsidian 의 ⌘O · ⌘⇧F 가 한다.
+    const input = right.createEl('input', { cls: 'devtrail-cc-filter' });
+    input.setAttr('type', 'text');
+    input.setAttr('placeholder', t.filterPlaceholder);
+    input.setAttr('aria-label', t.filterPlaceholder);
+    input.value = this.filter || '';
+    input.addEventListener('input', () => {
+      this.filter = input.value;
+      this.applyFilter();
+    });
+
+    // 날짜 — 2026-08-22 SAT
+    const now = new Date();
+    right.createEl('span', {
+      text: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${t.weekdayUpper[now.getDay()]}`,
+      cls: 'devtrail-cc-date devtrail-cc-mono',
+    });
+
+    // 만들기는 명령 팔레트로 간다 — 생성 버튼을 화면 위에 늘어놓지 않는다.
+    const make = right.createEl('span', { cls: 'devtrail-cc-make' });
+    make.createEl('span', { text: t.makeNote });
+    make.createEl('span', { text: '⌘P', cls: 'devtrail-cc-kbd devtrail-cc-mono' });
   }
+
+  /* 필터를 다시 그리지 않고 적용한다.
+   *
+   * ⚠️ 매 글자마다 render() 를 부르면 볼트를 다시 훑는다. 이미 그린 행의
+   *    표시 여부만 바꾼다. */
+  applyFilter() {
+    const q = (this.filter || '').trim().toLowerCase();
+    const root = this.containerEl;
+    for (const el of Array.from(root.querySelectorAll('[data-filter]'))) {
+      const hay = (el.getAttr('data-filter') || '').toLowerCase();
+      el.style.display = (!q || hay.indexOf(q) >= 0) ? '' : 'none';
+    }
+  }
+
 
   /* ── 오늘 ────────────────────────────────────────────────────────────
    * 오늘 개발일지의 체크박스를 보여준다. 고치지는 않는다 — v1 은 읽기 전용이고
@@ -1305,4 +1441,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { TEXT, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };

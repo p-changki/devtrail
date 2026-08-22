@@ -1153,4 +1153,74 @@ t_contains "히트맵 주" "FLOW_WEEKS" "$(cat "$JS")"
 t_contains "기본 14" "STALE_DAYS = 14" "$(cat "$JS")"
 t_contains "기본 12" "FLOW_WEEKS = 12" "$(cat "$JS")"
 
+t_start "프로젝트 4주 스파크라인"
+cat > "$T_TMP/spark.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.weeklyBars !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const DAY = 86400000;
+const now = new Date(2026, 7, 22, 12).getTime();
+const at = (d) => new Date(2026, 7, 22, 12).getTime() - d * DAY;
+// 0~6일 전 = 이번 주(마지막 칸), 7~13 = 지난주, …
+const bars = f.weeklyBars([at(1), at(2), at(8), at(22), at(40)], now, 4);
+const bad = [];
+if (bars.length !== 4) bad.push('len=' + bars.length);
+if (bars[3] !== 2) bad.push('이번주=' + bars[3]);   // 1일·2일 전
+if (bars[2] !== 1) bad.push('지난주=' + bars[2]);   // 8일 전
+if (bars[1] !== 0) bad.push('2주전=' + bars[1]);
+if (bars[0] !== 1) bad.push('3주전=' + bars[0]);    // 22일 전 (21~27 구간)
+// 40일 전은 4주 밖이라 들어오지 않는다.
+console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "주 단위로 나눈다" "OK" "$(node "$T_TMP/spark.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+
+t_start "기한을 읽되 지어내지 않는다"
+cat > "$T_TMP/due.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.parseDue !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const bad = [];
+const eq = (l, g, w) => { if (g !== w) bad.push(`${l}: want ${w} got ${g}`); };
+eq('이모지', f.parseDue('로그인 고치기 📅 2026-08-25'), '2026-08-25');
+eq('due 필드', f.parseDue('정리 [due:: 2026-08-25]'), '2026-08-25');
+eq('due 콜론', f.parseDue('정리 due: 2026-08-25'), '2026-08-25');
+// ⚠️ 없으면 없다. 오늘 날짜나 아무 날짜를 채워 넣지 않는다 —
+//    지어낸 기한은 사람을 잘못된 급함으로 몰아붙인다.
+eq('없음', f.parseDue('그냥 할 일'), null);
+eq('날짜 아님', f.parseDue('버전 2026-99-99 확인'), null);
+console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "있는 것만 읽는다" "OK" "$(node "$T_TMP/due.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+
+t_start "시안이 요구한 요소가 다 있다"
+# ⚠️ 처음 구현에서 여덟 개를 빠뜨렸다. 사양의 각 요소가 실제로 그려지는지 본다.
+t_contains "필터 입력" "devtrail-cc-filter" "$(cat "$JS")"
+t_contains "날짜 표시" "devtrail-cc-date" "$(cat "$JS")"
+t_contains "만들기 안내" "devtrail-cc-kbd" "$(cat "$JS")"
+t_contains "스파크라인" "devtrail-cc-spark" "$(cat "$JS")"
+t_contains "이어쓰기 버튼" "continueWrite" "$(cat "$JS")"
+t_contains "작업 전체 버튼" "allTasks" "$(cat "$JS")"
+t_contains "전체 보기" "seeAll" "$(cat "$JS")"
+t_contains "기한 라벨" "devtrail-cc-due" "$(cat "$JS")"
+# 표는 5열이다 — 스파크라인 자리가 있어야 한다.
+t_contains "표가 5열" "1fr 84px 1fr 100px 96px" "$(cat "$CSS")"
+
 t_end
