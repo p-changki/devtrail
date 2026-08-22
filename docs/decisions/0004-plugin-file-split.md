@@ -3,7 +3,8 @@
 - 상태: 채택 (조건부)
 - 날짜: 2026-08-22
 - 관련: [0002 Command Center](./0002-command-center.md) D3
-- 근거: [`evidence/0004-loader-spike.json`](./evidence/0004-loader-spike.json)
+- 근거: [`evidence/0004-loader-spike.json`](./evidence/0004-loader-spike.json) (ASCII 경로)
+  · [`evidence/0004-loader-spike-hazardpath.json`](./evidence/0004-loader-spike-hazardpath.json) (물결·공백·한글·점)
 
 ## 무엇이 문제였나
 
@@ -83,17 +84,31 @@ const model = require(`${here}/read-model.js`);
 
 ## 나누기 전에 풀어야 할 것
 
-### 1. 경로에 공백·유니코드가 있으면?
+### 1. 경로에 공백·유니코드가 있으면? — 확인함 ✓
 
-스파이크를 돌린 QA 볼트 경로는 ASCII 였다. **실제 사용자 볼트는 다르다:**
+1차 스파이크는 ASCII 경로에서 돌렸다. 실사용 경로는 다르다:
 
 ```
 /Users/…/Library/Mobile Documents/com~apple~CloudDocs/Obsidian Vault
-                                 ^^^^^ 물결        ^^^^^^^^^^^^^^ 공백
+                                 ~~~~~ 물결        ^^^^^^^^^^^^^^ 공백
 ```
 
-⚠️ **이건 아직 검증되지 않았다.** 나누기 전에 그런 경로에서 한 번 확인한다.
-안 되면 나누기 자체가 무의미해진다.
+그래서 위험을 **모아 담은** 볼트를 하나 만들어 다시 물었다
+([`evidence/0004-loader-spike-hazardpath.json`](./evidence/0004-loader-spike-hazardpath.json)):
+
+```
+/Users/…/devtrail-qa5/com~apple~CloudDocs/Obsidian Vault 한글 v1.0
+                      ~~~~~ ~~~~~         ^^^^^^^^ ^^^^^ ^^^^ ^^^^
+                      물결                공백      한글   점
+```
+
+```
+with_ext   OK  probe-module-loaded
+no_ext     OK  probe-module-loaded
+sentinel   OK  sentinel:5
+```
+
+물결·공백·한글·점을 전부 담은 경로에서 통과했다. 이 위험은 닫혔다.
 
 ### 2. 배포 목록이 파일 이름을 안다
 
@@ -126,6 +141,5 @@ main.js          플러그인 수명주기 · 위 셋을 잇는다
 
 ## 되돌릴 조건
 
-- 실사용 경로(공백·유니코드)에서 절대 경로 require 가 실패한다
 - Obsidian 이 이 동작을 막는다 — 그때는 concat 과 번들을 비교하는 ADR 을
   새로 쓴다
