@@ -73,3 +73,68 @@
   outline-offset: 2px;
   border-radius: var(--radius-s);
 }
+
+/* ── 네비게이션 ─────────────────────────────────────────────────────────── */
+.devtrail-cc-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  /* 좁은 패널에서 탭이 잘리지 않게 감싼다. */
+  flex-wrap: wrap;
+}
+
+.devtrail-cc-tab {
+  padding: 4px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  cursor: pointer;
+}
+
+.devtrail-cc-tab:hover { color: var(--text-normal); }
+
+.devtrail-cc-tab.is-active {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  border-color: var(--interactive-accent);
+}
+
+.devtrail-cc-tab:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* ── 명령 버튼 ──────────────────────────────────────────────────────────── */
+.devtrail-cc-grid {
+  display: grid;
+  /* 패널 폭에 맞춰 열 수가 줄어든다 — 미디어 쿼리 없이 좁은 패널을 견딘다. */
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.devtrail-cc-action {
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  text-align: left;
+}
+
+.devtrail-cc-action:hover { background: var(--background-modifier-hover); }
+
+.devtrail-cc-action:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* ⚠️ 준비되지 않은 명령은 눌리지 않는다. 눌러서 아무 일도 안 일어나는 것보다
+ *    처음부터 못 누르게 하고 이유를 title 로 알려주는 편이 낫다. */
+.devtrail-cc-action.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

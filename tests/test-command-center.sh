@@ -251,4 +251,60 @@ t_eq "due 를 읽지 않는다" "0" \
 # 빈 볼트에서 0 을 늘어놓지 않는다 — 안내가 되어야 한다.
 t_contains "빈 상태 문구가 있다" "empty" "$(cat "$JS")"
 
+# ── 라우트 ───────────────────────────────────────────────────────────────────
+#
+# Phase 3 의 종료 기준: 각 화면이 구체적인 다음 행동을 주고,
+#                      노트 생성 로직을 중복하지 않는다.
+t_start "라우트가 존재한다"
+for r in home today capture projects reviews; do
+  t_contains "$r" "'$r'" "$(cat "$JS")"
+done
+
+# ── 노트 생성을 다시 만들지 않는다 ──────────────────────────────────────────
+#
+# ⚠️ Capture 는 기존 Templater 명령을 부른다. 같은 노트를 만드는 코드가
+#    플러그인에도 생기면 템플릿을 고쳐도 플러그인 쪽은 옛말을 한다.
+#    2026-08-22 QA 에서 프로젝트 허브 본문이 두 곳에 있어 링크가 전부
+#    깨진 적이 있다 — 같은 유형이다.
+t_start "노트 생성을 중복하지 않는다"
+t_contains "명령을 실행한다" "commands.executeCommandById" "$(cat "$JS")"
+# 노트를 직접 만들면 그게 두 번째 생성 경로다.
+t_eq "vault.create 를 부르지 않는다" "0" \
+  "$(grep -cE 'vault\.create\(|vault\.createFolder\(' "$JS" | tr -d ' ')"
+t_eq "파일에 쓰지 않는다" "0" \
+  "$(grep -cE 'vault\.modify\(|vault\.append\(' "$JS" | tr -d ' ')"
+
+# ⚠️ Templater 명령 id 에는 볼트 경로가 들어간다. 하드코딩하면 영어 볼트나
+#    다른 루트를 쓰는 사람에게서 조용히 죽는다 — 경로 맵에서 조립해야 한다.
+t_contains "명령 id 를 조립한다" "templater-obsidian:create-" "$(cat "$JS")"
+# ⚠️ 파일명 한/영 매핑(CAPTURES)은 필요하다 — 템플릿 이름이 언어마다 다르다.
+#    막아야 할 것은 '경로' 하드코딩이다. notes/템플릿 처럼 볼트 구조를 박으면
+#    루트를 바꾼 사람에게서 조용히 죽는다.
+t_eq "볼트 경로를 박지 않는다" "0" \
+  "$(grep -cE "['\"\`][^'\"\`]*notes/" "$JS" | tr -d ' ')"
+
+# 명령이 없을 때 조용히 다른 노트를 만들면 안 된다 — 무엇을 해야 할지 말한다.
+t_contains "없는 명령을 알려준다" "notReady" "$(cat "$JS")"
+
+# ── 조립이 실제로 맞는가 ────────────────────────────────────────────────────
+t_start "명령 id 조립"
+cat > "$T_TMP/cmdid.js" <<'JSEOF'
+const Module = require('module'); const orig = Module._load;
+Module._load = (r,p,m) => r === 'obsidian' ? { Plugin: class{}, ItemView: class{} } : orig(r,p,m);
+const P = require(process.argv[2]);
+const f = P.__test;
+if (!f || typeof f.templaterCommandId !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const ko = f.templaterCommandId({ templates: 'notes/템플릿' }, '개발일지양식.md');
+const en = f.templaterCommandId({ templates: 'MyVault/Templates' }, 'Devlog.md');
+const bad = f.templaterCommandId({}, 'Devlog.md');
+console.log(ko === 'templater-obsidian:create-notes/템플릿/개발일지양식.md'
+         && en === 'templater-obsidian:create-MyVault/Templates/Devlog.md'
+         && bad === null ? 'OK' : `FAIL ko=${ko} en=${en} bad=${bad}`);
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "경로 맵에서 조립한다" "OK" "$(node "$T_TMP/cmdid.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+
 t_end

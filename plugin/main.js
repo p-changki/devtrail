@@ -126,6 +126,50 @@ function todayDevlog(app, data) {
   return app.vault.getAbstractFileByPath(path) || null;
 }
 
+/* ── 기존 명령에 위임 ────────────────────────────────────────────────────
+ *
+ * ⚠️ 노트를 여기서 만들지 않는다. Templater 명령을 부른다.
+ *
+ *    같은 노트를 만드는 코드가 플러그인에도 생기면, 템플릿을 고쳐도
+ *    플러그인 쪽은 옛말을 한다. 2026-08-22 QA 에서 프로젝트 허브 본문이
+ *    두 곳에 있어 링크가 전부 깨졌다 — 같은 유형이다.
+ *
+ * ⚠️ 명령 id 에는 볼트 경로가 들어간다:
+ *      templater-obsidian:create-notes/템플릿/개발일지양식.md
+ *    하드코딩하면 영어 볼트나 다른 루트를 쓰는 사람에게서 조용히 죽는다.
+ *    경로 맵에서 조립한다.
+ */
+function templaterCommandId(paths, templateFile) {
+  const dir = paths && paths.templates;
+  if (!dir || !templateFile) return null;
+  return `templater-obsidian:create-${dir}/${templateFile}`;
+}
+
+/* 어떤 캡처가 어떤 템플릿을 쓰는가.
+ *
+ * 파일명은 언어마다 다르다 — 경로 맵의 lang 으로 고른다. 여기 목록은
+ * Templater 에 등록된 것(enabled_templates_hotkeys)과 같아야 한다. */
+const CAPTURES = [
+  { key: 'devlog',  ko: '개발일지양식.md',            en: 'Devlog.md' },
+  { key: 'devnote', ko: '개발메모 템플릿.md',          en: 'Dev note.md' },
+  { key: 'idea',    ko: '아이디어 빠른저장 템플릿.md', en: 'Quick idea.md' },
+  { key: 'worklog', ko: '워크로그 템플릿.md',          en: 'Worklog.md' },
+  { key: 'report',  ko: '회고 템플릿.md',              en: 'Retro.md' },
+  { key: 'project', ko: '프로젝트 생성 템플릿.md',     en: 'New project.md' },
+];
+
+function captureFile(c, lang) {
+  return lang === 'en' ? c.en : c.ko;
+}
+
+/* 그 명령이 실제로 있는가. 없으면 조용히 다른 노트를 만들지 않는다 —
+ * 무엇을 해야 하는지 말한다. */
+function commandExists(app, id) {
+  if (!id) return false;
+  const all = app.commands && app.commands.commands;
+  return !!(all && all[id]);
+}
+
 /* 화면 문구. 한국어·영어만 있고, 그 외에는 한국어로 떨어진다 —
  * CLI 의 dt_lang 과 같은 규칙이다. */
 const TEXT = {
@@ -151,6 +195,20 @@ const TEXT = {
     stage: '단계',
     next: '다음',
     open: '열기',
+    navHome: '홈', navToday: '오늘', navCapture: '기록',
+    navProjects: '프로젝트', navReviews: '리뷰',
+    tasks: '오늘 할 일',
+    noTasks: '체크박스가 없습니다',
+    openDevlog: '개발일지 열기',
+    makeDevlog: '개발일지 만들기',
+    captureHelp: '무엇을 남기시겠습니까',
+    cDevlog: '개발일지', cDevnote: '개발메모', cIdea: '아이디어',
+    cWorklog: '워크로그', cReport: '회고', cProject: '프로젝트',
+    notReady: '이 명령이 아직 준비되지 않았습니다',
+    notReadyHelp: '터미널에서 devtrail obsidian 을 실행하고 Obsidian 을 재시작하세요.',
+    weekly: '이번 주 주간리뷰',
+    weeklyNo: '아직 없습니다',
+    makeWeekly: '터미널에서: devtrail weekly',
   },
   en: {
     title: 'DevTrail',
@@ -174,6 +232,20 @@ const TEXT = {
     stage: 'Stage',
     next: 'Next',
     open: 'Open',
+    navHome: 'Home', navToday: 'Today', navCapture: 'Capture',
+    navProjects: 'Projects', navReviews: 'Reviews',
+    tasks: "Today's tasks",
+    noTasks: 'No checkboxes',
+    openDevlog: "Open today's devlog",
+    makeDevlog: "Create today's devlog",
+    captureHelp: 'What would you like to record',
+    cDevlog: 'Devlog', cDevnote: 'Dev note', cIdea: 'Idea',
+    cWorklog: 'Worklog', cReport: 'Retro', cProject: 'Project',
+    notReady: 'That command is not ready yet',
+    notReadyHelp: 'Run devtrail obsidian in a terminal, then restart Obsidian.',
+    weekly: "This week's review",
+    weeklyNo: 'not yet',
+    makeWeekly: 'In a terminal: devtrail weekly',
   },
 };
 
@@ -182,6 +254,8 @@ function textFor(lang) {
 }
 
 class CommandCenterView extends obsidian.ItemView {
+  route = 'home';
+
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return 'DevTrail'; }
   getIcon() { return 'layout-dashboard'; }
@@ -213,10 +287,17 @@ class CommandCenterView extends obsidian.ItemView {
       return;
     }
 
+    this.nav(root, t);
+
     const model = collect(this.app, map.data.paths);
     const devlog = todayDevlog(this.app, map.data);
-
     const body = root.createEl('div', { cls: 'devtrail-cc-body' });
+
+    // 라우트마다 한 가지 질문에 답한다. 홈은 전체를 훑는다.
+    if (this.route === 'today')    return this.viewToday(body, t, map.data, devlog);
+    if (this.route === 'capture')  return this.viewCapture(body, t, map.data);
+    if (this.route === 'projects') return this.viewProjects(body, t, model);
+    if (this.route === 'reviews')  return this.viewReviews(body, t, map.data, model);
 
     // ⚠️ 빈 볼트에 0 을 늘어놓지 않는다. 대시보드가 아니라 안내가 되어야 한다.
     const nothing =
@@ -269,6 +350,127 @@ class CommandCenterView extends obsidian.ItemView {
         this.row(list, o.file.basename, o.file, o.at);
       }
     });
+  }
+
+  /* ── 네비게이션 ─────────────────────────────────────────────────────── */
+  nav(root, t) {
+    const bar = root.createEl('nav', { cls: 'devtrail-cc-nav' });
+    bar.setAttr('aria-label', t.title);
+    const items = [
+      ['home', t.navHome], ['today', t.navToday], ['capture', t.navCapture],
+      ['projects', t.navProjects], ['reviews', t.navReviews],
+    ];
+    for (const [key, label] of items) {
+      const b = bar.createEl('button', { text: label, cls: 'devtrail-cc-tab' });
+      if (this.route === key) {
+        b.addClass('is-active');
+        b.setAttr('aria-current', 'page');
+      }
+      b.addEventListener('click', () => { this.route = key; this.render(); });
+    }
+  }
+
+  /* ── 오늘 ────────────────────────────────────────────────────────────
+   * 오늘 개발일지의 체크박스를 보여준다. 고치지는 않는다 — v1 은 읽기 전용이고
+   * 편집은 Obsidian 이 이미 잘 한다. */
+  async viewToday(body, t, data, devlog) {
+    if (!devlog) {
+      const e = body.createEl('div', { cls: 'devtrail-cc-empty' });
+      e.createEl('p', { text: t.devlogNo });
+      this.action(e, t.makeDevlog, templaterCommandId(data.paths, captureFile(CAPTURES[0], data.lang)), t);
+      return;
+    }
+    let tasks = [];
+    try {
+      const raw = await this.app.vault.read(devlog);
+      tasks = raw.split('\n').filter((l) => /^\s*- \[[ xX]\]/.test(l));
+    } catch (e) { tasks = []; }
+
+    this.card(body, t.tasks, tasks.length, (list) => {
+      if (tasks.length === 0) {
+        list.createEl('p', { text: t.noTasks, cls: 'devtrail-cc-muted' });
+        return;
+      }
+      for (const line of tasks.slice(0, 20)) {
+        const done = /\[[xX]\]/.test(line);
+        const text = line.replace(/^\s*- \[[ xX]\]\s*/, '');
+        const row = list.createEl('div', { cls: 'devtrail-cc-row' });
+        row.createEl('span', { text: (done ? '☑ ' : '☐ ') + (text || '…') });
+      }
+    });
+    this.card(body, t.devlog, 1, (list) => this.row(list, devlog.basename, devlog, t.openDevlog));
+  }
+
+  /* ── 기록 ────────────────────────────────────────────────────────────
+   * ⚠️ 노트를 만들지 않는다. 등록된 Templater 명령을 부른다. */
+  viewCapture(body, t, data) {
+    body.createEl('p', { text: t.captureHelp, cls: 'devtrail-cc-muted' });
+    const grid = body.createEl('div', { cls: 'devtrail-cc-grid' });
+    const labels = {
+      devlog: t.cDevlog, devnote: t.cDevnote, idea: t.cIdea,
+      worklog: t.cWorklog, report: t.cReport, project: t.cProject,
+    };
+    for (const c of CAPTURES) {
+      const id = templaterCommandId(data.paths, captureFile(c, data.lang));
+      this.action(grid, labels[c.key] || c.key, id, t);
+    }
+  }
+
+  /* ── 프로젝트 ─────────────────────────────────────────────────────── */
+  viewProjects(body, t, model) {
+    this.card(body, t.projects, model.projects.length, (list) => {
+      if (model.projects.length === 0) {
+        list.createEl('p', { text: t.emptyProjects, cls: 'devtrail-cc-muted' });
+        return;
+      }
+      for (const p of model.projects) {
+        const bits = [];
+        if (p.stage) bits.push(`${t.stage}: ${p.stage}`);
+        if (p.next) bits.push(`${t.next}: ${p.next}`);
+        this.row(list, p.name, p.file, bits.join(' · '));
+      }
+    });
+  }
+
+  /* ── 리뷰 ────────────────────────────────────────────────────────────
+   * ⚠️ 주간리뷰 생성은 CLI 가 한다(devtrail weekly). ISO 주차 계산과 Dataview
+   *    쿼리 조립이 거기 있고, 여기서 다시 만들면 두 벌이 된다. */
+  viewReviews(body, t, data, model) {
+    const dir = data.paths && data.paths.weekly;
+    let file = null;
+    if (dir) {
+      const found = this.app.vault.getMarkdownFiles()
+        .filter((f) => f.path.startsWith(dir + '/'))
+        .sort((a, b) => b.stat.mtime - a.stat.mtime);
+      file = found[0] || null;
+    }
+    this.card(body, t.weekly, file ? 1 : 0, (list) => {
+      if (file) this.row(list, file.basename, file, t.open);
+      else {
+        list.createEl('p', { text: t.weeklyNo, cls: 'devtrail-cc-muted' });
+        list.createEl('p', { text: t.makeWeekly, cls: 'devtrail-cc-muted' });
+      }
+    });
+    this.card(body, t.overdue, model.overdue.length, (list) => {
+      if (model.overdue.length === 0) {
+        list.createEl('p', { text: t.emptyOverdue, cls: 'devtrail-cc-muted' });
+        return;
+      }
+      for (const o of model.overdue) this.row(list, o.file.basename, o.file, o.at);
+    });
+  }
+
+  /* 명령 버튼. 명령이 없으면 무엇을 해야 하는지 말한다 —
+   * 조용히 다른 노트를 만들지 않는다. */
+  action(parent, label, id, t) {
+    const b = parent.createEl('button', { text: label, cls: 'devtrail-cc-action' });
+    if (commandExists(this.app, id)) {
+      b.addEventListener('click', () => this.app.commands.executeCommandById(id));
+      return;
+    }
+    b.addClass('is-disabled');
+    b.setAttr('disabled', 'true');
+    b.setAttr('title', `${t.notReady} — ${t.notReadyHelp}`);
   }
 
   /* 카드 하나. 제목 · 개수 · 내용. */
@@ -331,4 +533,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { isUserNote };
+module.exports.__test = { isUserNote, templaterCommandId, captureFile, CAPTURES };
