@@ -463,4 +463,43 @@ t_contains "설치 안내 문구가 있다" "searchMissing" "$(cat "$JS")"
 t_eq "검색 버튼이 파일을 만들지 않는다" "0" \
   "$(grep -cE 'vault\.create\(|vault\.modify\(' "$JS" | tr -d ' ')"
 
+# ── 시각 규약 ────────────────────────────────────────────────────────────────
+#
+# ⚠️ Obsidian 안에서는 테마를 이긴다고 생각하지 않는다. 우리 색을 강제하면
+#    남의 테마가 깨진다 — docs/design-tokens.md 의 원칙 4.
+#    색은 전부 Obsidian 의 시맨틱 변수에서 온다.
+t_start "색을 하드코딩하지 않는다"
+CSS="$ROOT/plugin/styles.css"
+# ⚠️ 주석에 단어가 나오는 것은 괜찮다. 선언(: 뒤)에 있는지를 본다.
+t_eq "hex 색이 없다" "0" \
+  "$(grep -cE ':[^;]*#[0-9a-fA-F]{3,8}\b' "$CSS" | tr -d ' ')"
+t_eq "rgb() 색이 없다" "0" \
+  "$(grep -cE ':[^;]*rgba?\(' "$CSS" | tr -d ' ')"
+# 전역 폰트·body 를 건드리면 사용자 볼트 전체가 바뀐다.
+t_eq "body 를 건드리지 않는다" "0" "$(grep -cE '^\s*body\s*[{,]' "$CSS" | tr -d ' ')"
+t_eq "전역 폰트를 정하지 않는다" "0" "$(grep -c 'font-family' "$CSS" | tr -d ' ')"
+
+t_start "상태를 색으로만 말하지 않는다"
+# ⚠️ 설계안 §3: 색만으로 신호하지 않는다. 색을 못 보는 사람이 있다.
+#    배지는 글자를 갖고, 비활성 버튼은 title 로 이유를 말한다.
+t_contains "배지에 글자가 있다" "devtrail-cc-badge" "$(cat "$JS")"
+t_contains "비활성 이유를 title 로" "setAttr('title'" "$(cat "$JS")"
+
+t_start "접근성"
+t_contains "포커스가 보인다" "focus-visible" "$(cat "$CSS")"
+t_contains "네비에 aria-label" "aria-label" "$(cat "$JS")"
+t_contains "현재 탭을 알린다" "aria-current" "$(cat "$JS")"
+# ⚠️ 움직임에 민감한 사람이 있다. 애니메이션을 넣었다면 끌 수 있어야 한다.
+t_eq "감소된 모션을 존중한다" "1" \
+  "$(grep -c 'prefers-reduced-motion' "$CSS" | tr -d ' ')"
+
+t_start "지표 카드"
+# 숫자만 있으면 무엇의 숫자인지 모른다. 아이콘·설명·이동이 함께 간다.
+t_contains "아이콘을 붙인다" "setIcon" "$(cat "$JS")"
+# ⚠️ 함수가 있는 것과 '연결된' 것은 다르다. 클릭 핸들러가 실제로 붙어야 한다.
+t_contains "카드를 누르면 이동한다" "metricRoute" "$(cat "$JS")"
+t_contains "클릭이 연결돼 있다" "() => this.metricRoute(route)" "$(cat "$JS")"
+# 지표 6개가 갈 곳을 다 갖는가 — 하나라도 빠지면 누르고 아무 일도 안 난다.
+t_eq "지표가 6개다" "6" "$(grep -c '\[t\.m' "$JS" | tr -d ' ')"
+
 t_end

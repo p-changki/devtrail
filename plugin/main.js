@@ -22,6 +22,12 @@
 const obsidian = require('obsidian');
 
 const VIEW_TYPE = 'devtrail-command-center';
+
+/* 아이콘. Obsidian 이 번들한 lucide 이름만 쓴다 — 아이콘 파일을 들고
+ * 다니면 그것도 유지할 물건이 된다. */
+function icon(el, name) {
+  if (obsidian.setIcon) obsidian.setIcon(el, name);
+}
 const PATH_MAP_FILE = '_devtrail-paths.md';
 
 /* ── 경로 맵 ──────────────────────────────────────────────────────────────
@@ -415,17 +421,20 @@ class CommandCenterView extends obsidian.ItemView {
       if (model.projects.length === 0) {
         list.createEl('p', { text: t.emptyProjects, cls: 'devtrail-cc-muted' }); return;
       }
-      for (const p of model.projects.slice(0, 6)) {
-        const bits = [];
-        if (p.stage) bits.push(`${t.stage}: ${p.stage}`);
-        if (p.next) bits.push(`${t.next}: ${p.next}`);
-        this.row(list, p.name, p.file, bits.join(' · '));
-      }
+      for (const p of model.projects.slice(0, 6)) this.projectRow(list, t, p);
     });
 
     this.card(cols, t.colRecent, model.recent.length, (list) => {
       for (const r of model.recent.slice(0, 8)) {
-        this.row(list, r.file.basename, r.file, r.type || '');
+        const el = list.createEl('div', { cls: 'devtrail-cc-row' });
+        const a = el.createEl('a', { text: r.file.basename, cls: 'devtrail-cc-link' });
+        a.setAttr('role', 'button'); a.setAttr('tabindex', '0');
+        const open = () => this.app.workspace.getLeaf(false).openFile(r.file);
+        a.addEventListener('click', open);
+        a.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+        });
+        if (r.type) this.badge(el, r.type, 'type');
       }
     });
 
@@ -438,19 +447,35 @@ class CommandCenterView extends obsidian.ItemView {
    *    0 만 늘어놓는 화면은 지어낸 화면이다. */
   metrics(body, t, model, devlog) {
     const strip = body.createEl('div', { cls: 'devtrail-cc-metrics' });
+    // [라벨, 값, 아이콘, 보조설명, 이동할 라우트, 주의 여부]
     const items = [
-      [t.mDevlog,   devlog ? t.yes : t.no],
-      [t.mProjects, model.projects.length],
-      [t.mInbox,    model.inbox.length],
-      [t.mWeek,     model.thisWeek],
-      [t.mTrouble,  model.trouble.length],
-      [t.mOverdue,  model.overdue.length],
+      [t.mDevlog,   devlog ? t.yes : t.no, 'calendar-days', t.hDevlog,   'today',    !devlog],
+      [t.mProjects, model.projects.length, 'folder-git-2', t.hProjects, 'projects', false],
+      [t.mInbox,    model.inbox.length,    'inbox',        t.hInbox,    'home',     model.inbox.length > 0],
+      [t.mWeek,     model.thisWeek,        'file-text',    t.hWeek,     'home',     false],
+      [t.mTrouble,  model.trouble.length,  'wrench',       t.hTrouble,  'home',     false],
+      [t.mOverdue,  model.overdue.length,  'alarm-clock',  t.hOverdue,  'reviews',  model.overdue.length > 0],
     ];
-    for (const [label, value] of items) {
-      const c = strip.createEl('div', { cls: 'devtrail-cc-metric' });
+    for (const [label, value, ic, help, route, warn] of items) {
+      // ⚠️ 지표는 '눌러서 갈 곳' 이 있어야 숫자가 행동으로 이어진다.
+      const c = strip.createEl('button', { cls: 'devtrail-cc-metric' });
+      c.setAttr('aria-label', `${label}: ${value} — ${help}`);
+      c.setAttr('title', help);
+      if (warn) c.addClass('is-attention');
+      const head = c.createEl('div', { cls: 'devtrail-cc-metric-head' });
+      icon(head.createEl('span', { cls: 'devtrail-cc-metric-icon' }), ic);
+      head.createEl('span', { text: label, cls: 'devtrail-cc-metric-label' });
       c.createEl('div', { text: String(value), cls: 'devtrail-cc-metric-value' });
-      c.createEl('div', { text: label, cls: 'devtrail-cc-metric-label' });
+      c.createEl('div', { text: help, cls: 'devtrail-cc-metric-help' });
+      c.addEventListener('click', () => this.metricRoute(route));
     }
+  }
+
+  /* 지표에서 라우트로. 숫자를 보고 바로 갈 수 있어야 한다. */
+  metricRoute(route) {
+    if (!route || route === this.route) return;
+    this.route = route;
+    this.render();
   }
 
   /* ── 빠른 기록 ────────────────────────────────────────────────────────
@@ -497,11 +522,16 @@ class CommandCenterView extends obsidian.ItemView {
     const bar = root.createEl('nav', { cls: 'devtrail-cc-nav' });
     bar.setAttr('aria-label', t.title);
     const items = [
-      ['home', t.navHome], ['today', t.navToday], ['capture', t.navCapture],
-      ['projects', t.navProjects], ['reviews', t.navReviews],
+      ['home', t.navHome, 'layout-dashboard'],
+      ['today', t.navToday, 'sun'],
+      ['capture', t.navCapture, 'plus-circle'],
+      ['projects', t.navProjects, 'folder-git-2'],
+      ['reviews', t.navReviews, 'rotate-ccw'],
     ];
-    for (const [key, label] of items) {
-      const b = bar.createEl('button', { text: label, cls: 'devtrail-cc-tab' });
+    for (const [key, label, ic] of items) {
+      const b = bar.createEl('button', { cls: 'devtrail-cc-tab' });
+      icon(b.createEl('span', { cls: 'devtrail-cc-tab-icon' }), ic);
+      b.createEl('span', { text: label });
       if (this.route === key) {
         b.addClass('is-active');
         b.setAttr('aria-current', 'page');
@@ -620,6 +650,34 @@ class CommandCenterView extends obsidian.ItemView {
     head.createEl('h3', { text: title });
     head.createEl('span', { text: String(count), cls: 'devtrail-cc-count' });
     fill(box.createEl('div', { cls: 'devtrail-cc-list' }));
+  }
+
+  /* 프로젝트 한 줄 — 이름 · stage 배지 · 다음 행동 · 마지막 수정. */
+  projectRow(list, t, p) {
+    const el = list.createEl('div', { cls: 'devtrail-cc-row devtrail-cc-projectrow' });
+    const left = el.createEl('div', { cls: 'devtrail-cc-row-main' });
+    const a = left.createEl('a', { text: p.name, cls: 'devtrail-cc-link' });
+    a.setAttr('role', 'button');
+    a.setAttr('tabindex', '0');
+    const open = () => this.app.workspace.getLeaf(false).openFile(p.file);
+    a.addEventListener('click', open);
+    a.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+    });
+    if (p.stage) this.badge(left, p.stage, 'stage');
+    if (p.next) el.createEl('div', { text: p.next, cls: 'devtrail-cc-muted' });
+    el.createEl('div', {
+      text: `${t.lastEdit} ${new Date(p.mtime).toLocaleDateString()}`,
+      cls: 'devtrail-cc-muted devtrail-cc-row-meta',
+    });
+  }
+
+  /* 배지. 상태를 색으로만 말하지 않는다 — 글자를 함께 둔다.
+   * 색을 못 보는 사람이 있고, 흑백 인쇄도 있다. */
+  badge(parent, text, kind) {
+    const b = parent.createEl('span', { text, cls: 'devtrail-cc-badge' });
+    if (kind) b.addClass(`is-${kind}`);
+    return b;
   }
 
   /* 노트 한 줄. 클릭하면 연다 — 쓰기는 하지 않는다(v1 은 읽기 전용). */
