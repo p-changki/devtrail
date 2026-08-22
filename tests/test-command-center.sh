@@ -145,4 +145,41 @@ t_no_file "manifest 도 지워진다" "$V2/.obsidian/plugins/$PID/manifest.json"
 t_eq "사용자 노트는 그대로" "1" \
   "$(find "$V2/notes" -name '*.md' | wc -l | tr -d ' ')"
 
+# ── Obsidian 실행 중 ────────────────────────────────────────────────────────
+#
+# ⚠️ 회귀: Obsidian 이 실행 중일 때 플러그인을 넣으면 그 폴더를 인지하지
+#    못한다. 우리는 "설치했습니다" 라고 보고하는데 사용자는 화면을 못 본다.
+#    2026-08-22 실물 확인에서 실제로 그랬다 — 설치·활성화가 다 됐는데
+#    화면이 안 나왔고, 원인은 실행 중에 목록을 바꿔서였다.
+#
+# ⚠️ 볼트 레지스트리와는 다르다. 거기서는 Obsidian 이 종료할 때 우리 변경을
+#    덮어쓰므로 아예 건너뛴다. 플러그인 파일은 살아남으므로 막지 않는다.
+#    대신 재시작해야 반영된다고 말한다 — 말하지 않으면 사용자는 고장으로 본다.
+t_start "실행 중이면 재시작을 알려준다"
+SRC="$ROOT/lib/commandcentercmd.sh"
+t_contains "install 이 실행 여부를 본다" "oa_warn_if_running" "$(cat "$SRC")"
+# 켜기·끄기도 같은 함정이다.
+# 주석(source 줄)이 아니라 실제 호출만 센다.
+t_eq "install·enable·disable 세 곳" "3" \
+  "$(grep -cE '^\s+oa_warn_if_running' "$SRC" | tr -d ' ')"
+
+# 플러그인 설치 경로에도 같은 안내가 있어야 한다 — 같은 함정이다.
+t_contains "plugins install 도 본다" "oa_warn_if_running" "$(cat "$ROOT/lib/plugins.sh")"
+
+# ⚠️ 안내가 '재시작해야 보인다' 를 실제로 말하는가. 함수만 있고 문구가
+#    빈약하면 사용자는 여전히 고장으로 본다.
+t_contains "재시작을 말한다" "재시작" "$(cat "$ROOT/lib/obsidian_app.sh")"
+t_contains "종료 후 재실행을 권한다" "종료한 뒤" "$(cat "$ROOT/lib/obsidian_app.sh")"
+
+# 공용 헬퍼로 한 곳에서 만든다. 문구가 명령마다 갈리면 또 어긋난다.
+t_contains "공용 헬퍼가 있다" "oa_warn_if_running" "$(cat "$ROOT/lib/obsidian_app.sh")"
+
+# ⚠️ 막지는 않는다. 파일 쓰기는 유효하므로 설치 자체는 되어야 한다.
+t_start "실행 중이어도 설치는 된다"
+V3=$(_vault v3); H3="$T_TMP/h3"; _cfg "$V3" "$H3"
+out=$(DEVTRAIL_HOME="$H3" DEVTRAIL_CONFIG="$H3/devtrail.config.json" \
+      "$DT" command-center install --apply 2>&1)
+t_file "실행 여부와 무관하게 설치된다" "$V3/.obsidian/plugins/$PID/main.js"
+t_eq "종료코드 0" "0" "$?"
+
 t_end

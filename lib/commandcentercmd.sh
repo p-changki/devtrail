@@ -14,7 +14,8 @@
 #    설치했다고 남의 볼트에서 자동으로 켜지면 안 된다.
 # ⚠️ 한글 앞 변수는 중괄호로: "${n}개"  (bash 3.2)
 
-. "$DEVTRAIL_ROOT/lib/plugins.sh"    # _pl_enable · pl_installed · pl_enabled
+. "$DEVTRAIL_ROOT/lib/plugins.sh"       # _pl_enable · pl_installed · pl_enabled
+. "$DEVTRAIL_ROOT/lib/obsidian_app.sh"  # oa_warn_if_running
 
 DT_CC_ID="devtrail-command-center"
 DT_CC_SRC="$DEVTRAIL_ROOT/plugin"
@@ -97,6 +98,7 @@ $(_cc_files)
 EOF
 
   ok "$(L "파일 ${ok_n}개 설치" "${ok_n} files installed")"
+  oa_warn_if_running || true
   dim "   $(L "켜기" "Enable"): devtrail command-center enable --apply"
   jr_end
 }
@@ -133,7 +135,8 @@ _cc_enable() {
   _pl_enable "$dot" "$DT_CC_ID" \
     || { jr_end; die "$(L "켜지 못했습니다" "Could not enable it")"; }
   ok "$(L "켰습니다" "Enabled")"
-  dim "   $(L "Obsidian 을 재시작해야 보입니다" "Restart Obsidian to see it")"
+  oa_warn_if_running \
+    || dim "   $(L "Obsidian 을 열면 보입니다" "It shows up when you open Obsidian")"
   jr_end
 }
 
@@ -170,6 +173,7 @@ _cc_disable() {
   jq --arg p "$DT_CC_ID" 'map(select(. != $p))' "$f" > "$tmp" && mv "$tmp" "$f" \
     || { rm -f "$tmp"; jr_end; die "$(L "끄지 못했습니다" "Could not disable it")"; }
   ok "$(L "껐습니다" "Disabled")"
+  oa_warn_if_running || true
   dim "   $(L "파일은 남아 있습니다" "The files are still there"): $(_cc_dest)"
   jr_end
 }
