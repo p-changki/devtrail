@@ -374,7 +374,9 @@ t_eq "event 를 세지 않는다"   "0" "$(grep -cE "'event'|\"event\"" "$JS" | 
 t_start "전체 화면 레이아웃"
 CSS="$ROOT/plugin/styles.css"
 t_contains "지표 스트립" "devtrail-cc-metrics" "$(cat "$CSS")"
-t_contains "3열 그리드"  "devtrail-cc-columns" "$(cat "$CSS")"
+# ⚠️ 옛 3열 그리드(devtrail-cc-columns)는 없앴다 — 좌측 레일 + 중앙 보드의
+#    작업 공간으로 바뀌었다.
+t_contains "작업 공간"  "devtrail-cc-workspace" "$(cat "$CSS")"
 # ⚠️ 좁아지면 열이 줄어야 한다. 고정 3열이면 사이드 패널에서 깨진다.
 t_contains "폭에 따라 접힌다" "auto-fit" "$(cat "$CSS")"
 t_contains "지표도 접힌다" "minmax" "$(cat "$CSS")"
@@ -517,7 +519,6 @@ PYEOF
 )"
 # ⚠️ 그리고 실제로 움직이는 것을 겨냥해야 한다. 이름을 바꾼 뒤 옛 이름이 남으면
 #    블록은 멀쩡해 보이는데 아무것도 끄지 않는다.
-for sel in $(grep -B40 'transition:' "$CSS" | grep -oE '^\.devtrail-cc-[a-z-]+(?= \{)' 2>/dev/null | sort -u); do :; done
 t_eq "움직이는 것을 다 겨냥한다" "" \
   "$(python3 - "$CSS" <<'"'"'PYEOF'"'"'
 import re, sys
@@ -785,8 +786,18 @@ fi
 t_start "CSS 클래스가 두 번 선언되지 않는다"
 # ⚠️ .devtrail-cc-card 를 보드 카드에도 쓰는 바람에 뒤 선언이 홈 카드를 뒤집어
 #    지표가 잘리고 열이 겹쳤다. 같은 이름을 두 곳에 쓰면 뒤가 이긴다.
-dupes=$(grep -oE '^\.devtrail-cc-[a-z-]+ \{' "$CSS" | sort | uniq -d)
-t_eq "중복 선언이 없다" "" "$dupes"
+# ⚠️ 처음엔 ^\.devtrail-cc-[a-z-]+ \{ 만 봤다. 그래서 .devtrail-command-center
+#    (접두사가 다르다) 와 .devtrail-cc-header h2 (자손 선택자) 의 중복을
+#    놓쳤고, 루트 블록이 두 번 선언된 채로 지나갔다. 선택자 전부를 본다.
+t_eq "중복 선언이 없다" "" \
+  "$(python3 - "$CSS" <<'"'"'PYEOF'"'"'
+import re, sys
+from collections import Counter
+css = open(sys.argv[1], encoding='utf-8').read()
+sels = [m.group(1).strip() for m in re.finditer(r'(?m)^([^@/}\s][^{]*)\{', css)]
+print(' '.join(sorted(s for s, n in Counter(sels).items() if n > 1)))
+PYEOF
+)"
 
 t_start "여러 줄을 담는 버튼이 높이를 푼다"
 # ⚠️ 지표 카드는 <button> 인데 라벨·값·보조설명 세 줄을 담는다. button 은 높이가
@@ -1149,6 +1160,22 @@ t_contains "CSS 가 열을 만든다" "auto-fit" \
 # ⚠️ 위 줄은 노트를 만들고 아래 줄은 화면을 바꾼다. 둘이 똑같이 생기면
 #    사용자는 누르기 전까지 무엇이 일어날지 모른다 — 위계가 아니라 종류가
 #    다르므로 형태로 갈라야 한다.
+# CSS 한 블록을 떼어낸다.
+#
+# ⚠️ 이중따옴표 안의 {…} 는 브레이스 확장에 걸린다 — "/^\.$sel {/,/^}/p" 가
+#    "//p" 와 "/^/p" 두 개로 쪼개져 sed 가 죽는다. 그러면 결과가 빈 문자열이
+#    되고, 개수를 세는 단언은 0 을 얻어 **조용히 통과**한다.
+#    문자 클래스 [{] [}] 로 감싸 확장을 막고, 비면 그 자리에서 실패시킨다.
+_css_block() {
+  local sel="$1" out
+  out=$(sed -n "/^\.${sel} [{]/,/^[}]/p" "$CSS")
+  if [ -z "$out" ]; then
+    _t_bad "CSS 블록 .$sel" "그런 블록이 없습니다 — 단언이 아무것도 검사하지 못합니다"
+    return 1
+  fi
+  printf '%s' "$out"
+}
+
 t_start "탭이 알약이 아니다"
 TAB="$(sed -n '/^\.devtrail-cc-tab {/,/^}/p' "$CSS")"
 t_contains "배경 없이 둔다" "background: none" "$TAB"
@@ -1181,5 +1208,59 @@ t_contains "가운데 둔다" "margin: 0 auto" "$(sed -n '/^\.devtrail-cc-search
 t_contains "내용이 왼쪽에서 시작한다" "justify-content: flex-start" "$SB"
 t_contains "충분한 높이를 갖는다" "min-height" "$SB"
 t_contains "둥글게" "border-radius: 999px" "$SB"
+
+t_start "여백을 부모가 준다"
+# ⚠️ 각 구역이 자기 margin-bottom 을 들고 있으면 하나가 빠졌을 때 그 구역만
+#    아래와 붙는다. 2026-08-22 에 빠른 실행 바가 지표와 겹쳐 보인 이유다.
+#    부모가 gap 으로 리듬을 주면 빠뜨릴 자리가 없다.
+t_contains "루트가 세로 flex" "flex-direction: column" \
+  "$(sed -n '/^\.devtrail-command-center {/,/^}/p' "$CSS")"
+t_contains "루트가 gap 을 준다" "gap:" \
+  "$(sed -n '/^\.devtrail-command-center {/,/^}/p' "$CSS")"
+t_contains "본문도 세로 flex" "flex-direction: column" \
+  "$(sed -n '/^\.devtrail-cc-body {/,/^}/p' "$CSS")"
+
+# 최상위 구역들은 세로 margin 을 스스로 갖지 않는다.
+stray=""
+for sel in devtrail-cc-header devtrail-cc-nav devtrail-cc-launch \
+           devtrail-cc-metrics devtrail-cc-workspace; do
+  m=$(_css_block "$sel" | grep -cE "margin-(top|bottom):")
+  [ "$m" = "0" ] || stray="$stray $sel"
+done
+t_eq "구역이 세로 여백을 들고 있지 않다" "" "$stray"
+
+t_start "죽은 CSS 선언이 없다"
+# ⚠️ 한 블록에 같은 속성이 두 번 있으면 앞의 것은 죽은 선언이다. 읽는 사람은
+#    앞의 값이 쓰인다고 믿는다 — 블록을 합칠 때 실제로 생겼다.
+t_eq "같은 속성을 두 번 쓰지 않는다" "" \
+  "$(python3 - "$CSS" <<'"'"'PYEOF'"'"'
+import re, sys
+css = open(sys.argv[1], encoding='utf-8').read()
+bad = []
+for m in re.finditer(r'(?m)^(\.[a-z-]+[^{]*)\{([^}]*)\}', css):
+    props = [p.split(':')[0].strip() for p in m.group(2).split(';') if ':' in p]
+    if any(props.count(x) > 1 for x in set(props)):
+        bad.append(m.group(1).strip())
+print(' '.join(bad))
+PYEOF
+)"
+# ⚠️ 쓰이지 않는 클래스는 지운다 — 남겨두면 다음 사람이 살아 있다고 믿는다.
+t_eq "쓰이지 않는 클래스가 없다" "" \
+  "$(for c in $(grep -oE '^\.devtrail-cc-[a-z-]+ [{]' "$CSS" | sed 's/^\.//;s/ [{]//' | sort -u); do
+       # ⚠️ JS 가 `devtrail-cc-col--${key}` 처럼 조립하는 이름이 있다.
+       # 전체 이름이 없으면 -- 앞 접두사가 쓰이는지 본다.
+       grep -q "$c" "$JS" && continue
+       # ⚠️ $( ) 안의 case 는 패턴을 (패턴) 으로 감싸야 한다 — 닫는 ) 가
+       #    명령 치환을 끊는다.
+       case "$c" in
+         (*--*) grep -q "${c%%--*}--" "$JS" && continue ;;
+       esac
+       printf '%s ' "$c"
+     done)"
+
+t_start "레일과 본문도 부모가 여백을 준다"
+for sel in devtrail-cc-side devtrail-cc-main; do
+  t_contains "$sel 이 세로 flex" "flex-direction: column" "$(_css_block "$sel")"
+done
 
 t_end
