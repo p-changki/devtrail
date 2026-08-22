@@ -1292,7 +1292,8 @@ t_start "상단 입력창이 전체 검색이다"
 t_contains "전체 검색이라고 말한다" "searchPlaceholder" "$(cat "$JS")"
 t_eq "거르기라고 하지 않는다" "0" "$(grep -c '태그로 거르기' "$JS" | tr -d ' ')"
 NAVSRC="$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS")"
-t_contains "Enter 로 실행한다" "ev.key === 'Enter'" "$NAVSRC"
+# ⚠️ 날것의 Enter 를 보지 않는다 — 한글 조합 중의 Enter 는 실행이 아니다.
+t_contains "Enter 로 실행한다" "isSubmitKey(ev)" "$NAVSRC"
 # 검색 실행은 searchRunner 한 곳에 있고, nav 는 그것을 부른다.
 t_contains "nav 가 실행기를 만든다" "searchRunner(this.app)" "$NAVSRC"
 RESOLVE="$(sed -n '/^function searchRunner(app) {/,/^}/p' "$JS")"
@@ -1559,5 +1560,50 @@ t_contains "CSS 도 있다" "devtrail-cc-searchkbd" "$(cat "$CSS")"
 # 배정이 없으면 아무것도 안 보여준다 — hotkeyLabel 이 이미 그렇게 한다.
 t_eq "검색창에도 키를 박지 않는다" "0" \
   "$(printf '%s' "$NAVSRC3" | grep -cE "'(⌘|⇧|⌥|⌃|Ctrl|Cmd)" | tr -d ' ')"
+
+t_start "한글 조합 중의 Enter 는 실행이 아니다"
+# ⚠️ 한글·일본어·중국어는 입력기(IME)가 글자를 **조합**한다. 조합 중에 누르는
+#    Enter 는 "글자를 확정" 하라는 뜻이지 "실행하라" 가 아니다.
+#    그것을 실행으로 받으면 아직 완성되지 않은 값이 넘어간다 —
+#    2026-08-22 에 "가나" 를 치고 Enter 를 눌렀는데 엉뚱한 글자로 검색됐다.
+#
+#    영문만 쓰는 사람은 평생 못 만나는 버그다. 그래서 더 쉽게 놓친다.
+cat > "$T_TMP/ime.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.isSubmitKey !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const bad = [];
+const eq = (l, g, w) => { if (g !== w) bad.push(`${l}: want ${w} got ${g}`); };
+
+// 조합이 끝난 Enter — 실행한다.
+eq('평범한 Enter', f.isSubmitKey({ key: 'Enter' }), true);
+eq('조합 끝남', f.isSubmitKey({ key: 'Enter', isComposing: false }), true);
+
+// ⚠️ 조합 중 — 실행하지 않는다. 한 번 더 누르면 그때 실행된다.
+eq('조합 중', f.isSubmitKey({ key: 'Enter', isComposing: true }), false);
+// 일부 입력기·구형 경로는 isComposing 대신 keyCode 229 로 온다.
+eq('keyCode 229', f.isSubmitKey({ key: 'Enter', keyCode: 229 }), false);
+eq('둘 다', f.isSubmitKey({ key: 'Enter', isComposing: true, keyCode: 229 }), false);
+
+// Enter 가 아니면 애초에 아니다.
+eq('다른 키', f.isSubmitKey({ key: 'a' }), false);
+eq('빈 이벤트', f.isSubmitKey(null), false);
+console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "조합 중에는 실행하지 않는다" "OK" "$(node "$T_TMP/ime.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+# 검색창과 모달 둘 다 그 규칙을 써야 한다.
+t_contains "검색창이 쓴다" "isSubmitKey(ev)" \
+  "$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS")"
+t_eq "Enter 를 날것으로 보지 않는다" "0" \
+  "$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS" | grep -c "ev.key === 'Enter'" | tr -d ' ')"
 
 t_end

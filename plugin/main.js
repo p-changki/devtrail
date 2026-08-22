@@ -225,6 +225,30 @@ function captureFile(c, lang) {
  * ⚠️ 없으면 null 을 준다. 비슷한 명령을 대신 실행하지 않는다 — 검색을
  *    눌렀는데 다른 것이 열리는 편이 아무 일도 안 일어나는 것보다 나쁘다.
  */
+/* 이 Enter 가 '실행' 인가.
+ *
+ * ⚠️ 한글·일본어·중국어는 입력기(IME)가 글자를 **조합**한다. 조합 중에 누르는
+ *    Enter 는 "글자를 확정" 하라는 뜻이지 "실행하라" 가 아니다. 그것을 실행으로
+ *    받으면 아직 완성되지 않은 값이 넘어간다 — "가나" 를 치고 Enter 를 눌렀는데
+ *    엉뚱한 글자로 검색됐다(2026-08-22).
+ *
+ *    조합 중이면 그냥 넘긴다. 사용자는 한 번 더 누르고, 그때 실행된다 —
+ *    한글 쓰는 사람이 어디서나 하는 동작이다.
+ *
+ * ⚠️ 영문만 쓰면 평생 못 만나는 버그다. 그래서 더 쉽게 놓친다.
+ *
+ * ⚠️ 행·카드의 Enter 핸들러에는 이것이 필요 없다. 그쪽은 입력창이 아니라
+ *    role="button" 인 div 라 조합이 일어날 수 없다. **글자를 받는 곳에만**
+ *    쓴다 — 새 입력창을 만들면 여기를 떠올려야 한다.
+ */
+function isSubmitKey(ev) {
+  if (!ev || ev.key !== 'Enter') return false;
+  if (ev.isComposing) return false;
+  // 일부 입력기·구형 경로는 isComposing 대신 keyCode 229 로 온다.
+  if (ev.keyCode === 229) return false;
+  return true;
+}
+
 /* 이 명령에 **실제로 배정된** 단축키. 없으면 null.
  *
  * ⚠️ 키캡을 손으로 박지 않는다. ⌘P 를 적어 뒀다가 그 버튼이 우리 모달을
@@ -1291,7 +1315,9 @@ class CommandCenterView extends obsidian.ItemView {
     if (run) {
       const go = () => run(input.value.trim());
       input.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter') { ev.preventDefault(); go(); }
+        if (!isSubmitKey(ev)) return;
+        ev.preventDefault();
+        go();
       });
       box.addEventListener('click', () => input.focus());
       box.querySelector('.devtrail-cc-searchbox-icon')
@@ -1720,4 +1746,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { TEXT, hotkeyLabel, searchRunner, localDate, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, isSubmitKey, hotkeyLabel, searchRunner, localDate, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
