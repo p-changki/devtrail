@@ -83,6 +83,7 @@ function collect(app, paths) {
   const projects = [];
   const inbox = [];
   const overdue = [];
+  const trouble = [];
   const today = new Date().toISOString().slice(0, 10);
 
   for (const f of files) {
@@ -99,6 +100,10 @@ function collect(app, paths) {
       });
     }
 
+    if (type === 'trouble' || type === 'troubleshooting') {
+      trouble.push({ file: f, status: meta.status || null, mtime: f.stat.mtime });
+    }
+
     if (meta.status === 'inbox') {
       inbox.push({ file: f, created: meta.created || null, mtime: f.stat.mtime });
     }
@@ -109,11 +114,22 @@ function collect(app, paths) {
     }
   }
 
+  // 이번 주(월요일 기준)에 만들어진 노트. 사용자가 "얼마나 남겼나" 를 본다.
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const thisWeek = files.filter((f) => f.stat.ctime >= weekAgo).length;
+
   projects.sort((a, b) => b.mtime - a.mtime);
   inbox.sort((a, b) => a.mtime - b.mtime);       // 오래된 것 먼저
   overdue.sort((a, b) => (a.at < b.at ? -1 : 1));
 
-  return { projects, inbox, overdue, total: files.length };
+  // 최근 기록 — 무엇을 하고 있었는지 되짚는다.
+  const recent = files
+    .slice()
+    .sort((a, b) => b.stat.mtime - a.stat.mtime)
+    .slice(0, 10)
+    .map((f) => ({ file: f, type: fm(app, f).type || null, mtime: f.stat.mtime }));
+
+  return { projects, inbox, overdue, trouble, recent, thisWeek, total: files.length };
 }
 
 /* 오늘 개발일지. 경로는 맵에서만 온다 — 파일명 규칙도 맵이 갖고 있다. */
@@ -209,6 +225,14 @@ const TEXT = {
     weekly: '이번 주 주간리뷰',
     weeklyNo: '아직 없습니다',
     makeWeekly: '터미널에서: devtrail weekly',
+    greetMorning: '좋은 아침입니다', greetAfternoon: '좋은 오후입니다',
+    greetEvening: '수고하셨습니다',
+    week: '주차',
+    mDevlog: '오늘 일지', mProjects: '활성 프로젝트', mInbox: 'Inbox',
+    mWeek: '이번 주 노트', mTrouble: '트러블슈팅', mOverdue: '다시 볼 것',
+    colToday: '오늘 현황', colProjects: '활성 프로젝트', colRecent: '최근 기록',
+    quickCapture: '빠른 기록',
+    yes: '있음', no: '없음',
   },
   en: {
     title: 'DevTrail',
@@ -246,6 +270,14 @@ const TEXT = {
     weekly: "This week's review",
     weeklyNo: 'not yet',
     makeWeekly: 'In a terminal: devtrail weekly',
+    greetMorning: 'Good morning', greetAfternoon: 'Good afternoon',
+    greetEvening: 'Good evening',
+    week: 'Week',
+    mDevlog: "Today's log", mProjects: 'Active projects', mInbox: 'Inbox',
+    mWeek: 'Notes this week', mTrouble: 'Troubleshooting', mOverdue: 'To revisit',
+    colToday: 'Today', colProjects: 'Active projects', colRecent: 'Recent',
+    quickCapture: 'Quick capture',
+    yes: 'yes', no: 'no',
   },
 };
 
@@ -273,7 +305,19 @@ class CommandCenterView extends obsidian.ItemView {
     const t = textFor(map.ok ? map.data.lang : 'ko');
 
     const head = root.createEl('div', { cls: 'devtrail-cc-header' });
-    head.createEl('h2', { text: t.title });
+    const now = new Date();
+    const h = now.getHours();
+    const greet = h < 12 ? t.greetMorning : h < 18 ? t.greetAfternoon : t.greetEvening;
+    const left = head.createEl('div');
+    left.createEl('h2', { text: greet });
+    left.createEl('p', { text: t.title, cls: 'devtrail-cc-muted' });
+    // ⚠️ 날짜는 사용자의 지역 형식으로. YYYY-MM-DD 를 박으면 그 형식을 쓰지
+    //    않는 사람에게 낯설다.
+    const right = head.createEl('div', { cls: 'devtrail-cc-header-right' });
+    right.createEl('div', {
+      text: now.toLocaleDateString(map.ok && map.data.lang === 'en' ? 'en-US' : 'ko-KR',
+        { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }),
+    });
 
     if (!map.ok) {
       // ⚠️ 여기서 경로를 짐작하지 않는다. 무엇을 실행해야 하는지 말한다.
@@ -301,29 +345,31 @@ class CommandCenterView extends obsidian.ItemView {
 
     // ⚠️ 빈 볼트에 0 을 늘어놓지 않는다. 대시보드가 아니라 안내가 되어야 한다.
     const nothing =
-      model.projects.length === 0 &&
-      model.inbox.length === 0 &&
-      model.overdue.length === 0 &&
-      !devlog;
+      model.projects.length === 0 && model.inbox.length === 0 &&
+      model.overdue.length === 0 && model.trouble.length === 0 && !devlog;
     if (nothing) {
       const e = body.createEl('div', { cls: 'devtrail-cc-empty' });
       e.createEl('p', { text: t.emptyAll });
       e.createEl('p', { text: t.emptyAllHelp, cls: 'devtrail-cc-muted' });
+      this.quickCapture(body, t, map.data);
       return;
     }
 
-    this.card(body, t.devlog, devlog ? 1 : 0, (list) => {
-      if (devlog) this.row(list, devlog.basename, devlog, t.devlogYes);
-      else list.createEl('p', { text: t.devlogNo, cls: 'devtrail-cc-muted' });
+    this.metrics(body, t, model, devlog);
+
+    // 3열. 좁아지면 CSS 가 열을 줄인다 — 사이드 패널에서도 깨지지 않는다.
+    const cols = body.createEl('div', { cls: 'devtrail-cc-columns' });
+
+    this.card(cols, t.colToday, devlog ? 1 : 0, (list) => {
+      if (!devlog) { list.createEl('p', { text: t.devlogNo, cls: 'devtrail-cc-muted' }); return; }
+      this.row(list, devlog.basename, devlog, t.open);
     });
 
-    this.card(body, t.projects, model.projects.length, (list) => {
+    this.card(cols, t.colProjects, model.projects.length, (list) => {
       if (model.projects.length === 0) {
-        list.createEl('p', { text: t.emptyProjects, cls: 'devtrail-cc-muted' });
-        return;
+        list.createEl('p', { text: t.emptyProjects, cls: 'devtrail-cc-muted' }); return;
       }
-      for (const p of model.projects.slice(0, 8)) {
-        // 있는 것만 보여준다. 없는 필드를 "-" 로 채우면 그것도 지어낸 것이다.
+      for (const p of model.projects.slice(0, 6)) {
         const bits = [];
         if (p.stage) bits.push(`${t.stage}: ${p.stage}`);
         if (p.next) bits.push(`${t.next}: ${p.next}`);
@@ -331,25 +377,50 @@ class CommandCenterView extends obsidian.ItemView {
       }
     });
 
-    this.card(body, t.inbox, model.inbox.length, (list) => {
-      if (model.inbox.length === 0) {
-        list.createEl('p', { text: t.emptyInbox, cls: 'devtrail-cc-muted' });
-        return;
-      }
-      for (const i of model.inbox.slice(0, 8)) {
-        this.row(list, i.file.basename, i.file, i.created || '');
+    this.card(cols, t.colRecent, model.recent.length, (list) => {
+      for (const r of model.recent.slice(0, 8)) {
+        this.row(list, r.file.basename, r.file, r.type || '');
       }
     });
 
-    this.card(body, t.overdue, model.overdue.length, (list) => {
-      if (model.overdue.length === 0) {
-        list.createEl('p', { text: t.emptyOverdue, cls: 'devtrail-cc-muted' });
-        return;
-      }
-      for (const o of model.overdue.slice(0, 8)) {
-        this.row(list, o.file.basename, o.file, o.at);
-      }
-    });
+    this.quickCapture(body, t, map.data);
+  }
+
+  /* ── 지표 ─────────────────────────────────────────────────────────────
+   * ⚠️ DevTrail 개념만 센다. Meetings·Events·Focus 같은 것을 넣으면 볼트에
+   *    그 개념이 없어 전부 0 이 뜬다(실측: meeting 0 · event 0 · task 0).
+   *    0 만 늘어놓는 화면은 지어낸 화면이다. */
+  metrics(body, t, model, devlog) {
+    const strip = body.createEl('div', { cls: 'devtrail-cc-metrics' });
+    const items = [
+      [t.mDevlog,   devlog ? t.yes : t.no],
+      [t.mProjects, model.projects.length],
+      [t.mInbox,    model.inbox.length],
+      [t.mWeek,     model.thisWeek],
+      [t.mTrouble,  model.trouble.length],
+      [t.mOverdue,  model.overdue.length],
+    ];
+    for (const [label, value] of items) {
+      const c = strip.createEl('div', { cls: 'devtrail-cc-metric' });
+      c.createEl('div', { text: String(value), cls: 'devtrail-cc-metric-value' });
+      c.createEl('div', { text: label, cls: 'devtrail-cc-metric-label' });
+    }
+  }
+
+  /* ── 빠른 기록 ────────────────────────────────────────────────────────
+   * 기존 Templater 명령을 부른다. 여기서 노트를 만들지 않는다. */
+  quickCapture(body, t, data) {
+    const box = body.createEl('section', { cls: 'devtrail-cc-card' });
+    box.createEl('div', { cls: 'devtrail-cc-card-head' })
+       .createEl('h3', { text: t.quickCapture });
+    const grid = box.createEl('div', { cls: 'devtrail-cc-grid' });
+    const labels = {
+      devlog: t.cDevlog, devnote: t.cDevnote, idea: t.cIdea,
+      worklog: t.cWorklog, report: t.cReport, project: t.cProject,
+    };
+    for (const c of CAPTURES) {
+      this.action(grid, labels[c.key] || c.key, templaterCommandId(data.paths, captureFile(c, data.lang)), t);
+    }
   }
 
   /* ── 네비게이션 ─────────────────────────────────────────────────────── */
@@ -522,7 +593,12 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
       workspace.revealLeaf(existing[0]);
       return;
     }
-    const leaf = workspace.getRightLeaf(false);
+    // ⚠️ 메인 워크스페이스 탭으로 연다. 사이드 패널(폭 300px)에는 정보
+    //    밀도를 담을 수 없다.
+    //    getLeaf(true) 가 아니라 getLeaf('tab') 이다 — true 는 "새 leaf 를
+    //    강제" 라는 뜻이고, 우리가 원하는 건 "메인 영역의 탭" 이다.
+    //    Obsidian 자신이 getLeaf("tab") · getLeaf("split") 을 쓴다.
+    const leaf = workspace.getLeaf('tab');
     if (!leaf) return;
     await leaf.setViewState({ type: VIEW_TYPE, active: true });
     workspace.revealLeaf(leaf);

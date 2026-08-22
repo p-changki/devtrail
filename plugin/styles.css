@@ -138,3 +138,67 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ── 전체 화면 레이아웃 ─────────────────────────────────────────────────────
+ *
+ * ⚠️ 미디어 쿼리를 쓰지 않는다. Obsidian 의 leaf 는 화면이 아니라 창 안의
+ *    영역이라 뷰포트 폭과 무관하다. auto-fit + minmax 로 '내 폭' 에 반응한다 —
+ *    메인 탭에서는 3열, 사이드 패널로 끌어다 놓으면 1열이 된다.
+ */
+.devtrail-cc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.devtrail-cc-header h2 { margin: 0 0 2px; font-size: var(--font-ui-larger); }
+.devtrail-cc-header p { margin: 0; }
+
+.devtrail-cc-header-right {
+  text-align: right;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* 지표 스트립 */
+.devtrail-cc-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.devtrail-cc-metric {
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+}
+
+.devtrail-cc-metric-value {
+  font-size: var(--font-ui-large);
+  font-weight: 600;
+  color: var(--text-normal);
+  /* 숫자가 세로로 정렬되게 — 지표는 눈으로 비교하는 물건이다. */
+  font-variant-numeric: tabular-nums;
+}
+
+.devtrail-cc-metric-label {
+  margin-top: 2px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+/* 3열 본문 */
+.devtrail-cc-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+/* 넓은 화면에서 본문이 너무 늘어지지 않게 — 읽는 폭에는 한계가 있다. */
+.devtrail-cc-body { max-width: 1400px; }

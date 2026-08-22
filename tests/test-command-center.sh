@@ -307,4 +307,38 @@ else
   dim "   node 없음 — 건너뜀"
 fi
 
+# ── 메인 탭 전체 화면 ───────────────────────────────────────────────────────
+#
+# ⚠️ 사이드 패널(폭 300px)에는 정보 밀도를 담을 수 없다. 메인 워크스페이스
+#    탭으로 연다.
+#
+# ⚠️ getLeaf(true) 가 아니라 getLeaf('tab') 이다. true 는 "새 leaf 를 강제"
+#    라는 뜻이고, 우리가 원하는 건 "메인 영역의 탭" 이다. Obsidian 자신이
+#    app.asar 에서 getLeaf("tab") · getLeaf("split") 을 쓴다(2026-08-22 확인).
+t_start "메인 탭으로 연다"
+t_contains "메인 탭 API 를 쓴다" "getLeaf('tab')" "$(cat "$JS")"
+t_eq "사이드 패널로 열지 않는다" "0" \
+  "$(grep -c 'getRightLeaf' "$JS" | tr -d ' ')"
+
+# ── 지표 ────────────────────────────────────────────────────────────────────
+#
+# ⚠️ 지표는 DevTrail 개념이다. Meetings·Events·Focus 같은 것을 넣으면 볼트에
+#    그 개념이 없어 전부 0 이 뜬다 — 실측: meeting 0 · event 0 · task 0 ·
+#    focus 0 · area 0 · priority 0. 그건 지어낸 화면이다.
+t_start "지표가 DevTrail 개념이다"
+for k in devlog projects inbox trouble; do
+  t_contains "지표 $k" "$k" "$(cat "$JS")"
+done
+t_eq "meeting 을 세지 않는다" "0" "$(grep -cE "'meeting'|\"meeting\"" "$JS" | tr -d ' ')"
+t_eq "event 를 세지 않는다"   "0" "$(grep -cE "'event'|\"event\"" "$JS" | tr -d ' ')"
+
+# ── 레이아웃 ────────────────────────────────────────────────────────────────
+t_start "전체 화면 레이아웃"
+CSS="$ROOT/plugin/styles.css"
+t_contains "지표 스트립" "devtrail-cc-metrics" "$(cat "$CSS")"
+t_contains "3열 그리드"  "devtrail-cc-columns" "$(cat "$CSS")"
+# ⚠️ 좁아지면 열이 줄어야 한다. 고정 3열이면 사이드 패널에서 깨진다.
+t_contains "폭에 따라 접힌다" "auto-fit" "$(cat "$CSS")"
+t_contains "지표도 접힌다" "minmax" "$(cat "$CSS")"
+
 t_end
