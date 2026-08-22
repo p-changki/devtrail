@@ -1462,4 +1462,47 @@ else
 fi
 t_contains "화면이 그 실행기를 쓴다" "searchRunner(this.app)" "$(cat "$JS")"
 
+t_start "단축키 표시가 사실이어야 한다"
+# ⚠️ 버튼 옆에 ⌘P 를 박아 뒀는데, ⌘P 는 Obsidian 의 **명령 팔레트** 단축키다.
+#    그 버튼은 우리 모달을 여는데 표시는 다른 것을 가리켰다 — 눌러 보면
+#    엉뚱한 게 열린다. 화면이 거짓을 말하면 사용자는 화면을 안 믿게 된다.
+# ⚠️ 어떤 키캡도 손으로 박지 않는다. ⌘P 하나만 막으면 다음엔 ⌘K 를 박는다.
+#    화면에 나오는 단축키는 전부 배정에서 읽어야 한다.
+t_eq "키를 손으로 박지 않는다" "0" \
+  "$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS" | grep -cE "'(⌘|⇧|⌥|⌃|Ctrl|Cmd)" | tr -d ' ')"
+# 실제로 배정된 것을 읽는다 — Obsidian 이 그 API 를 갖고 있다.
+t_contains "배정된 단축키를 읽는다" "printHotkeyForCommand" "$(cat "$JS")"
+t_contains "우리 명령을 등록한다" "quick-capture" "$(cat "$JS")"
+QC="$(sed -n "/quick-capture/,/});/p" "$JS")"
+t_contains "그 명령이 모달을 연다" "openQuickCapture" "$QC"
+
+cat > "$T_TMP/hk.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {}, Modal: class { constructor() {} } };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.hotkeyLabel !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const bad = [];
+const app = (val) => ({ hotkeyManager: { printHotkeyForCommand: () => val } });
+if (f.hotkeyLabel(app('⌘⇧U'), 'x') !== '⌘⇧U') bad.push('배정된 것을 못 읽는다');
+// ⚠️ 안 배정됐으면 아무것도 보여주지 않는다. 있지도 않은 단축키를 적으면
+//    사용자가 눌러 보고 화면을 의심한다.
+if (f.hotkeyLabel(app(''), 'x') !== null) bad.push('빈 값인데 뭔가 보여준다');
+if (f.hotkeyLabel(app(null), 'x') !== null) bad.push('null 인데 뭔가 보여준다');
+if (f.hotkeyLabel({}, 'x') !== null) bad.push('API 없는데 뭔가 보여준다');
+console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "없으면 안 보여준다" "OK" "$(node "$T_TMP/hk.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+
+t_start "빠른 기록에 기본 단축키가 있다"
+t_contains "프리셋에 등록" "devtrail-command-center:quick-capture" \
+  "$(cat "$ROOT/preset/obsidian/hotkeys.tmpl.json")"
+
 t_end

@@ -21,6 +21,7 @@
 
 const obsidian = require('obsidian');
 
+const PLUGIN_ID = 'devtrail-command-center';
 const VIEW_TYPE = 'devtrail-command-center';
 
 /* 아이콘. Obsidian 이 번들한 lucide 이름만 쓴다 — 아이콘 파일을 들고
@@ -224,6 +225,22 @@ function captureFile(c, lang) {
  * ⚠️ 없으면 null 을 준다. 비슷한 명령을 대신 실행하지 않는다 — 검색을
  *    눌렀는데 다른 것이 열리는 편이 아무 일도 안 일어나는 것보다 나쁘다.
  */
+/* 이 명령에 **실제로 배정된** 단축키. 없으면 null.
+ *
+ * ⚠️ 키캡을 손으로 박지 않는다. ⌘P 를 적어 뒀다가 그 버튼이 우리 모달을
+ *    열게 바꾼 적이 있다 — 표시는 명령 팔레트를 가리키는데 실제로는 다른 게
+ *    열렸다. 화면이 거짓을 말하면 사용자는 화면을 안 믿게 된다.
+ *
+ * ⚠️ 안 배정됐으면 아무것도 보여주지 않는다. 있지도 않은 단축키를 적으면
+ *    사용자가 눌러 보고 또 화면을 의심한다.
+ */
+function hotkeyLabel(app, commandId) {
+  const hm = app && app.hotkeyManager;
+  if (!hm || typeof hm.printHotkeyForCommand !== 'function') return null;
+  const s = hm.printHotkeyForCommand(commandId);
+  return (typeof s === 'string' && s.length > 0) ? s : null;
+}
+
 /* 검색을 실제로 여는 함수를 만든다. 없으면 null.
  *
  * ⚠️ 명령만 부르면 사용자가 친 글자가 버려진다. "devlog" 를 치고 Enter 를
@@ -1289,7 +1306,8 @@ class CommandCenterView extends obsidian.ItemView {
     // ⚠️ 전체 명령 팔레트가 아니라 DevTrail 전용 선택창을 연다.
     const make = right.createEl('button', { cls: 'devtrail-cc-make' });
     make.createEl('span', { text: t.makeNote });
-    make.createEl('span', { text: '⌘P', cls: 'devtrail-cc-kbd devtrail-cc-mono' });
+    const key = hotkeyLabel(this.app, `${PLUGIN_ID}:quick-capture`);
+    if (key) make.createEl('span', { text: key, cls: 'devtrail-cc-kbd devtrail-cc-mono' });
     make.setAttr('aria-label', t.makeNote);
     make.addEventListener('click', () => this.openQuickCapture(t));
   }
@@ -1619,6 +1637,20 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
       callback: () => this.activate(),
     });
 
+    // ⚠️ 빠른 기록에도 명령을 준다. 그래야 사용자가 설정에서 단축키를 배정할
+    //    수 있고, 화면이 **실제 배정된 것**을 읽어 보여줄 수 있다.
+    this.addCommand({
+      id: 'quick-capture',
+      name: 'DevTrail: Quick capture',
+      callback: () => {
+        const view = this.app.workspace.getLeavesOfType(VIEW_TYPE)
+          .map((l) => l.view).filter(Boolean)[0];
+        if (view && typeof view.openQuickCapture === 'function') {
+          view.openQuickCapture(textFor(view.lang || 'ko'));
+        }
+      },
+    });
+
     // ⚠️ Obsidian 은 시작할 때 workspace.json 의 레이아웃을 복원한다.
     //    예전 버전이 사이드독에 열어둔 뷰가 거기 저장돼 있어서, 재시작하면
     //    activate() 를 거치지 않고 사이드에 그대로 되살아난다.
@@ -1681,4 +1713,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { TEXT, searchRunner, localDate, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, hotkeyLabel, searchRunner, localDate, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
