@@ -603,4 +603,108 @@ t_eq "미설치면 업데이트 여부도 모른다" "unknown" \
 t_eq "설치 여부는 안다" "false" \
   "$(jq -r '.installed | tostring' "$T_TMP/ccst-none.json")"
 
+# ── 프로젝트 칸반 ───────────────────────────────────────────────────────────
+#
+# 카드 하나 = 프로젝트 노트 하나다. 개발일지 체크박스를 카드로 만들지 않는다 —
+# 같은 일을 두 곳에 적으면 둘 다 믿을 수 없게 된다.
+#
+# ⚠️ 읽기 전용이다. 카드를 옮겨 frontmatter 를 고치는 것은 다음 Phase다.
+t_start "stage 를 컬럼으로 정규화한다"
+cat > "$T_TMP/stage.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.normalizeStage !== 'function') { console.log('NOHOOK'); process.exit(0); }
+const cases = [
+  ['planning', 'planning'], ['planned', 'planning'], ['plan', 'planning'],
+  ['in-progress', 'active'], ['in_progress', 'active'], ['active', 'active'], ['doing', 'active'],
+  ['blocked', 'blocked'],
+  ['done', 'done'], ['completed', 'done'], ['complete', 'done'], ['archived', 'done'],
+  ['  Planning  ', 'planning'],  // 공백·대소문자를 견딘다
+  ['IN-PROGRESS', 'active'],
+  // ⚠️ 모르는 것을 임의 컬럼에 넣지 않는다. 사용자가 지정하지 않은 상태를
+  //    '계획 중' 이라고 보여주면 화면이 사실이 아닌 것을 말한다.
+  ['', null], [null, null], [undefined, null],
+  ['nonsense', null], ['진행중', null], ['todo', null],
+];
+let bad = 0;
+for (const [input, want] of cases) {
+  const got = f.normalizeStage(input);
+  if (got !== want) { bad++; console.log('MISMATCH', JSON.stringify(input), 'want', want, 'got', got); }
+}
+console.log(bad === 0 ? 'OK' : 'FAIL');
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "별칭이 옳은 컬럼으로 간다" "OK" "$(node "$T_TMP/stage.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+
+t_start "보드가 네 컬럼과 미지정을 갖는다"
+t_contains "컬럼 정의" "BOARD_COLUMNS" "$(cat "$JS")"
+for k in planning active blocked done; do
+  t_contains "컬럼 $k" "'$k'" "$(cat "$JS")"
+done
+# ⚠️ 미지정은 다섯 번째 컬럼이 아니라 별도 영역이다 — 상태가 아니라 '빠진 것' 이다.
+t_contains "미지정을 따로 다룬다" "unstaged" "$(cat "$JS")"
+t_eq "컬럼은 넷이다" "4" \
+  "$(grep -A8 'BOARD_COLUMNS = \[' "$JS" | grep -c "^\s*\['")"
+
+t_start "카드가 노트에서 읽은 것만 보여준다"
+t_contains "프로젝트명" "p.name" "$(cat "$JS")"
+t_contains "next_action" "p.next" "$(cat "$JS")"
+t_contains "마지막 수정" "p.file.stat.mtime" "$(cat "$JS")"
+# 카드 전체가 눌린다 — 링크만 누르게 하면 표적이 너무 작다.
+# ⚠️ 'Enter' 문구는 최근 기록 행에도 있다. 존재만 보면 카드에서 빼도 통과한다 —
+#    카드 함수 안에 있는지를 본다.
+t_contains "카드를 키보드로 연다" "ev.key === 'Enter'" \
+  "$(sed -n '/projectCard(parent, t, p, colKey)/,/^  }/p' "$JS")"
+t_contains "카드 전체가 눌린다" "c.addEventListener('click', open)" \
+  "$(sed -n '/projectCard(parent, t, p, colKey)/,/^  }/p' "$JS")"
+t_contains "빈 컬럼 문구" "emptyColumn" "$(cat "$JS")"
+
+t_start "노트를 쓰지 않는다"
+# ⚠️ 플러그인은 읽기 모델이다. 쓰기는 Templater 통로 하나뿐이다.
+for m in "vault.create" "vault.modify" "vault.append" "processFrontMatter"; do
+  t_eq "$m 를 부르지 않는다" "0" "$(grep -c "$m" "$JS" | tr -d ' ')"
+done
+
+t_start "상태색이 글자·아이콘과 함께 온다"
+# ⚠️ 색만으로 상태를 말하지 않는다 — 다크/라이트와 색각에서 무너진다.
+t_contains "상태 클래스" "devtrail-cc-col--" "$(cat "$JS")"
+t_contains "컬럼에 아이콘" "devtrail-cc-col-icon" "$(cat "$JS")"
+CSS="$ROOT/plugin/styles.css"
+for s in "devtrail-cc-col--planning" "devtrail-cc-col--active" \
+         "devtrail-cc-col--blocked" "devtrail-cc-col--done"; do
+  t_contains "CSS $s" "$s" "$(cat "$CSS")"
+done
+t_contains "보드가 접힌다" "devtrail-cc-board" "$(cat "$CSS")"
+t_contains "카드 포커스" ":focus-visible" "$(cat "$CSS")"
+
+# ── 헤더 검색 · 빠른 실행 ───────────────────────────────────────────────────
+#
+# ⚠️ 검색기를 만들지 않는다. 설치된 검색 플러그인이나 Obsidian 기본 검색으로
+#    가는 통로일 뿐이다 — 결과 목록을 흉내 내면 없는 기능을 있는 척하게 된다.
+t_start "검색은 통로일 뿐이다"
+t_contains "헤더에 검색 진입점" "devtrail-cc-search" "$(cat "$JS")"
+t_contains "명령 존재를 확인한다" "commandExists" "$(cat "$JS")"
+# 결과 UI 를 흉내 내지 않는다.
+t_eq "결과 목록이 없다" "0" "$(grep -c 'searchResult\|renderResults' "$JS" | tr -d ' ')"
+t_eq "자체 인덱스가 없다" "0" "$(grep -c 'buildIndex\|fuzzySearch' "$JS" | tr -d ' ')"
+t_contains "없으면 안내로 떨어진다" "searchMissingHelp" "$(cat "$JS")"
+
+t_start "빠른 실행이 Templater 만 부른다"
+t_contains "실행 바" "devtrail-cc-launch" "$(cat "$JS")"
+# ⚠️ 명령이 없으면 조용히 노트를 만들지 않는다 — 무엇을 해야 하는지 말한다.
+# ⚠️ disabled 는 검색 바에도 있다. 실행 바가 명령 존재를 확인하는지를 본다.
+t_contains "명령이 없으면 비활성" "if (!commandExists(this.app, id))" \
+  "$(sed -n '/launchBar(root, t, data)/,/^  }/p' "$JS")"
+t_contains "비활성으로 표시한다" "b.setAttr('disabled', 'true')" \
+  "$(sed -n '/launchBar(root, t, data)/,/^  }/p' "$JS")"
+t_contains "CSS 실행 바" "devtrail-cc-launch" "$(cat "$CSS")"
+
 t_end

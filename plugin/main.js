@@ -220,9 +220,50 @@ function findCommandByPluginId(app, pluginId) {
   return { id: preferred, name: (all[preferred] && all[preferred].name) || preferred };
 }
 
+/* ── 프로젝트 보드 ──────────────────────────────────────────────────────────
+ *
+ * 카드 하나 = 프로젝트 노트 하나다. 개발일지 체크박스를 카드로 만들지 않는다 —
+ * 같은 일을 두 곳에 적으면 어느 쪽도 믿을 수 없게 된다. 오늘 할 일은 개발일지가,
+ * 프로젝트 상태는 이 보드가 맡는다.
+ *
+ * ⚠️ 읽기 전용이다. 카드를 끌어 frontmatter 를 고치는 것은 다음 Phase다 —
+ *    노트를 고치는 순간 이 플러그인은 '두 번째 쓰기 출처' 가 된다.
+ *
+ * [키, 아이콘, 상태색 이름]
+ */
+const BOARD_COLUMNS = [
+  ['planning', 'clipboard-list', 'planning'],
+  ['active',   'play-circle',    'active'],
+  ['blocked',  'alert-triangle', 'blocked'],
+  ['done',     'check-circle-2', 'done'],
+];
+
+/* frontmatter 의 stage 를 컬럼으로 옮긴다.
+ *
+ * ⚠️ 모르는 값을 임의 컬럼에 넣지 않는다. 사용자가 지정하지 않은 상태를
+ *    '계획 중' 이라고 보여주면 화면이 사실이 아닌 것을 말한다. null 을 돌려주고
+ *    화면은 그것을 '단계 미지정' 으로 따로 모은다 — 채우라고 말하기 위해서다. */
+const STAGE_ALIASES = {
+  planning: 'planning', planned: 'planning', plan: 'planning',
+  'in-progress': 'active', in_progress: 'active', active: 'active', doing: 'active',
+  blocked: 'blocked',
+  done: 'done', completed: 'done', complete: 'done', archived: 'done',
+};
+
+function normalizeStage(raw) {
+  if (typeof raw !== 'string') return null;
+  const key = raw.trim().toLowerCase();
+  if (!key) return null;
+  return STAGE_ALIASES[key] || null;
+}
+
 /* 검색은 Obsidian 이 이미 갖고 있다(⌘O · ⌘⇧F). 여기서 제공하는 것은
  * '설치된 검색 플러그인으로 가는 통로' 뿐이다 — 검색기를 새로 만들지 않는다. */
 const SEARCH_PLUGINS = ['omnisearch'];
+
+/* Obsidian 기본 검색. 부르기 전에 레지스트리에 있는지 확인한다 —
+ * 짐작해서 부르면 조용히 아무 일도 일어나지 않는다. */
+const CORE_SEARCH = 'global-search:open';
 
 /* 그 명령이 실제로 있는가. 없으면 조용히 다른 노트를 만들지 않는다 —
  * 무엇을 해야 하는지 말한다. */
@@ -251,7 +292,18 @@ const TEXT = {
     devlogNo: '아직 없습니다',
     emptyAll: '아직 쌓인 것이 없습니다',
     emptyAllHelp: '노트를 만들면 여기에 모입니다.',
-    emptyProjects: '등록된 프로젝트가 없습니다',
+    emptyProjects: '아직 프로젝트가 없습니다',
+    emptyProjectsHelp: '기록 탭의 [프로젝트] 로 하나 만들어 보세요.',
+    col: { planning: '계획 중', active: '진행 중', blocked: '막힘', done: '완료 · 보관' },
+    emptyColumn: {
+      planning: '계획 중인 프로젝트가 없습니다',
+      active: '진행 중인 것이 없습니다 — stage 를 in-progress 로 바꾸면 여기 옵니다',
+      blocked: '막힌 것이 없습니다',
+      done: '아직 완료한 것이 없습니다',
+    },
+    unstaged: '단계 미지정',
+    unstagedHelp: '노트 앞머리의 stage 에 planning · in-progress · blocked · done 중 하나를 적어주세요.',
+    noNext: '다음 행동 없음',
     emptyInbox: '정리할 것이 없습니다',
     emptyOverdue: '다시 볼 것이 없습니다',
     stage: '단계',
@@ -279,6 +331,8 @@ const TEXT = {
     colToday: '오늘 현황', colProjects: '활성 프로젝트', colRecent: '최근 기록',
     quickCapture: '빠른 기록',
     search: '검색',
+    searchPlaceholder: '전체 검색',
+    searchCore: 'Obsidian 검색',
     searchMissing: 'Omnisearch 가 설치되어 있지 않습니다',
     searchMissingHelp: 'Obsidian 설정 → 커뮤니티 플러그인에서 설치하면 여기에 연결됩니다. 기본 검색은 ⌘O · ⌘⇧F 입니다.',
     yes: '있음', no: '없음',
@@ -299,7 +353,18 @@ const TEXT = {
     devlogNo: 'not yet',
     emptyAll: 'Nothing here yet',
     emptyAllHelp: 'Notes you create show up here.',
-    emptyProjects: 'No projects registered',
+    emptyProjects: 'No projects yet',
+    emptyProjectsHelp: 'Create one from [Project] on the Capture tab.',
+    col: { planning: 'Planning', active: 'In progress', blocked: 'Blocked', done: 'Done · Archived' },
+    emptyColumn: {
+      planning: 'Nothing in planning',
+      active: 'Nothing in progress — set stage to in-progress to move a project here',
+      blocked: 'Nothing is blocked',
+      done: 'Nothing finished yet',
+    },
+    unstaged: 'Stage not set',
+    unstagedHelp: 'Set stage in the note frontmatter to planning, in-progress, blocked or done.',
+    noNext: 'No next action',
     emptyInbox: 'Nothing to sort',
     emptyOverdue: 'Nothing to revisit',
     stage: 'Stage',
@@ -327,6 +392,8 @@ const TEXT = {
     colToday: 'Today', colProjects: 'Active projects', colRecent: 'Recent',
     quickCapture: 'Quick capture',
     search: 'Search',
+    searchPlaceholder: 'Search everything',
+    searchCore: 'Obsidian search',
     searchMissing: 'Omnisearch is not installed',
     searchMissingHelp: 'Install it in Settings → Community plugins and it will be linked here. Built-in search is ⌘O · ⌘⇧F.',
     yes: 'yes', no: 'no',
@@ -383,6 +450,8 @@ class CommandCenterView extends obsidian.ItemView {
       return;
     }
 
+    this.searchBar(root, t);
+    this.launchBar(root, t, map.data);
     this.nav(root, t);
 
     const model = collect(this.app, map.data.paths);
@@ -517,6 +586,71 @@ class CommandCenterView extends obsidian.ItemView {
     b.addEventListener('click', () => this.app.commands.executeCommandById(found.id));
   }
 
+  /* 화면 맨 위의 검색 진입점.
+   *
+   * ⚠️ 검색기를 만들지 않는다. Obsidian 이 이미 갖고 있고, Omnisearch 가 있으면
+   *    그쪽이 더 낫다. 여기 있는 것은 '통로' 뿐이다 — 결과 목록을 흉내 내면
+   *    없는 기능을 있는 척하게 된다.
+   * ⚠️ 명령 id 를 짐작해서 부르지 않는다. 레지스트리에 있는지 먼저 확인한다. */
+  searchBar(root, t) {
+    let found = null;
+    for (const pid of SEARCH_PLUGINS) {
+      found = findCommandByPluginId(this.app, pid);
+      if (found) break;
+    }
+    // Omnisearch 가 없으면 Obsidian 기본 검색으로 떨어진다 — 있을 때만.
+    if (!found && commandExists(this.app, CORE_SEARCH)) {
+      found = { id: CORE_SEARCH, name: t.searchCore };
+    }
+
+    const bar = root.createEl('div', { cls: 'devtrail-cc-search' });
+    const b = bar.createEl('button', { cls: 'devtrail-cc-search-btn' });
+    icon(b.createEl('span', { cls: 'devtrail-cc-search-icon' }), 'search');
+    b.createEl('span', {
+      text: found ? `${t.searchPlaceholder} — ${found.name}` : t.searchMissing,
+      cls: 'devtrail-cc-search-text',
+    });
+
+    if (!found) {
+      b.setAttr('disabled', 'true');
+      b.setAttr('title', t.searchMissingHelp);
+      bar.createEl('p', { text: t.searchMissingHelp, cls: 'devtrail-cc-muted' });
+      return;
+    }
+    b.setAttr('aria-label', `${t.search}: ${found.name}`);
+    b.setAttr('title', found.id);
+    b.addEventListener('click', () => this.app.commands.executeCommandById(found.id));
+  }
+
+  /* 자주 쓰는 기록으로 가는 아이콘 바. 검색 바로 아래 — 찾기 다음은 남기기다.
+   *
+   * ⚠️ 노트를 직접 만들지 않는다. 등록된 Templater 명령만 부른다. */
+  launchBar(root, t, data) {
+    const bar = root.createEl('div', { cls: 'devtrail-cc-launch' });
+    bar.setAttr('aria-label', t.quickCapture);
+    const labels = {
+      devlog: t.cDevlog, devnote: t.cDevnote, idea: t.cIdea,
+      worklog: t.cWorklog, report: t.cReport, project: t.cProject,
+    };
+    const icons = {
+      devlog: 'calendar-days', devnote: 'pencil', idea: 'lightbulb',
+      worklog: 'clock', report: 'rotate-ccw', project: 'folder-plus',
+    };
+    for (const c of CAPTURES) {
+      const id = templaterCommandId(data.paths, captureFile(c, data.lang));
+      const b = bar.createEl('button', { cls: 'devtrail-cc-launch-btn' });
+      icon(b.createEl('span'), icons[c.key] || 'file-plus');
+      b.createEl('span', { text: labels[c.key] || c.key });
+      if (!commandExists(this.app, id)) {
+        b.setAttr('disabled', 'true');
+        b.setAttr('title', t.actionMissing);
+        continue;
+      }
+      b.setAttr('title', labels[c.key] || c.key);
+      b.addEventListener('click', () => this.app.commands.executeCommandById(id));
+    }
+  }
+
   /* ── 네비게이션 ─────────────────────────────────────────────────────── */
   nav(root, t) {
     const bar = root.createEl('nav', { cls: 'devtrail-cc-nav' });
@@ -586,19 +720,92 @@ class CommandCenterView extends obsidian.ItemView {
     }
   }
 
-  /* ── 프로젝트 ─────────────────────────────────────────────────────── */
+  /* ── 프로젝트 보드 ─────────────────────────────────────────────────
+   *
+   * 넷으로 나누고, 어디에도 못 넣은 것은 따로 모은다. 빈 컬럼에 0 을
+   * 늘어놓지 않는다 — 무엇을 하면 채워지는지 말한다. */
   viewProjects(body, t, model) {
-    this.card(body, t.projects, model.projects.length, (list) => {
-      if (model.projects.length === 0) {
-        list.createEl('p', { text: t.emptyProjects, cls: 'devtrail-cc-muted' });
-        return;
+    if (model.projects.length === 0) {
+      const e = body.createEl('div', { cls: 'devtrail-cc-empty' });
+      e.createEl('p', { text: t.emptyProjects });
+      e.createEl('p', { text: t.emptyProjectsHelp, cls: 'devtrail-cc-muted' });
+      return;
+    }
+
+    // 한 번만 훑어 컬럼별로 나눈다.
+    const buckets = { planning: [], active: [], blocked: [], done: [] };
+    const unstaged = [];
+    for (const p of model.projects) {
+      const col = normalizeStage(p.stage);
+      if (col) buckets[col].push(p); else unstaged.push(p);
+    }
+
+    // ⚠️ 단계 미지정은 다섯 번째 컬럼이 아니다. 상태가 아니라 '빠진 것' 이므로
+    //    보드 위에 두어 먼저 눈에 띄게 한다.
+    if (unstaged.length > 0) {
+      const box = body.createEl('div', { cls: 'devtrail-cc-unstaged' });
+      const h = box.createEl('div', { cls: 'devtrail-cc-unstaged-head' });
+      icon(h.createEl('span'), 'help-circle');
+      h.createEl('strong', { text: `${t.unstaged} ${unstaged.length}` });
+      box.createEl('p', { text: t.unstagedHelp, cls: 'devtrail-cc-muted' });
+      const list = box.createEl('div', { cls: 'devtrail-cc-unstaged-list' });
+      for (const p of unstaged) this.projectCard(list, t, p, null);
+    }
+
+    const board = body.createEl('div', { cls: 'devtrail-cc-board' });
+    for (const [key, ic] of BOARD_COLUMNS) {
+      const items = buckets[key];
+      const col = board.createEl('section', { cls: `devtrail-cc-col devtrail-cc-col--${key}` });
+      col.setAttr('aria-label', `${t.col[key]} ${items.length}`);
+      const head = col.createEl('header', { cls: 'devtrail-cc-col-head' });
+      icon(head.createEl('span', { cls: 'devtrail-cc-col-icon' }), ic);
+      head.createEl('span', { text: t.col[key], cls: 'devtrail-cc-col-name' });
+      head.createEl('span', { text: String(items.length), cls: 'devtrail-cc-col-count' });
+
+      const list = col.createEl('div', { cls: 'devtrail-cc-col-body' });
+      if (items.length === 0) {
+        list.createEl('p', { text: t.emptyColumn[key], cls: 'devtrail-cc-muted' });
+        continue;
       }
-      for (const p of model.projects) {
-        const bits = [];
-        if (p.stage) bits.push(`${t.stage}: ${p.stage}`);
-        if (p.next) bits.push(`${t.next}: ${p.next}`);
-        this.row(list, p.name, p.file, bits.join(' · '));
-      }
+      for (const p of items) this.projectCard(list, t, p, key);
+    }
+  }
+
+  /* 카드 하나. 제목 → 다음 행동 → 보조 메타 순으로 읽히게 둔다.
+   *
+   * ⚠️ 카드 전체가 눌린다. 링크만 누르게 하면 표적이 너무 작다. */
+  projectCard(parent, t, p, colKey) {
+    const c = parent.createEl('div', { cls: 'devtrail-cc-card' });
+    if (colKey) c.addClass(`devtrail-cc-card--${colKey}`);
+    c.setAttr('role', 'button');
+    c.setAttr('tabindex', '0');
+
+    c.createEl('div', { text: p.name, cls: 'devtrail-cc-card-title' });
+
+    // next_action 이 카드에서 가장 먼저 눈에 띄어야 한다 — 없으면 없다고 말한다.
+    if (p.next) {
+      const n = c.createEl('div', { cls: 'devtrail-cc-card-next' });
+      icon(n.createEl('span'), 'arrow-right');
+      n.createEl('span', { text: p.next });
+    } else {
+      c.createEl('div', { text: t.noNext, cls: 'devtrail-cc-card-next is-empty' });
+    }
+
+    const meta = c.createEl('div', { cls: 'devtrail-cc-card-meta' });
+    if (p.stage) this.badge(meta, p.stage, colKey || 'unknown');
+    // 실제 파일 메타데이터를 쓴다. '오래됨' 기준을 임의로 만들지 않는다.
+    if (p.file && p.file.stat && p.file.stat.mtime) {
+      meta.createEl('span', {
+        text: new Date(p.file.stat.mtime).toISOString().slice(0, 10),
+        cls: 'devtrail-cc-card-date',
+      });
+    }
+
+    c.setAttr('aria-label', `${p.name} — ${p.next || t.noNext}`);
+    const open = () => this.app.workspace.getLeaf(false).openFile(p.file);
+    c.addEventListener('click', open);
+    c.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
     });
   }
 
@@ -769,4 +976,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { isUserNote, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findCommandByPluginId, SEARCH_PLUGINS };
+module.exports.__test = { isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findCommandByPluginId, SEARCH_PLUGINS };
