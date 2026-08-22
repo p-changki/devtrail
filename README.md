@@ -166,6 +166,7 @@ devtrail scan [경로]        볼트 진단 — 구조 · 메타 · 충돌 (쓰�
 devtrail doctor            의존성 · 인증 · 권한 · 자동화 상태
 devtrail obsidian          Obsidian 설정 병합
 devtrail plugins <sub>     Obsidian 플러그인 (install|status)
+devtrail command-center <sub>  Obsidian 화면 (install|enable|disable|status)
 devtrail setup <sub>       비대화형 셋업 (env|plan|apply|status) — 앱·CI 용
 devtrail augment [모듈]     없는 폴더 · 허브만 생성
 devtrail project <하위>     프로젝트 등록 (add|list)

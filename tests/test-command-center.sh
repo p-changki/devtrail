@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# Command Center — 플러그인 골격과 설치 경로.
+#
+# Phase 1 의 계약은 하나다:
+#
+#   노트를 하나도 건드리지 않고 켜고 끌 수 있으며, devtrail undo 가 되돌린다.
+#
+# ⚠️ 이 플러그인은 우리 것이지만 예외를 두지 않는다. 남의 플러그인에 적용하는
+#    안전 계약(동의·저널·되돌리기·기존 목록 보존)이 우리 것에는 필요 없다고
+#    말할 근거가 없다. [ADR 0002](../docs/decisions/0002-command-center.md)
+#
+# ⚠️ 네트워크를 쓰지 않는다. 빌드가 없으므로 plugin/ 이 곧 배포물이다(D3).
+# ⚠️ 한글 앞 변수는 중괄호로: "${n}개"  (bash 3.2)
+
+set -uo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
+ROOT="$PWD"
+. tests/lib/harness.sh
+
+T_TMP=$(mktemp -d)
+trap 'rm -rf "$T_TMP"' EXIT
+
+DT="$ROOT/bin/devtrail"
+export DEVTRAIL_ROOT="$ROOT"
+unset DEVTRAIL_JOURNAL
+export DEVTRAIL_OBSIDIAN_REGISTRY="$T_TMP/no-registry.json"
+
+PID=devtrail-command-center
+
+# ── 플러그인 자체 ────────────────────────────────────────────────────────────
+t_start "플러그인 파일"
+t_file "manifest.json" "$ROOT/plugin/manifest.json"
+t_file "main.js"       "$ROOT/plugin/main.js"
+t_json "manifest 가 유효한 JSON" "$ROOT/plugin/manifest.json"
+t_eq "id 가 규약대로" "$PID" "$(jq -r '.id' "$ROOT/plugin/manifest.json")"
+t_ne "minAppVersion 이 있다" "null" "$(jq -r '.minAppVersion' "$ROOT/plugin/manifest.json")"
+t_ne "버전이 있다" "null" "$(jq -r '.version' "$ROOT/plugin/manifest.json")"
+
+# ⚠️ 빌드 도구를 도입하지 않기로 했다(ADR 0002 D3). 번들러 흔적이 생기면
+#    그 결정이 조용히 뒤집힌 것이다.
+t_no_file "package.json 이 없다"  "$ROOT/plugin/package.json"
+t_no_file "tsconfig 가 없다"      "$ROOT/plugin/tsconfig.json"
+t_eq "소스가 한 파일" "1" "$(ls "$ROOT/plugin"/*.js 2>/dev/null | wc -l | tr -d ' ')"
+
+# 뒤집는 조건 중 하나 — 1500줄. 넘으면 ADR 을 다시 봐야 한다.
+n=$(wc -l < "$ROOT/plugin/main.js" | tr -d ' ')
+t_eq "소스가 1500줄 미만" "true" "$([ "$n" -lt 1500 ] && echo true || echo false)"
+
+# ── 명령 표면 ────────────────────────────────────────────────────────────────
+t_start "명령 표면"
+t_contains "usage 에 있다" "command-center" "$("$DT" help 2>&1)"
+t_contains "알 수 없는 하위 명령 거절" "알 수 없는 하위 명령" \
+  "$(DEVTRAIL_CONFIG=/dev/null "$DT" command-center nonsense 2>&1)"
+t_not_contains "--help 이 설정을 요구하지 않는다" "설정이 없습니다" \
+  "$(DEVTRAIL_CONFIG="$T_TMP/nope.json" "$DT" command-center --help 2>&1)"
+
+# ── 설치 ─────────────────────────────────────────────────────────────────────
+_vault() {
+  local v="$T_TMP/$1"
+  mkdir -p "$v/.obsidian" "$v/notes/개발"
+  printf -- '---\ntype: devlog\n---\n# 노트\n' > "$v/notes/개발/사용자노트.md"
+  printf '%s' "$v"
+}
+_cfg() {
+  local v="$1" h="$2"
+  mkdir -p "$h"
+  jq -n --arg v "$v" '{version:3, lang:"ko",
+    vault:{backend:"local", path:$v, root:"notes"}, dirs:{},
+    github:{user:"t", repos:[], project_groups:{}},
+    install:{mode:"new", modules:["devlog"]}}' > "$h/devtrail.config.json"
+}
+
+t_start "install 은 dry-run 이 기본"
+V1=$(_vault v1); H1="$T_TMP/h1"; _cfg "$V1" "$H1"
+out=$(DEVTRAIL_HOME="$H1" DEVTRAIL_CONFIG="$H1/devtrail.config.json" \
+      "$DT" command-center install 2>&1)
+t_contains "무엇을 할지 말한다" "$PID" "$out"
+t_no_file "플러그인을 깔지 않는다" "$V1/.obsidian/plugins/$PID/main.js"
+t_no_file "community-plugins 를 만들지 않는다" "$V1/.obsidian/community-plugins.json"
+
+t_start "install --apply"
+DEVTRAIL_HOME="$H1" DEVTRAIL_CONFIG="$H1/devtrail.config.json" \
+  "$DT" command-center install --apply >/dev/null 2>&1
+t_file "main.js 설치" "$V1/.obsidian/plugins/$PID/main.js"
+t_file "manifest.json 설치" "$V1/.obsidian/plugins/$PID/manifest.json"
+# ⚠️ 설치가 곧 활성화는 아니다. 기존 볼트에는 opt-in 이어야 한다(ADR 0002).
+t_no_file "설치만으로 켜지지 않는다" "$V1/.obsidian/community-plugins.json"
+
+# ⚠️ Phase 1 의 종료 기준 — 노트를 하나도 건드리지 않는다.
+t_start "노트를 건드리지 않는다"
+t_eq "사용자 노트 그대로" "$(printf -- '---\ntype: devlog\n---\n# 노트\n')" \
+  "$(cat "$V1/notes/개발/사용자노트.md")"
+t_eq "노트 수 그대로" "1" \
+  "$(find "$V1/notes" -name '*.md' | wc -l | tr -d ' ')"
+
+# ── 켜기·끄기 ────────────────────────────────────────────────────────────────
+t_start "enable 은 남의 목록을 지우지 않는다"
+printf '%s' '["obsidian-excalidraw-plugin","calendar"]' \
+  > "$V1/.obsidian/community-plugins.json"
+DEVTRAIL_HOME="$H1" DEVTRAIL_CONFIG="$H1/devtrail.config.json" \
+  "$DT" command-center enable --apply >/dev/null 2>&1
+list=$(cat "$V1/.obsidian/community-plugins.json")
+t_contains "우리 것이 들어간다" "$PID" "$list"
+t_contains "쓰던 것 1" "excalidraw" "$list"
+t_contains "쓰던 것 2" "calendar" "$list"
+t_eq "셋이다" "3" "$(jq 'length' "$V1/.obsidian/community-plugins.json")"
+
+t_start "disable 은 우리 것만 뺀다"
+DEVTRAIL_HOME="$H1" DEVTRAIL_CONFIG="$H1/devtrail.config.json" \
+  "$DT" command-center disable --apply >/dev/null 2>&1
+list=$(cat "$V1/.obsidian/community-plugins.json")
+t_not_contains "우리 것이 빠진다" "$PID" "$list"
+t_contains "쓰던 것은 남는다" "excalidraw" "$list"
+t_eq "둘이다" "2" "$(jq 'length' "$V1/.obsidian/community-plugins.json")"
+# 끄는 것과 지우는 것은 다르다.
+t_file "파일은 남는다" "$V1/.obsidian/plugins/$PID/main.js"
+
+# ── status ───────────────────────────────────────────────────────────────────
+t_start "status --json"
+s=$(DEVTRAIL_HOME="$H1" DEVTRAIL_CONFIG="$H1/devtrail.config.json" \
+    "$DT" command-center status --json 2>/dev/null)
+printf '%s' "$s" > "$T_TMP/cc.json"
+t_json "유효한 JSON" "$T_TMP/cc.json"
+t_eq "설치됨"  "true"  "$(jq -r '.installed' "$T_TMP/cc.json")"
+t_eq "꺼져 있음" "false" "$(jq -r '.enabled' "$T_TMP/cc.json")"
+
+# ── 되돌리기 ─────────────────────────────────────────────────────────────────
+#
+# ⚠️ Phase 1 의 종료 기준. 되돌릴 수 없으면 남의 볼트에 넣을 수 없다.
+t_start "undo 가 되돌린다"
+V2=$(_vault v2); H2="$T_TMP/h2"; _cfg "$V2" "$H2"
+DEVTRAIL_HOME="$H2" DEVTRAIL_CONFIG="$H2/devtrail.config.json" \
+  "$DT" command-center install --apply >/dev/null 2>&1
+t_file "설치됨" "$V2/.obsidian/plugins/$PID/main.js"
+
+job=$(ls -1 "$H2/journal" 2>/dev/null | tail -1)
+t_ne "저널 작업이 생겼다" "" "$job"
+t_eq "명령 이름" "command-center-install" \
+  "$(jq -r '.command' "$H2/journal/$job/meta.json" 2>/dev/null)"
+
+DEVTRAIL_HOME="$H2" DEVTRAIL_CONFIG="$H2/devtrail.config.json" \
+  "$DT" undo "$job" --apply >/dev/null 2>&1
+t_no_file "main.js 가 지워진다" "$V2/.obsidian/plugins/$PID/main.js"
+t_no_file "manifest 도 지워진다" "$V2/.obsidian/plugins/$PID/manifest.json"
+t_eq "사용자 노트는 그대로" "1" \
+  "$(find "$V2/notes" -name '*.md' | wc -l | tr -d ' ')"
+
+t_end
