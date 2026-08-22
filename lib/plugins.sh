@@ -179,6 +179,10 @@ pl_install() {
 $(_pl_rows)
 EOF
 
+  # ⚠️ Obsidian 은 시작할 때만 플러그인 폴더를 훑는다. 실행 중에 넣으면
+  #    그 자리에서는 아무 일도 일어나지 않는다 — 말해주지 않으면 고장으로 본다.
+  [ "$done_n" -gt 0 ] && { . "$DEVTRAIL_ROOT/lib/obsidian_app.sh"; oa_warn_if_running || true; }
+
   if [ "$failed_required" = 1 ]; then
     echo
     warn "$(L "필수 플러그인이 빠졌습니다. 네트워크를 확인하고 다시" \
