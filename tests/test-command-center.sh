@@ -707,4 +707,50 @@ t_contains "비활성으로 표시한다" "b.setAttr('disabled', 'true')" \
   "$(sed -n '/launchBar(root, t, data)/,/^  }/p' "$JS")"
 t_contains "CSS 실행 바" "devtrail-cc-launch" "$(cat "$CSS")"
 
+# ── 화면이 거짓말하지 않는가 ────────────────────────────────────────────────
+#
+# 이 두 검사는 2026-08-22 에 실제로 화면을 깨뜨린 결함 두 개에서 나왔다.
+# 둘 다 "코드가 있다" 는 검사로는 잡히지 않았고, 사용자가 스크린샷으로 알려줬다.
+
+t_start "쓰는 문구가 전부 정의돼 있다"
+# ⚠️ t.lastEdit 이 정의 없이 쓰여 화면에 'undefined 2026. 8. 22.' 가 떴다.
+#    문구는 ko·en 양쪽에 다 있어야 한다 — 한쪽만 있으면 다른 언어에서 깨진다.
+cat > "$T_TMP/i18n.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = function (r, p, m) {
+  if (r === 'obsidian') return { Plugin: class {}, ItemView: class {} };
+  return orig(r, p, m);
+};
+const fs = require('fs');
+const T = require(process.argv[2]).__test.TEXT;
+if (!T || !T.ko || !T.en) { console.log('NOHOOK'); process.exit(0); }
+const src = fs.readFileSync(process.argv[2], 'utf8');
+const used = new Set([...src.matchAll(/\bt\.([a-zA-Z][a-zA-Z0-9]*)/g)].map((m) => m[1]));
+const bad = [];
+for (const k of used) {
+  if (T.ko[k] === undefined) bad.push('ko:' + k);
+  if (T.en[k] === undefined) bad.push('en:' + k);
+}
+console.log(bad.length === 0 ? 'OK' : 'MISSING ' + bad.join(' '));
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "정의 없는 문구가 없다" "OK" "$(node "$T_TMP/i18n.js" "$JS" 2>&1 | tail -1)"
+else
+  dim "   node 없음 — 건너뜀"
+fi
+
+t_start "CSS 클래스가 두 번 선언되지 않는다"
+# ⚠️ .devtrail-cc-card 를 보드 카드에도 쓰는 바람에 뒤 선언이 홈 카드를 뒤집어
+#    지표가 잘리고 열이 겹쳤다. 같은 이름을 두 곳에 쓰면 뒤가 이긴다.
+dupes=$(grep -oE '^\.devtrail-cc-[a-z-]+ \{' "$CSS" | sort | uniq -d)
+t_eq "중복 선언이 없다" "" "$dupes"
+
+t_start "여러 줄을 담는 버튼이 높이를 푼다"
+# ⚠️ 지표 카드는 <button> 인데 라벨·값·보조설명 세 줄을 담는다. button 은 높이가
+#    고정될 수 있어, 풀지 않으면 값이 테두리 밖으로 넘쳐 아래 열과 겹친다 —
+#    2026-08-22 에 사용자 화면이 실제로 이렇게 깨졌다.
+t_contains "지표가 높이를 푼다" "height: auto" \
+  "$(sed -n '/^\.devtrail-cc-metric {/,/^}/p' "$CSS")"
+
 t_end

@@ -328,7 +328,11 @@ const TEXT = {
     week: '주차',
     mDevlog: '오늘 일지', mProjects: '활성 프로젝트', mInbox: 'Inbox',
     mWeek: '이번 주 노트', mTrouble: '트러블슈팅', mOverdue: '다시 볼 것',
-    colToday: '오늘 현황', colProjects: '활성 프로젝트', colRecent: '최근 기록',
+    colToday: '오늘 현황', lastEdit: '마지막 수정', colProjects: '활성 프로젝트', colRecent: '최근 기록',
+    hDevlog: '오늘 개발일지가 있는지', hProjects: 'status 가 active 인 프로젝트',
+    hInbox: '아직 정리하지 않은 포착물', hWeek: '최근 7일에 만든 노트',
+    hTrouble: '기록해 둔 트러블슈팅', hOverdue: 'review_at 이 지난 노트',
+    actionMissing: '명령이 없습니다 — 터미널에서 devtrail obsidian 을 실행하고 Obsidian 을 다시 여세요.',
     quickCapture: '빠른 기록',
     search: '검색',
     searchPlaceholder: '전체 검색',
@@ -389,7 +393,11 @@ const TEXT = {
     week: 'Week',
     mDevlog: "Today's log", mProjects: 'Active projects', mInbox: 'Inbox',
     mWeek: 'Notes this week', mTrouble: 'Troubleshooting', mOverdue: 'To revisit',
-    colToday: 'Today', colProjects: 'Active projects', colRecent: 'Recent',
+    colToday: 'Today', lastEdit: 'Last edit', colProjects: 'Active projects', colRecent: 'Recent',
+    hDevlog: 'Whether today has a devlog', hProjects: 'Projects with status active',
+    hInbox: 'Captures you have not sorted yet', hWeek: 'Notes created in the last 7 days',
+    hTrouble: 'Troubleshooting notes you kept', hOverdue: 'Notes past their review_at',
+    actionMissing: 'No such command — run devtrail obsidian, then reopen Obsidian.',
     quickCapture: 'Quick capture',
     search: 'Search',
     searchPlaceholder: 'Search everything',
@@ -472,7 +480,6 @@ class CommandCenterView extends obsidian.ItemView {
       const e = body.createEl('div', { cls: 'devtrail-cc-empty' });
       e.createEl('p', { text: t.emptyAll });
       e.createEl('p', { text: t.emptyAllHelp, cls: 'devtrail-cc-muted' });
-      this.quickCapture(body, t, map.data);
       return;
     }
 
@@ -507,7 +514,6 @@ class CommandCenterView extends obsidian.ItemView {
       }
     });
 
-    this.quickCapture(body, t, map.data);
   }
 
   /* ── 지표 ─────────────────────────────────────────────────────────────
@@ -549,42 +555,10 @@ class CommandCenterView extends obsidian.ItemView {
 
   /* ── 빠른 기록 ────────────────────────────────────────────────────────
    * 기존 Templater 명령을 부른다. 여기서 노트를 만들지 않는다. */
-  quickCapture(body, t, data) {
-    const box = body.createEl('section', { cls: 'devtrail-cc-card' });
-    box.createEl('div', { cls: 'devtrail-cc-card-head' })
-       .createEl('h3', { text: t.quickCapture });
-    const grid = box.createEl('div', { cls: 'devtrail-cc-grid' });
-    const labels = {
-      devlog: t.cDevlog, devnote: t.cDevnote, idea: t.cIdea,
-      worklog: t.cWorklog, report: t.cReport, project: t.cProject,
-    };
-    for (const c of CAPTURES) {
-      this.action(grid, labels[c.key] || c.key, templaterCommandId(data.paths, captureFile(c, data.lang)), t);
-    }
-    this.searchRow(box, t);
-  }
-
-  /* 설치된 검색 플러그인으로 가는 통로.
-   *
-   * ⚠️ 없으면 아무것도 추측하지 않는다. 무엇을 설치하면 되는지, 그리고
-   *    그때까지 무엇을 쓰면 되는지(Obsidian 기본 검색)를 말한다. */
-  searchRow(box, t) {
-    let found = null;
-    for (const pid of SEARCH_PLUGINS) {
-      found = findCommandByPluginId(this.app, pid);
-      if (found) break;
-    }
-    const row = box.createEl('div', { cls: 'devtrail-cc-searchrow' });
-    if (!found) {
-      row.createEl('p', { text: t.searchMissing, cls: 'devtrail-cc-muted' });
-      row.createEl('p', { text: t.searchMissingHelp, cls: 'devtrail-cc-muted' });
-      return;
-    }
-    const b = row.createEl('button', { text: `${t.search} — ${found.name}`, cls: 'devtrail-cc-action' });
-    b.setAttr('aria-label', `${t.search}: ${found.name}`);
-    b.setAttr('title', found.id);
-    b.addEventListener('click', () => this.app.commands.executeCommandById(found.id));
-  }
+  /* ⚠️ 빠른 기록 카드와 하단 검색 안내를 지웠다. 헤더의 검색 바와 빠른 실행
+   *    바가 같은 일을 하고, 둘이 서로 다른 말을 하고 있었다 — 위는
+   *    "Obsidian 검색", 아래는 "Omnisearch 가 없습니다". 한 화면에서 같은
+   *    질문에 두 번 답하면 사용자는 어느 쪽을 믿을지 모른다. */
 
   /* 화면 맨 위의 검색 진입점.
    *
@@ -775,29 +749,29 @@ class CommandCenterView extends obsidian.ItemView {
    *
    * ⚠️ 카드 전체가 눌린다. 링크만 누르게 하면 표적이 너무 작다. */
   projectCard(parent, t, p, colKey) {
-    const c = parent.createEl('div', { cls: 'devtrail-cc-card' });
-    if (colKey) c.addClass(`devtrail-cc-card--${colKey}`);
+    const c = parent.createEl('div', { cls: 'devtrail-cc-pcard' });
+    if (colKey) c.addClass(`devtrail-cc-pcard--${colKey}`);
     c.setAttr('role', 'button');
     c.setAttr('tabindex', '0');
 
-    c.createEl('div', { text: p.name, cls: 'devtrail-cc-card-title' });
+    c.createEl('div', { text: p.name, cls: 'devtrail-cc-pcard-title' });
 
     // next_action 이 카드에서 가장 먼저 눈에 띄어야 한다 — 없으면 없다고 말한다.
     if (p.next) {
-      const n = c.createEl('div', { cls: 'devtrail-cc-card-next' });
+      const n = c.createEl('div', { cls: 'devtrail-cc-pcard-next' });
       icon(n.createEl('span'), 'arrow-right');
       n.createEl('span', { text: p.next });
     } else {
-      c.createEl('div', { text: t.noNext, cls: 'devtrail-cc-card-next is-empty' });
+      c.createEl('div', { text: t.noNext, cls: 'devtrail-cc-pcard-next is-empty' });
     }
 
-    const meta = c.createEl('div', { cls: 'devtrail-cc-card-meta' });
+    const meta = c.createEl('div', { cls: 'devtrail-cc-pcard-meta' });
     if (p.stage) this.badge(meta, p.stage, colKey || 'unknown');
     // 실제 파일 메타데이터를 쓴다. '오래됨' 기준을 임의로 만들지 않는다.
     if (p.file && p.file.stat && p.file.stat.mtime) {
       meta.createEl('span', {
         text: new Date(p.file.stat.mtime).toISOString().slice(0, 10),
-        cls: 'devtrail-cc-card-date',
+        cls: 'devtrail-cc-pcard-date',
       });
     }
 
@@ -976,4 +950,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findCommandByPluginId, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findCommandByPluginId, SEARCH_PLUGINS };

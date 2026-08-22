@@ -56,6 +56,7 @@
   padding: 4px 0;
   /* 좁은 패널에서도 줄이 깨지지 않게 한다. */
   flex-wrap: wrap;
+  padding: 6px 0;
 }
 
 .devtrail-cc-link {
@@ -81,6 +82,7 @@
   margin-bottom: 12px;
   /* 좁은 패널에서 탭이 잘리지 않게 감싼다. */
   flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
 .devtrail-cc-tab {
@@ -91,6 +93,10 @@
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
 }
 
 .devtrail-cc-tab:hover { color: var(--text-normal); }
@@ -152,6 +158,9 @@
   gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: 12px;
 }
 
 .devtrail-cc-header h2 { margin: 0 0 2px; font-size: var(--font-ui-larger); }
@@ -172,10 +181,23 @@
 }
 
 .devtrail-cc-metric {
+  /* ⚠️ button 은 높이가 고정될 수 있다. 카드처럼 여러 줄을 담으려면 풀어야
+   *    한다 — 안 풀면 값과 보조설명이 테두리 밖으로 넘쳐 아래 열과 겹친다.
+   *    2026-08-22 에 실제로 이렇게 깨졌다. */
+  height: auto;
+  min-height: 0;
   padding: 12px;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
   background: var(--background-secondary);
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  cursor: pointer;
+  /* 버튼 기본 스타일을 지운다 — 카드처럼 보여야 한다. */
+  font: inherit;
+  color: var(--text-normal);
 }
 
 .devtrail-cc-metric-value {
@@ -184,12 +206,16 @@
   color: var(--text-normal);
   /* 숫자가 세로로 정렬되게 — 지표는 눈으로 비교하는 물건이다. */
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 
 .devtrail-cc-metric-label {
   margin-top: 2px;
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin: 0;
 }
 
 /* 3열 본문 */
@@ -216,11 +242,6 @@
 .devtrail-command-center { padding: 16px 20px 24px; }
 
 /* ── 헤더 ── 하나의 바로 묶는다. 인사·날짜·탭이 따로 놀지 않게. */
-.devtrail-cc-header {
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--background-modifier-border);
-  margin-bottom: 12px;
-}
 
 .devtrail-cc-header h2 {
   font-size: 1.35em;
@@ -229,14 +250,7 @@
 }
 
 /* ── 네비게이션 ── 아이콘 + 글자. 아이콘만 두면 무엇인지 배워야 한다. */
-.devtrail-cc-nav { margin-bottom: 16px; }
 
-.devtrail-cc-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-}
 
 .devtrail-cc-tab-icon {
   display: inline-flex;
@@ -248,16 +262,6 @@
 .devtrail-cc-tab.is-active .devtrail-cc-tab-icon { opacity: 1; }
 
 /* ── 지표 ── 누를 수 있는 카드. 숫자가 행동으로 이어져야 한다. */
-.devtrail-cc-metric {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 12px 14px;
-  cursor: pointer;
-  /* 버튼 기본 스타일을 지운다 — 카드처럼 보여야 한다. */
-  font: inherit;
-  color: var(--text-normal);
-}
 
 .devtrail-cc-metric:hover { background: var(--background-modifier-hover); }
 
@@ -275,13 +279,7 @@
   color: var(--text-muted);
 }
 
-.devtrail-cc-metric-label {
-  font-size: var(--font-ui-smaller);
-  color: var(--text-muted);
-  margin: 0;
-}
 
-.devtrail-cc-metric-value { line-height: 1.1; }
 
 .devtrail-cc-metric-help {
   margin-top: 4px;
@@ -310,7 +308,6 @@
 .devtrail-cc-badge.is-stage { color: var(--text-accent); }
 
 /* ── 행 ── */
-.devtrail-cc-row { padding: 6px 0; }
 .devtrail-cc-row + .devtrail-cc-row { border-top: 1px solid var(--background-modifier-border); }
 
 .devtrail-cc-projectrow { display: block; }
@@ -398,7 +395,7 @@
 }
 
 /* ── 카드 ─────────────────────────────────────────────────────────────────── */
-.devtrail-cc-card {
+.devtrail-cc-pcard {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -410,21 +407,21 @@
   transition: border-color 120ms ease, transform 120ms ease;
 }
 
-.devtrail-cc-card:hover { border-color: var(--interactive-accent); }
-.devtrail-cc-card:active { transform: translateY(1px); }
+.devtrail-cc-pcard:hover { border-color: var(--interactive-accent); }
+.devtrail-cc-pcard:active { transform: translateY(1px); }
 
-.devtrail-cc-card:focus-visible {
+.devtrail-cc-pcard:focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
 }
 
 /* 긴 이름이 넘치지 않게. 자르지 않고 접는다 — 프로젝트명은 다 읽혀야 한다. */
-.devtrail-cc-card-title {
+.devtrail-cc-pcard-title {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.devtrail-cc-card-next {
+.devtrail-cc-pcard-next {
   display: flex;
   align-items: flex-start;
   gap: 4px;
@@ -433,10 +430,10 @@
   overflow-wrap: anywhere;
 }
 
-.devtrail-cc-card-next.is-empty { color: var(--text-faint); font-style: italic; }
-.devtrail-cc-card-next .svg-icon { width: 14px; height: 14px; flex: none; margin-top: 2px; }
+.devtrail-cc-pcard-next.is-empty { color: var(--text-faint); font-style: italic; }
+.devtrail-cc-pcard-next .svg-icon { width: 14px; height: 14px; flex: none; margin-top: 2px; }
 
-.devtrail-cc-card-meta {
+.devtrail-cc-pcard-meta {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -445,7 +442,7 @@
   color: var(--text-muted);
 }
 
-.devtrail-cc-card-date { font-variant-numeric: tabular-nums; margin-left: auto; }
+.devtrail-cc-pcard-date { font-variant-numeric: tabular-nums; margin-left: auto; }
 
 /* ── 단계 미지정 ────────────────────────────────────────────────────────────
  * 상태가 아니라 '빠진 것' 이다. 컬럼이 아니라 보드 위에 둔다. */
