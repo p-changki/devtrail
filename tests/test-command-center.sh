@@ -160,7 +160,7 @@ SRC="$ROOT/lib/commandcentercmd.sh"
 t_contains "install 이 실행 여부를 본다" "oa_warn_if_running" "$(cat "$SRC")"
 # 켜기·끄기도 같은 함정이다.
 # 주석(source 줄)이 아니라 실제 호출만 센다.
-t_eq "install·enable·disable 세 곳" "3" \
+t_eq "install·update·enable·disable 네 곳" "4" \
   "$(grep -cE '^\s+oa_warn_if_running' "$SRC" | tr -d ' ')"
 
 # 플러그인 설치 경로에도 같은 안내가 있어야 한다 — 같은 함정이다.
@@ -501,5 +501,106 @@ t_contains "카드를 누르면 이동한다" "metricRoute" "$(cat "$JS")"
 t_contains "클릭이 연결돼 있다" "() => this.metricRoute(route)" "$(cat "$JS")"
 # 지표 6개가 갈 곳을 다 갖는가 — 하나라도 빠지면 누르고 아무 일도 안 난다.
 t_eq "지표가 6개다" "6" "$(grep -c '\[t\.m' "$JS" | tr -d ' ')"
+
+# ── 업데이트 ────────────────────────────────────────────────────────────────
+#
+# 배포 경로는 하나다 — 저장소의 plugin/ 이 곧 배포물이다(ADR 0002 D3).
+# devtrail update(git pull)가 소스를 갱신하고, command-center update 가
+# 그것을 볼트에 반영한다. 별도 다운로드 경로를 만들지 않는다 — 두 경로가
+# 서로 다른 버전을 가져오면 사용자가 어느 게 진짜인지 모른다.
+#
+# ⚠️ 감지는 자동, 적용은 승인. 실행 중인 Obsidian 아래에서 파일을 갈아치우면
+#    로딩 상태가 꼬인다.
+_ccenv() {
+  printf 'DEVTRAIL_HOME=%s DEVTRAIL_CONFIG=%s' "$1" "$1/devtrail.config.json"
+}
+
+t_start "update 는 기본이 읽기 전용"
+VU=$(_vault vu); HU="$T_TMP/hu"; _cfg "$VU" "$HU"
+DEVTRAIL_HOME="$HU" DEVTRAIL_CONFIG="$HU/devtrail.config.json" \
+  "$DT" command-center install --apply >/dev/null 2>&1
+
+# 설치본을 옛 버전으로 만든다 — 업데이트가 필요한 상태.
+python3 - "$VU/.obsidian/plugins/$PID/manifest.json" <<'PYEOF'
+import json, io, sys
+p = sys.argv[1]
+d = json.load(io.open(p, encoding='utf-8'))
+d['version'] = '0.0.1'
+json.dump(d, io.open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+PYEOF
+before=$(md5 -q "$VU/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VU/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
+
+out=$(DEVTRAIL_HOME="$HU" DEVTRAIL_CONFIG="$HU/devtrail.config.json" \
+      "$DT" command-center update 2>&1)
+t_contains "무엇이 바뀔지 말한다" "0.0.1" "$out"
+after=$(md5 -q "$VU/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VU/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
+t_eq "파일을 바꾸지 않는다" "$before" "$after"
+t_eq "manifest 도 그대로" "0.0.1" \
+  "$(jq -r '.version' "$VU/.obsidian/plugins/$PID/manifest.json")"
+
+t_start "update --apply 만 바꾼다"
+DEVTRAIL_HOME="$HU" DEVTRAIL_CONFIG="$HU/devtrail.config.json" \
+  "$DT" command-center update --apply >/dev/null 2>&1
+t_eq "버전이 올라간다" "$(jq -r '.version' "$ROOT/plugin/manifest.json")" \
+  "$(jq -r '.version' "$VU/.obsidian/plugins/$PID/manifest.json")"
+
+t_start "최신이면 아무것도 안 바꾼다"
+b2=$(md5 -q "$VU/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VU/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
+out2=$(DEVTRAIL_HOME="$HU" DEVTRAIL_CONFIG="$HU/devtrail.config.json" \
+       "$DT" command-center update --apply 2>&1)
+a2=$(md5 -q "$VU/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VU/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
+t_eq "파일 그대로" "$b2" "$a2"
+t_contains "최신이라고 말한다" "$(L "최신" "up to date")" "$out2"
+
+t_start "검증 실패 시 기존 설치를 보존한다"
+# ⚠️ 원본이 깨졌으면 아무것도 하지 않는다. 절반만 바꾼 플러그인이 최악이다.
+BAD="$T_TMP/badsrc"; mkdir -p "$BAD"
+printf '%s' '{"id":"someone-else","version":"9.9.9"}' > "$BAD/manifest.json"
+printf 'x' > "$BAD/main.js"
+keep=$(md5 -q "$VU/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VU/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
+out3=$(DT_CC_SRC_OVERRIDE="$BAD" DEVTRAIL_HOME="$HU" \
+       DEVTRAIL_CONFIG="$HU/devtrail.config.json" \
+       "$DT" command-center update --apply 2>&1)
+now=$(md5 -q "$VU/.obsidian/plugins/$PID/main.js" 2>/dev/null || md5sum "$VU/.obsidian/plugins/$PID/main.js" | cut -d' ' -f1)
+t_eq "id 가 다르면 안 바꾼다" "$keep" "$now"
+t_contains "id 불일치를 말한다" "id" "$out3"
+
+t_start "업데이트가 사용자 것을 보존한다"
+t_eq "활성 목록 그대로" "true" \
+  "$(jq --arg p "$PID" 'index($p) != null' "$VU/.obsidian/community-plugins.json" 2>/dev/null || echo true)"
+t_eq "사용자 노트 그대로" "1" \
+  "$(find "$VU/notes" -name '*.md' | wc -l | tr -d ' ')"
+
+t_start "update 도 되돌릴 수 있다"
+job=$(ls -1 "$HU/journal" 2>/dev/null | tail -1)
+t_ne "저널 작업이 있다" "" "$job"
+t_contains "명령 이름이 update" "command-center-update" \
+  "$(jq -r '.command' "$HU/journal/$job/meta.json" 2>/dev/null)"
+
+t_start "status --json 이 상태를 다 말한다"
+st=$(DEVTRAIL_HOME="$HU" DEVTRAIL_CONFIG="$HU/devtrail.config.json" \
+     "$DT" command-center status --json 2>/dev/null)
+printf '%s' "$st" > "$T_TMP/ccst.json"
+t_json "유효한 JSON" "$T_TMP/ccst.json"
+# ⚠️ false 는 유효한 값이다. // 는 false 를 falsy 로 보고 기본값으로 떨군다 —
+#    저장소가 jq 의 // 를 boolean 에 쓰지 말라고 정한 이유가 이것이다.
+for k in installed enabled installed_version available_version update_available \
+         min_app_version restart_required; do
+  t_eq "필드 $k 가 있다" "true" \
+    "$(jq --arg k "$k" 'has($k)' "$T_TMP/ccst.json")"
+  t_ne "필드 $k 가 null 이 아니다" "null" \
+    "$(jq -r --arg k "$k" '.[$k] | tostring' "$T_TMP/ccst.json")"
+done
+# ⚠️ 모르는 것은 지어내지 않는다. 설치가 안 된 볼트에서는 버전을 알 수 없다.
+VN=$(_vault vn); HN="$T_TMP/hn"; _cfg "$VN" "$HN"
+stn=$(DEVTRAIL_HOME="$HN" DEVTRAIL_CONFIG="$HN/devtrail.config.json" \
+      "$DT" command-center status --json 2>/dev/null)
+printf '%s' "$stn" > "$T_TMP/ccst-none.json"
+t_eq "미설치면 버전을 모른다" "unknown" \
+  "$(jq -r '.installed_version' "$T_TMP/ccst-none.json")"
+t_eq "미설치면 업데이트 여부도 모른다" "unknown" \
+  "$(jq -r '.update_available | tostring' "$T_TMP/ccst-none.json")"
+t_eq "설치 여부는 안다" "false" \
+  "$(jq -r '.installed | tostring' "$T_TMP/ccst-none.json")"
 
 t_end

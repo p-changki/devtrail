@@ -62,6 +62,7 @@ doctor_run() {
     [ -d "$vr" ] && ok "$(L "루트 폴더" "Root folder"): $(cfg '.vault.root')" \
                  || { _d_warn "$(L "루트 폴더 없음" "Root folder missing"): $vr"; }
     _d_plugins "$vp"
+    _d_command_center
   fi
 
   local backend; backend=$(cfg '.vault.backend' 'local')
@@ -132,6 +133,40 @@ _d_bin() {
 #
 # auto-note-mover 는 필수에서 뺐다. DevTrail 코드가 이 플러그인을 전혀 쓰지
 # 않는데 없다고 ❌ 를 띄우면, 진짜 차단 항목과 구분이 안 된다.
+# Command Center — 설치·버전·업데이트 가능 여부.
+#
+# ⚠️ 네트워크를 쓰지 않는다. 저장소의 plugin/ 과 볼트에 깔린 것을 비교할
+#    뿐이다. 최신 소스는 `devtrail update` 가 가져온다 — 배포 경로는 하나다.
+# ⚠️ 확인 실패를 '고장' 이라고 단정하지 않는다. 설치하지 않은 것은 정상이다.
+_d_command_center() {
+  local cc="$DEVTRAIL_ROOT/lib/commandcentercmd.sh"
+  [ -f "$cc" ] || return 0
+  # shellcheck disable=SC1090
+  . "$cc"
+
+  local st; st=$(_cc_status --json 2>/dev/null) || return 0
+  local installed; installed=$(printf '%s' "$st" | jq -r '.installed')
+  if [ "$installed" != "true" ]; then
+    dim "   Command Center $(L "미설치 (선택)" "not installed (optional)")"
+    dim "     devtrail command-center install --apply"
+    return 0
+  fi
+
+  local have want upd enabled
+  have=$(printf '%s' "$st"    | jq -r '.installed_version')
+  want=$(printf '%s' "$st"    | jq -r '.available_version')
+  upd=$(printf '%s' "$st"     | jq -r '.update_available | tostring')
+  enabled=$(printf '%s' "$st" | jq -r '.enabled | tostring')
+
+  if [ "$upd" = "true" ]; then
+    _d_warn "Command Center $(L "업데이트 있음" "update available"): ${have} → ${want}"
+    dim "     devtrail command-center update"
+  else
+    ok "Command Center ${have}"
+  fi
+  [ "$enabled" = "true" ] || dim "     $(L "꺼져 있습니다" "It is disabled"): devtrail command-center enable --apply"
+}
+
 _d_plugins() {
   local vp="$1" pf="$1/.obsidian/community-plugins.json"
   local need=(obsidian-shellcommands templater-obsidian dataview)

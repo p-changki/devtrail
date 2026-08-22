@@ -182,7 +182,7 @@ devtrail scan [path]       diagnose a vault — structure · meta · conflicts (
 devtrail doctor            dependencies · auth · permissions · automation
 devtrail obsidian          merge Obsidian settings
 devtrail plugins <sub>     Obsidian plugins (install|status)
-devtrail command-center <sub>  Obsidian view (install|enable|disable|status)
+devtrail command-center <sub>  Obsidian view (install|update|enable|disable|status)
 devtrail setup <sub>       non-interactive setup (env|plan|apply|status) — for the app and CI
 devtrail augment [module]  create only missing folders and hubs
 devtrail project <sub>     register projects (add|list)
