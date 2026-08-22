@@ -169,6 +169,9 @@ def main():
             'date': today,
             'devlog_exists': exists,
             'open_tasks': open_tasks(devlog) if exists else ('unknown' if not devlog else 0),
+            # ⚠️ 경로를 돌려준다. 앱이 파일명 규칙을 한 벌 더 갖지 않게 —
+            #    그 순간 규칙이 갈리고 "있는데 없다" 는 화면이 생긴다.
+            'devlog_path': devlog or None,
         },
         'projects': {
             'active_count': len(c['projects']),

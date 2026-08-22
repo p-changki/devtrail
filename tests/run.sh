@@ -306,6 +306,7 @@ run behav "setup 계약"     ./tests/test-setup.sh
 run behav "command center" ./tests/test-command-center.sh
 run behav "capture"        ./tests/test-capture.sh
 run behav "snapshot"       ./tests/test-snapshot.sh
+run behav "app 경계"       ./tests/test-app.sh
 
 [ "$GROUP" = all ] && run swift "swift 빌드" \
   sh -c 'cd app && swift build -c release 2>&1 | tail -1'

@@ -34,6 +34,19 @@ final class Status: ObservableObject {
     ///    무엇을 해야 하는지도 알려주지 않는 막다른 길이었다.
     @Published var needsSetup = false
     @Published var lastRun = ""                 // 마지막 자동 실행 시각
+
+    // ── Obsidian 없이 보는 상태 ────────────────────────────────────────────
+    // ⚠️ 앱은 이 하나만 소비한다. Markdown·경로 규칙을 스스로 해석하지 않는다.
+    @Published var snapshot: Snapshot? = nil
+    @Published var snapshotError: String? = nil
+    /// snapshot 이 알려준 오늘 개발일지 경로. 앱이 조립하지 않는다.
+    @Published var snapshotDevlogPath: String? = nil
+
+    // ── 링크 받아두기 ──────────────────────────────────────────────────────
+    @Published var captureBusy = false
+    @Published var captureError: String? = nil
+    @Published var captureResult: String? = nil
+    @Published var captureUndoJob: String? = nil
     @Published var backfillDate = ""
 
     var scheduleOn: Bool { scheduleLoaded > 0 }
@@ -145,12 +158,13 @@ final class Status: ObservableObject {
         return "\(vault)/\(rel)"
     }
 
-    /// 오늘 개발일지 절대경로. 없으면 nil.
-    var devlogFile: String? {
-        guard let dir = vaultPath("devlog") else { return nil }
-        let pattern = dig("naming.devlog_file") as? String ?? "{{DATE}} devlog.md"
-        return "\(dir)/\(pattern.replacingOccurrences(of: "{{DATE}}", with: date))"
-    }
+    /// 오늘 개발일지 절대경로. 모르면 nil.
+    ///
+    /// ⚠️ 파일명 규칙을 여기서 갖지 않는다. snapshot 이 CLI 가 해석한 경로를
+    ///    그대로 준다 — 앱이 규칙을 한 벌 더 가지면 어느 한쪽이 바뀔 때
+    ///    "파일이 있는데 없다" 고 말하는 화면이 생긴다. 이 저장소는
+    ///    dirs.devlog 로 같은 병을 네 번 고쳤다.
+    var devlogFile: String? { snapshotDevlogPath }
 
     /// 주간리뷰 폴더. 특정 파일명은 ISO 주차 계산이 필요해 폴더를 연다.
     var weeklyDir: String? { vaultPath("weekly") }
@@ -442,4 +456,82 @@ final class Status: ObservableObject {
             self.refresh()
         }
     }
+    // ── Snapshot ───────────────────────────────────────────────────────────
+    //
+    // ⚠️ 렌더마다 부르지 않는다. SwiftUI 의 body 는 자주 다시 그려지고,
+    //    거기서 프로세스를 띄우면 메뉴를 여는 것만으로 CLI 가 수십 번 뜬다.
+    //    앱이 앞으로 나올 때와 사용자가 새로고침을 누를 때만 부른다.
+    func refreshSnapshot() {
+        CLI.runAsync(["command-center", "snapshot", "--json"]) { [weak self] r in
+            guard let self = self else { return }
+            guard r.ok, let data = r.out.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data),
+                  let dict = obj as? [String: Any], let snap = Snapshot(dict) else {
+                // ⚠️ 실패를 '아무것도 없음' 으로 보여주지 않는다. 못 읽은 것과
+                //    비어 있는 것은 다른 사실이다.
+                self.snapshot = nil
+                self.snapshotError = r.ok ? "상태를 읽지 못했습니다" : self.cliFailure(r)
+                return
+            }
+            self.snapshot = snap
+            self.snapshotDevlogPath =
+                ((dict["today"] as? [String: Any])?["devlog_path"] as? String)
+            self.snapshotError = nil
+        }
+    }
+
+    private func cliFailure(_ r: CLI.Result) -> String {
+        if self.cliMissing { return "devtrail 을 찾지 못했습니다" }
+        let err = r.err.trimmingCharacters(in: .whitespacesAndNewlines)
+        return err.isEmpty ? "devtrail 실행에 실패했습니다" : err
+    }
+
+    // ── 링크 받아두기 ──────────────────────────────────────────────────────
+    //
+    // ⚠️ URL 을 문자열로 이어 붙이지 않는다. 인자 배열로 넘긴다 —
+    //    YouTube URL 에는 & 가 흔하고, 셸을 거치면 거기서 잘린다.
+    // ⚠️ 노트를 앱이 만들지 않는다. CLI 가 만들고, 저널에 남고, undo 로 사라진다.
+    func captureYouTube(_ url: String, apply: Bool) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            captureError = "링크를 입력하세요"
+            return
+        }
+        // ⚠️ 두 번 누르면 노트가 두 개 생긴다. 버튼 비활성화는 첫 방어선이지만
+        //    화면 밖에서 이 함수를 부를 수도 있다. 모델에서도 막는다.
+        guard !captureBusy else { return }
+        captureBusy = true
+        captureError = nil
+        captureResult = nil
+
+        var args = ["capture", "youtube", "--url", trimmed]
+        if apply { args.append("--apply") }
+        CLI.runAsync(args) { [weak self] r in
+            guard let self = self else { return }
+            self.captureBusy = false
+            let out = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard r.ok else {
+                self.captureError = self.cliFailure(r)
+                return
+            }
+            self.captureResult = out.isEmpty ? "완료" : out
+            if apply {
+                self.captureUndoJob = Status.undoJob(from: out)
+                self.refreshSnapshot()
+            }
+        }
+    }
+
+    /// 출력에서 되돌리기 작업 번호를 찾는다. 없으면 nil —
+    /// 지어내지 않는다.
+    static func undoJob(from output: String) -> String? {
+        for line in output.split(separator: "\n") where line.contains("undo") {
+            for token in line.split(separator: " ") {
+                let t = token.trimmingCharacters(in: .whitespaces)
+                if t.count == 20, t.contains("-"), t.first?.isNumber == true { return t }
+            }
+        }
+        return nil
+    }
+
 }

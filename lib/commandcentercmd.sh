@@ -522,7 +522,8 @@ _cc_snapshot() {
   tpl_rel=$(dt_dir templates)
   devlog_rel=$(dt_dir devlog)
   devlog_path=""
-  [ -n "$devlog_rel" ] && devlog_path="$root/$devlog_rel/$today devlog.md"
+  # ⚠️ 파일명은 dt_devlog_name 하나에서만 온다.
+  [ -n "$devlog_rel" ] && devlog_path="$root/$devlog_rel/$(dt_devlog_name "$today")"
 
   local vault_state
   vault_state=$(python3 "$DEVTRAIL_ROOT/lib/snapshot.py" \

@@ -74,6 +74,31 @@ shell commands 를 거쳐야 해 느리고 취약하다. **두 벌을 두되, �
    네 번 고쳤다. 두 벌을 허용하는 이번 결정은 **계약 테스트가 있는 동안에만**
    유효하다. 테스트가 사라지면 이 결정도 무효다.
 
+## 앱은 무엇을 하고 무엇을 안 하나
+
+```
+읽기   devtrail command-center snapshot --json   그것 하나만 소비한다
+쓰기   devtrail capture youtube --apply          앱이 직접 쓰지 않는다
+```
+
+⚠️ 앱은 Markdown 도 frontmatter 도 **파일명 규칙도** 해석하지 않는다.
+개발일지 경로는 snapshot 이 준 것을 그대로 쓴다.
+
+발견: 앱이 `"{{DATE}} devlog.md"` 라는 자기 기본값을 갖고 있었다. 같은 문자열이
+**여섯 곳**에 있다 — 이 저장소가 `dirs.devlog` 로 네 번 고친 것과 같은 병이다.
+
+| 자리 | 처리 |
+|---|---|
+| `lib/common.sh` `dt_devlog_name` | **단일 출처로 신설** |
+| 메뉴바 앱 | snapshot 이 준 경로를 쓰도록 고침 |
+| `lib/commandcentercmd.sh` (snapshot) | `dt_devlog_name` 을 부르도록 고침 |
+| `templates/scripts/_lib.sh.tmpl` | **남음** — 이번 범위 밖 |
+| `templates/dashboard/server.py` | **남음** |
+| `lib/gen/hubs.py` | **남음** |
+
+남은 셋은 지금 같은 값이라 당장 어긋나지 않지만, 하나만 바뀌면 "파일이 있는데
+없다" 는 화면이 다시 생긴다. 각각 검증이 필요해 별도로 다룬다.
+
 ## 되돌릴 조건
 
 - 캡처 대상이 셋을 넘으면 — 그때는 공통 캡처 골격이 필요하다

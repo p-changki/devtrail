@@ -106,6 +106,18 @@ vault_rel() {
   if [ -n "$r" ]; then printf '%s/%s' "$r" "$1"; else printf '%s' "$1"; fi
 }
 
+# dt_devlog_name <날짜> — 그 날짜의 개발일지 파일명.
+#
+# ⚠️ 이 기본값을 다른 곳에 두지 않는다. '{{DATE}} devlog.md' 가 생성 스크립트·
+#    메뉴바 앱·snapshot 세 곳에 각자 있었고, 그중 하나만 바뀌면 "파일이 있는데
+#    없다" 고 말하는 화면이 생긴다. 이 저장소는 dirs.devlog 로 같은 병을 네 번
+#    고쳤다.
+dt_devlog_name() {
+  local d="$1" pat
+  pat=$(cfg '.naming.devlog_file' '{{DATE}} devlog.md')
+  printf '%s' "${pat//\{\{DATE\}\}/$d}"
+}
+
 # dt_dir <key> — 볼트 루트 기준 상대경로.
 #   1) config 의 dirs.<key>        사용자가 채택한 경로가 최우선
 #   2) preset/tree.json 의 path    프리셋 기본값

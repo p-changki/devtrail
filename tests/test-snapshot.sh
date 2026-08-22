@@ -205,4 +205,21 @@ else
   dim "   node 없음 — 계약 검사를 건너뜀 (⚠️ 두 구현이 갈려도 모른다)"
 fi
 
+t_start "개발일지 파일명의 출처가 하나다"
+# ⚠️ '{{DATE}} devlog.md' 기본값이 생성 스크립트·메뉴바 앱·snapshot 세 곳에
+#    각자 있었다. 이 저장소가 dirs.devlog 로 네 번 고친 것과 같은 병이다.
+#    dt_devlog_name 하나만 그 값을 안다.
+# ⚠️ 아직 네 곳(생성 스크립트·대시보드 서버·허브 생성기·설정 템플릿)이 각자
+#    기본값을 갖고 있다. 그 넷은 이번 범위 밖이라 손대지 않았고, 보고했다.
+#    여기서는 **이번에 손댄 둘**만 지킨다: 메뉴바 앱과 snapshot.
+t_eq "앱이 자기 기본값을 갖지 않는다" "0" \
+  "$(grep -rc '{{DATE}} devlog.md' "$ROOT/app/Sources"/*/*.swift 2>/dev/null | awk -F: '{s+=$2} END{print s+0}')"
+t_eq "snapshot 이 자기 기본값을 갖지 않는다" "0" \
+  "$(grep -c '{{DATE}} devlog.md' "$ROOT/lib/commandcentercmd.sh" | tr -d ' ')"
+t_contains "단일 출처 함수가 있다" "dt_devlog_name" "$(cat "$ROOT/lib/common.sh")"
+# snapshot 이 실제 경로를 알려주므로 앱이 조립할 필요가 없다.
+t_ne "snapshot 이 경로를 알려준다" "null" "$(jq -r '.today.devlog_path' "$SNAP")"
+t_eq "그 경로가 실제 파일이다" "yes" \
+  "$([ -f "$(jq -r '.today.devlog_path' "$SNAP")" ] && echo yes || echo no)"
+
 t_end
