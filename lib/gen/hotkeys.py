@@ -88,7 +88,22 @@ def build_hotkeys(spec, tmpl_rel, existing, shell_ids, have=None):
     for p in spec.get("plugin", []):
         place(p["command"], p["modifiers"], p["key"])
 
-    return out, assigned, remapped, skipped
+    # ⚠️ 우리가 먼저 배정한 키를 사용자가 나중에 다른 명령에 줬을 수 있다.
+    #    place() 는 '이미 우리 것' 이라 유지하고 넘어가므로 그 겹침을 못 본다.
+    #    고쳐주지는 않는다 — 사용자가 일부러 그렇게 뒀을 수 있다 — 대신
+    #    반드시 말한다. 말하지 않으면 둘 중 하나가 조용히 안 먹는다.
+    #    (2026-08-22 실물에서 실제로 발생: Mod+Shift+J 가 겹쳤다)
+    seen = {}
+    clashes = []
+    for cmd, binds in out.items():
+        for b in binds or []:
+            c = combo(b.get("modifiers") or [], str(b.get("key", "")))
+            if c in seen and seen[c] != cmd:
+                clashes.append((c, seen[c], cmd))
+            else:
+                seen[c] = cmd
+
+    return out, assigned, remapped, skipped, clashes
 
 
 def tpl_name(entry):
@@ -264,7 +279,7 @@ def main():
 
     if what == "hotkeys":
         shell_ids = load(sys.argv[5], {}) if len(sys.argv) > 5 and sys.argv[5] else {}
-        out, assigned, remapped, skipped = build_hotkeys(
+        out, assigned, remapped, skipped, clashes = build_hotkeys(
             spec, tmpl_rel, existing, shell_ids, have)
         print(json.dumps(out, ensure_ascii=False, indent=2))
         print(T("hk.assigned", a=len(assigned), r=len(remapped), s=len(skipped)),
@@ -273,6 +288,11 @@ def main():
             print(T("hk.remapped", old=old, new=new), file=sys.stderr)
         for cmd, c, by in skipped:
             print(f"  건너뜀 {c} (이미 사용: {by})", file=sys.stderr)
+        for c, a, b in clashes:
+            print(f"  ⚠️  {c} 를 두 명령이 씁니다: {a} · {b}", file=sys.stderr)
+            print("     Obsidian 설정 → 단축키에서 한쪽을 바꾸세요. "
+                  "고치지 않는 이유는 어느 쪽이 맞는지 우리가 모르기 때문입니다.",
+                  file=sys.stderr)
         return 0
 
     print(f"알 수 없는 대상: {what}", file=sys.stderr)

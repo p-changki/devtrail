@@ -41,14 +41,37 @@ fi
 FAILED=""
 SKIPPED=0
 # run <그룹> <이름> <명령…>
+# 테스트가 오류를 뱉으면서 초록으로 끝나는 일이 없게 한다.
+#
+# ⚠️ 2026-08-22 에 실제로 그랬다. $( ) 안의 heredoc 이 끝나지 않아 파이썬이
+#    NameError 를 냈고, 결과가 빈 문자열이 되어 개수를 세는 단언이 0 을 얻고
+#    통과했다. 종료 코드는 0 이었다 — 아무도 몰랐다.
+#
+#    "통과했다" 는 종료 코드만의 이야기가 아니다. 오류를 내면서 통과한 것은
+#    통과가 아니다.
+_TEST_ERRORS='Traceback|NameError|SyntaxError|command not found|unbound variable|syntax error'
+
 run() {
   local group="$1" name="$2"; shift 2
   if ! _want "$group"; then SKIPPED=$((SKIPPED + 1)); return 0; fi
   printf '\n%s━━ %s %s\n' "$B" "$name" "$Z"
-  if "$@"; then
+  local errfile ok=0
+  errfile=$(mktemp)
+  if "$@" 2> >(tee "$errfile" >&2); then ok=1; fi
+  local noisy
+  # ⚠️ grep -c 는 0 건일 때 "0" 을 찍고 **exit 1** 이다. || echo 0 을 붙이면
+  #    "0" 이 두 줄이 되어 비교가 언제나 실패한다.
+  noisy=$(grep -cE "$_TEST_ERRORS" "$errfile" 2>/dev/null) || true
+  noisy=$(printf '%s' "${noisy:-0}" | tr -d '[:space:]')
+  rm -f "$errfile"
+  if [ "$ok" = 1 ] && [ "${noisy:-0}" = 0 ]; then
     printf '%s✓ %s%s\n' "$G" "$name" "$Z"
   else
-    printf '%s✗ %s%s\n' "$R" "$name" "$Z"
+    if [ "$ok" = 1 ]; then
+      printf '%s✗ %s%s — 통과했지만 오류를 %s건 출력했다\n' "$R" "$name" "$Z" "$noisy"
+    else
+      printf '%s✗ %s%s\n' "$R" "$name" "$Z"
+    fi
     FAILED="${FAILED}${name}
 "
   fi
@@ -304,6 +327,9 @@ run behav "프로젝트 키"   ./tests/test-project-keys.sh
 run behav "부트스트랩"     ./tests/test-bootstrap.sh
 run behav "setup 계약"     ./tests/test-setup.sh
 run behav "command center" ./tests/test-command-center.sh
+run behav "capture"        ./tests/test-capture.sh
+run behav "snapshot"       ./tests/test-snapshot.sh
+run behav "app 경계"       ./tests/test-app.sh
 
 [ "$GROUP" = all ] && run swift "swift 빌드" \
   sh -c 'cd app && swift build -c release 2>&1 | tail -1'

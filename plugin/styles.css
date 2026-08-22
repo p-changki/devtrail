@@ -4,11 +4,30 @@
  *    글자가 안 보이거나 배경과 섞인다. 전역 폰트·body 스타일은 건드리지 않는다.
  */
 
-.devtrail-command-center { padding: 0 4px; }
+.devtrail-command-center {
+  /* ⚠️ 여백을 각 구역이 들고 있으면 하나가 빠졌을 때 그 구역만 아래와 붙는다.
+   *    실제로 빠른 실행 바에 margin-bottom 이 없어 지표와 겹쳐 보였다.
+   *    부모가 gap 으로 리듬을 주면 빠뜨릴 자리가 없다. */
+  display: flex;
+  flex-direction: column;
+  /* 사양: max-width 1180px, padding 28px 40px 56px, gap 24px */
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 40px 56px;
+  gap: 24px;
+}
 
-.devtrail-cc-header h2 { margin: 0 0 12px; font-size: var(--font-ui-large); }
+.devtrail-cc-header h2 {
+  margin: 0 0 2px;
+  font-size: 1.35em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
 
-.devtrail-cc-muted { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.devtrail-cc-muted {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
 
 .devtrail-cc-recovery,
 .devtrail-cc-empty {
@@ -19,7 +38,6 @@
 }
 
 .devtrail-cc-card {
-  margin-bottom: 12px;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
   background: var(--background-secondary);
@@ -30,7 +48,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
@@ -46,16 +64,18 @@
   font-variant-numeric: tabular-nums;
 }
 
-.devtrail-cc-list { padding: 6px 12px 10px; }
+.devtrail-cc-list {
+  padding: 8px 12px 10px;
+}
 
 .devtrail-cc-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 0;
   /* 좁은 패널에서도 줄이 깨지지 않게 한다. */
   flex-wrap: wrap;
+  padding: 8px 0;
 }
 
 .devtrail-cc-link {
@@ -65,11 +85,1215 @@
   padding: 2px 0;
 }
 
-.devtrail-cc-link:hover { text-decoration: underline; }
+.devtrail-cc-link:hover {
+  text-decoration: underline;
+}
 
 /* 키보드로 이동할 때 지금 어디인지 보여야 한다. */
 .devtrail-cc-link:focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
   border-radius: var(--radius-s);
+}
+
+/* ── 네비게이션 ─────────────────────────────────────────────────────────── */
+.devtrail-cc-nav {
+  /* ⚠️ 탭은 '어디에 있는가' 를 말한다. 아래 줄의 빠른 실행은 '무엇을 하는가'
+   *    를 말한다 — 둘이 똑같은 알약이면 누르기 전까지 무엇이 일어날지 모른다.
+   *    탭은 밑줄로, 동작은 알약으로 형태를 가른다. */
+  display: flex;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.devtrail-cc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  /* 현재 탭이 될 때 글자가 밀리지 않게 자리를 미리 잡아 둔다. */
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border-bottom: none;
+  margin-bottom: 0;
+  color: var(--text-muted);
+}
+
+.devtrail-cc-tab:hover {
+  color: var(--text-normal);
+}
+
+.devtrail-cc-tab:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+
+.devtrail-cc-tab.is-active {
+  /* ⚠️ 색만으로 현재 탭을 말하지 않는다 — 밑줄과 굵기가 함께 온다. */
+  border-bottom-color: var(--interactive-accent);
+  /* 사양: 활성 탭은 배경 + 굵기. 밑줄이 아니다. */
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-weight: 600;
+  border-bottom-color: transparent;
+}
+
+
+/* ── 명령 버튼 ──────────────────────────────────────────────────────────── */
+
+.devtrail-cc-action {
+  padding: 8px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  text-align: left;
+}
+
+.devtrail-cc-action:hover {
+  background: var(--background-modifier-hover);
+}
+
+.devtrail-cc-action:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* ⚠️ 준비되지 않은 명령은 눌리지 않는다. 눌러서 아무 일도 안 일어나는 것보다
+ *    처음부터 못 누르게 하고 이유를 title 로 알려주는 편이 낫다. */
+.devtrail-cc-action.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── 전체 화면 레이아웃 ─────────────────────────────────────────────────────
+ *
+ * ⚠️ 미디어 쿼리를 쓰지 않는다. Obsidian 의 leaf 는 화면이 아니라 창 안의
+ *    영역이라 뷰포트 폭과 무관하다. auto-fit + minmax 로 '내 폭' 에 반응한다 —
+ *    메인 탭에서는 3열, 사이드 패널로 끌어다 놓으면 1열이 된다.
+ */
+.devtrail-cc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.devtrail-cc-header p {
+  margin: 0;
+}
+
+.devtrail-cc-header-right {
+  text-align: right;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* 지표 스트립 */
+
+
+
+
+/* 넓은 화면에서 본문이 너무 늘어지지 않게 — 읽는 폭에는 한계가 있다. */
+/* ⚠️ 폭을 자르지 않는다. 대시보드는 읽는 물건이 아니라 훑는 물건이라
+ *    글줄 길이가 기준이 아니다 — 1400px 로 자르면 넓은 화면에서 오른쪽이
+ *    통째로 죽는다. 긴 글이 생기는 곳은 카드가 스스로 제한한다. */
+.devtrail-cc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ══ 시각 규약 ═══════════════════════════════════════════════════════════════
+ *
+ * ⚠️ 색을 고르지 않는다. docs/design-tokens.md 의 원칙 4 —
+ *    "Obsidian 안에서는 테마를 이긴다고 생각하지 않는다."
+ *    hex 도 rgb() 도 쓰지 않고 테마 변수만 쓴다. 그래야 남의 테마가 안 깨진다.
+ *
+ * 여백은 4의 배수로만 간다. 6px·10px 같은 값이 섞이면 정렬이 미묘하게 어긋나고,
+ * 그 어긋남이 "투박하다" 는 인상의 대부분이다.
+ */
+
+
+/* ── 헤더 ── 하나의 바로 묶는다. 인사·날짜·탭이 따로 놀지 않게. */
+
+
+/* ── 네비게이션 ── 아이콘 + 글자. 아이콘만 두면 무엇인지 배워야 한다. */
+
+
+/* ── 지표 ── 누를 수 있는 카드. 숫자가 행동으로 이어져야 한다. */
+
+
+
+
+
+
+
+/* ⚠️ 주의는 색으로만 말하지 않는다. 왼쪽 띠가 있어서 색을 못 봐도 구분된다. */
+
+/* ── 배지 ── 상태를 짧은 글자로. 색은 거들 뿐. */
+.devtrail-cc-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.devtrail-cc-badge.is-stage {
+  color: var(--text-accent);
+}
+
+/* ── 행 ── */
+.devtrail-cc-row + .devtrail-cc-row {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.devtrail-cc-projectrow {
+  display: block;
+}
+
+/* ⚠️ 움직임에 민감한 사람이 있다. 전환을 끌 수 있어야 한다. */
+
+/* ── 프로젝트 보드 ──────────────────────────────────────────────────────────
+ *
+ * ⚠️ 색만으로 상태를 말하지 않는다. 모든 컬럼에 아이콘과 글자가 함께 있고,
+ *    색은 그 위에 얹히는 세 번째 신호다 — 다크·라이트·색각에서 다 견디려면
+ *    색이 유일한 신호여서는 안 된다.
+ *
+ * ⚠️ 색은 Obsidian 의 의미 변수에서만 가져온다. 테마를 이긴다고 생각하지
+ *    않는다(docs/design-tokens.md 원칙 4).
+ */
+.devtrail-cc-board {
+  display: grid;
+  /* ⚠️ 컬럼이 내용만큼만 높다. 계획 중에 4장, 나머지가 0 이면 빈 컬럼이 네 배
+   *    높이로 늘어나고, 한 줄짜리 안내가 화면 절반을 차지한다. */
+  align-items: start;
+  /* leaf 는 뷰포트가 아니다 — 미디어 쿼리가 아니라 auto-fit 으로 접는다. */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.devtrail-cc-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-top: 3px solid var(--text-muted);
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+
+/* 컬럼마다 상단선 하나. 카드 배경을 물들이지 않는다 — 제목이 먼저 읽혀야 한다. */
+.devtrail-cc-col--planning {
+  border-top-color: var(--text-muted);
+}
+.devtrail-cc-col--active   {
+  border-top-color: var(--color-purple);
+}
+.devtrail-cc-col--blocked  {
+  border-top-color: var(--color-red);
+}
+.devtrail-cc-col--done     {
+  border-top-color: var(--color-green);
+}
+
+.devtrail-cc-col--planning .devtrail-cc-col-icon {
+  color: var(--text-muted);
+}
+.devtrail-cc-col--active   .devtrail-cc-col-icon {
+  color: var(--color-purple);
+}
+.devtrail-cc-col--blocked  .devtrail-cc-col-icon {
+  color: var(--color-red);
+}
+.devtrail-cc-col--done     .devtrail-cc-col-icon {
+  color: var(--color-green);
+}
+
+.devtrail-cc-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.devtrail-cc-col-name {
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+
+.devtrail-cc-col-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: var(--font-smaller);
+}
+
+.devtrail-cc-col-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+/* ── 카드 ─────────────────────────────────────────────────────────────────── */
+.devtrail-cc-pcard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  cursor: pointer;
+}
+
+.devtrail-cc-pcard:hover {
+  border-color: var(--interactive-accent);
+}
+.devtrail-cc-pcard:active {
+  transform: translateY(1px);
+}
+
+.devtrail-cc-pcard:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* 긴 이름이 넘치지 않게. 자르지 않고 접는다 — 프로젝트명은 다 읽혀야 한다. */
+.devtrail-cc-pcard-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.devtrail-cc-pcard-next {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: var(--font-smaller);
+  color: var(--text-normal);
+  overflow-wrap: anywhere;
+}
+
+.devtrail-cc-pcard-next.is-empty {
+  color: var(--text-faint);
+  font-style: italic;
+}
+.devtrail-cc-pcard-next .svg-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 2px;
+}
+
+.devtrail-cc-pcard-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+}
+
+.devtrail-cc-pcard-date {
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+/* ── 단계 미지정 ────────────────────────────────────────────────────────────
+ * 상태가 아니라 '빠진 것' 이다. 컬럼이 아니라 보드 위에 둔다. */
+.devtrail-cc-unstaged {
+  border: 1px solid var(--background-modifier-border);
+  border-left: 3px solid var(--color-yellow);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--background-secondary);
+}
+
+.devtrail-cc-unstaged-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.devtrail-cc-unstaged-head .svg-icon {
+  color: var(--color-yellow);
+}
+
+.devtrail-cc-unstaged-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ── 검색 진입점 ────────────────────────────────────────────────────────────
+ * 입력창처럼 보이되 입력창이 아니다 — 누르면 진짜 검색이 열린다.
+ * ⚠️ 있는 척하지 않는다. 검색 플러그인이 없으면 눌리지 않고, 왜인지 말한다. */
+
+
+.devtrail-cc-search-btn:hover:not(:disabled) {
+  border-color: var(--interactive-accent);
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+/* 아이콘이 글자보다 조금 크게 — 검색이라는 신호가 먼저 읽힌다. */
+.devtrail-cc-search-icon .svg-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── 빠른 실행 ──────────────────────────────────────────────────────────────
+ * 찾기 다음은 남기기다. 검색 바로 아래에 둔다. */
+
+
+.devtrail-cc-launch-btn:hover:not(:disabled) {
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+/* ⚠️ 명령이 없으면 눌리지 않는다 — 조용히 다른 노트를 만들지 않기 위해서다. */
+.devtrail-cc-launch-btn .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── 작업 공간 ──────────────────────────────────────────────────────────────
+ *
+ * 좌측에 좁은 정보 열, 중앙에 프로젝트 보드. 보드가 화면의 중심이다.
+ *
+ * ⚠️ leaf 는 뷰포트가 아니다 — 미디어 쿼리가 아니라 auto-fit 으로 접는다.
+ *    사이드 패널로 끌어다 놓으면 창이 넓어도 1열이 되어야 한다.
+ */
+
+/* 중앙이 남는 폭을 다 가져간다 — 보드가 넓게 펼쳐져야 읽힌다. */
+/* 레일은 좁게 고정, 본문이 남는 폭을 전부 가져간다.
+ * flex-basis 가 합보다 크면 줄바꿈한다 — 그때 둘 다 100% 가 된다. */
+
+/* ── 최근 기록 ──────────────────────────────────────────────────────────────
+ * 넓은 화면에서 한 줄이 끝까지 늘어나면 이름과 배지가 양끝으로 갈린다.
+ * 열로 접어 이름 → 배지가 한눈에 이어지게 한다. */
+.devtrail-cc-recent {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0 28px;
+}
+
+
+/* ══ 재설계 (디자인 핸드오프 2026-08-22) ══════════════════════════════════════
+ *
+ * ⚠️ 사양은 색을 hex 로 적었지만(#161616 등), 그대로 쓰면 남의 테마가 깨진다.
+ *    사양 자신이 "색은 스니펫 상단에서 Obsidian 변수에 매핑합니다" 라고
+ *    지시했고, docs/design-tokens.md 원칙 4 도 같은 말이다. 아래가 그 매핑이다.
+ *
+ *    bg-page       → --background-primary
+ *    bg-surface    → --background-secondary        카드
+ *    bg-elevated   → --background-modifier-border  막대 트랙 · 히트맵 0단계
+ *    row hover     → --background-modifier-hover
+ *    text-primary  → --text-normal
+ *    text-muted    → --text-muted
+ *    text-disabled → --text-faint
+ *    border        → --background-modifier-border
+ *    success       → --color-green
+ *    warning       → --color-yellow
+ *    info          → --color-blue
+ *
+ * ⚠️ 사양: "애니메이션 없음. transition 없음." 그대로 따른다.
+ */
+
+
+/* 상단 바 — 탭이 여기 앉는다. */
+
+
+
+/* ── 카드 ─────────────────────────────────────────────────────────────────── */
+.devtrail-cc-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  padding: 18px 20px;
+  min-width: 0;
+}
+
+.devtrail-cc-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.devtrail-cc-panel-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.devtrail-cc-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.devtrail-cc-mono {
+  font-family: var(--font-monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.devtrail-cc-faint {
+  color: var(--text-faint);
+}
+.devtrail-cc-warn  {
+  color: var(--color-yellow);
+}
+
+.devtrail-cc-footnote {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin: 0;
+}
+
+/* ── 배치 ─────────────────────────────────────────────────────────────────── */
+/* 사양: 1fr 400px · 340px 1fr. leaf 가 좁아지면 접힌다 — 사이드 패널에서도
+ * 읽혀야 한다(사양은 데스크톱만 가정했다). */
+.devtrail-cc-grid-2,
+.devtrail-cc-grid-3 {
+  display: grid;
+  gap: 20px;
+  align-items: stretch;
+}
+
+.devtrail-cc-grid-2 {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+.devtrail-cc-grid-3 {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.devtrail-cc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.devtrail-cc-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.devtrail-cc-section-head h2 {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.devtrail-cc-section-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 11px;
+}
+
+/* ── 히트맵 ───────────────────────────────────────────────────────────────── */
+.devtrail-cc-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.devtrail-cc-legend-label {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.devtrail-cc-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.devtrail-cc-heat {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 4px;
+}
+
+.devtrail-cc-heat-days {
+  display: grid;
+  grid-template-rows: repeat(7, 16px);
+  gap: 4px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--text-faint);
+  font-family: var(--font-monospace);
+}
+
+.devtrail-cc-heat-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 16px);
+  gap: 4px;
+}
+
+.devtrail-cc-cell {
+  border-radius: 3px;
+  background: var(--background-modifier-border);
+}
+
+.devtrail-cc-cell.is-empty {
+  background: none;
+}
+
+/* 강도 5단계. 사양의 #303030 → #c1c9d6 를 테마의 불투명도 단계로 옮긴다.
+ * ⚠️ 0 은 언제나 가장 흐리다 — 쓴 날과 안 쓴 날이 눈으로 갈려야 한다. */
+.devtrail-cc-lv0 {
+  background: var(--background-modifier-border);
+}
+.devtrail-cc-lv1 {
+  background: var(--text-faint);
+  opacity: 0.45;
+}
+.devtrail-cc-lv2 {
+  background: var(--text-faint);
+  opacity: 0.7;
+}
+.devtrail-cc-lv3 {
+  background: var(--text-muted);
+}
+.devtrail-cc-lv4 {
+  background: var(--text-normal);
+}
+
+/* ── 지표 3개 ─────────────────────────────────────────────────────────────── */
+.devtrail-cc-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.devtrail-cc-stat-value {
+  font-family: var(--font-monospace);
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-normal);
+}
+
+.devtrail-cc-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── 요일별 평균 ──────────────────────────────────────────────────────────── */
+.devtrail-cc-weekdays {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.devtrail-cc-wd-row {
+  display: grid;
+  grid-template-columns: 20px 1fr 34px;
+  align-items: center;
+  gap: 8px;
+}
+
+.devtrail-cc-wd-name {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.devtrail-cc-wd-value {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.devtrail-cc-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+
+.devtrail-cc-fill {
+  display: block;
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--text-faint);
+}
+
+.devtrail-cc-fill.is-peak {
+  background: var(--text-muted);
+}
+
+/* ── 오늘 ─────────────────────────────────────────────────────────────────── */
+.devtrail-cc-today-note {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.devtrail-cc-today-note .devtrail-cc-link {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.devtrail-cc-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.devtrail-cc-task {
+  display: grid;
+  gap: 8px;
+  padding: 8px 6px;
+  border-radius: 6px;
+  grid-template-columns: 13px 1fr auto;
+}
+
+.devtrail-cc-task:hover {
+  background: var(--background-modifier-hover);
+}
+
+.devtrail-cc-checkbox {
+  width: 13px;
+  height: 13px;
+  margin-top: 2px;
+  border: 1px solid var(--text-faint);
+  border-radius: 4px;
+}
+
+.devtrail-cc-task-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-normal);
+  overflow-wrap: anywhere;
+}
+
+.devtrail-cc-task-src {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.devtrail-cc-task-src:hover {
+  color: var(--text-normal);
+  text-decoration: underline;
+}
+
+/* ── 단계 분포 ────────────────────────────────────────────────────────────── */
+.devtrail-cc-dist {
+  display: flex;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+
+.devtrail-cc-dist-seg {
+  display: block;
+  height: 100%;
+}
+
+/* ⚠️ 사양: 계획 중 구간만 색. 나머지는 무채색이다 —
+ *    "색은 의미에만 씁니다. 상태가 없는 것은 전부 무채색입니다." */
+.devtrail-cc-stage-planning {
+  background: var(--color-blue);
+}
+.devtrail-cc-stage-active   {
+  background: var(--text-muted);
+}
+.devtrail-cc-stage-blocked  {
+  background: var(--text-faint);
+}
+.devtrail-cc-stage-done     {
+  background: var(--background-modifier-border);
+}
+.devtrail-cc-stage-unstaged {
+  background: var(--text-faint);
+}
+
+.devtrail-cc-dist-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.devtrail-cc-dist-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.devtrail-cc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  display: inline-block;
+}
+
+.devtrail-cc-warn-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--color-yellow);
+}
+
+/* ── 표 ───────────────────────────────────────────────────────────────────── */
+.devtrail-cc-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.devtrail-cc-tr {
+  display: grid;
+  grid-template-columns: 1fr 84px 1fr 100px 96px;
+  align-items: center;
+  gap: 14px;
+  padding: 0 8px;
+  min-height: 40px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.devtrail-cc-tr:hover {
+  background: var(--background-modifier-hover);
+}
+
+.devtrail-cc-tr:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+}
+
+.devtrail-cc-th {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--background-modifier-border);
+  min-height: 28px;
+  cursor: default;
+}
+
+.devtrail-cc-th:hover {
+  background: none;
+}
+
+.devtrail-cc-td-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 550;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ⚠️ 방치 행만 색이 붙는다. hover 로 덮지 않는다 — 사양대로. */
+.devtrail-cc-tr.is-stale {
+  background: var(--background-modifier-border);
+}
+.devtrail-cc-tr.is-stale:hover {
+  background: var(--background-modifier-border);
+}
+
+/* ── 노트 구성 ────────────────────────────────────────────────────────────── */
+.devtrail-cc-stack {
+  display: flex;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+
+.devtrail-cc-stack-seg {
+  display: block;
+  height: 100%;
+}
+
+.devtrail-cc-comp-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.devtrail-cc-comp-row {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── 최근 기록 ────────────────────────────────────────────────────────────── */
+
+.devtrail-cc-recent-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.devtrail-cc-recent-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* ── 상단 바 오른쪽 ───────────────────────────────────────────────────────── */
+
+.devtrail-cc-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.devtrail-cc-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 필터 — 검색이 아니라 좁히기다. 이미 그린 것만 줄인다. */
+.devtrail-cc-filter {
+  width: 240px;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.devtrail-cc-filter::placeholder {
+  color: var(--text-faint);
+}
+.devtrail-cc-filter:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -1px;
+}
+
+.devtrail-cc-date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.devtrail-cc-make {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+  height: auto;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.devtrail-cc-kbd {
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+/* ── 기한 라벨 ────────────────────────────────────────────────────────────── */
+/* ⚠️ 지난 것만 색이 붙는다. 나머지는 무채색이다 — 전부 색이면 아무것도
+ *    눈에 띄지 않는다. */
+.devtrail-cc-due {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  align-self: start;
+}
+
+.devtrail-cc-due.is-over {
+  color: var(--color-yellow);
+}
+
+
+/* ── 패널 하단 버튼 ──────────────────────────────────────────────────────── */
+.devtrail-cc-panel-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.devtrail-cc-btn {
+  height: auto;
+  padding: 6px 14px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.devtrail-cc-btn:hover:not(:disabled) {
+  background: var(--background-modifier-hover);
+}
+.devtrail-cc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.devtrail-cc-btn.is-ghost {
+  border-color: transparent;
+  background: none;
+  color: var(--text-muted);
+}
+
+.devtrail-cc-btn:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* ── 스파크라인 ──────────────────────────────────────────────────────────── */
+.devtrail-cc-spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+}
+
+.devtrail-cc-spark-bar {
+  flex: 1;
+  height: 100%;
+  border-radius: 1px;
+}
+
+/* ── 전체 보기 ───────────────────────────────────────────────────────────── */
+.devtrail-cc-linkbtn {
+  height: auto;
+  padding: 0;
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.devtrail-cc-linkbtn:hover {
+  color: var(--text-normal);
+  text-decoration: underline;
+}
+.devtrail-cc-linkbtn:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* ── 상단 전체 검색 ───────────────────────────────────────────────────────── */
+.devtrail-cc-searchbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 240px;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  cursor: text;
+}
+
+.devtrail-cc-searchbox:focus-within {
+  border-color: var(--interactive-accent);
+}
+.devtrail-cc-searchbox-icon {
+  display: flex;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.devtrail-cc-searchbox-icon .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.devtrail-cc-searchinput {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-normal);
+  font-size: 12px;
+}
+
+.devtrail-cc-searchinput:focus {
+  outline: none;
+  box-shadow: none;
+}
+.devtrail-cc-searchinput::placeholder {
+  color: var(--text-faint);
+}
+
+/* 검색 플러그인이 없을 때 — 끄지 않고 왜인지 말한다. */
+.devtrail-cc-searchhelp {
+  font-size: 10px;
+  color: var(--text-faint);
+  max-width: 240px;
+}
+
+/* ── 최근 기록 전체 ──────────────────────────────────────────────────────── */
+.devtrail-cc-back {
+  align-self: flex-start;
+  height: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.devtrail-cc-back:hover {
+  color: var(--text-normal);
+}
+.devtrail-cc-back:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+.devtrail-cc-recent-table .devtrail-cc-tr {
+  grid-template-columns: 1fr 96px 100px 1.4fr;
+}
+
+.devtrail-cc-td-path {
+  font-size: 10px;
+  font-family: var(--font-monospace);
+  overflow-wrap: anywhere;
+}
+
+/* ── 빠른 기록 선택창 ─────────────────────────────────────────────────────── */
+.devtrail-qc-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.devtrail-qc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.devtrail-qc-row {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.devtrail-qc-row:hover,
+.devtrail-qc-row.is-on {
+  background: var(--background-modifier-hover);
+}
+
+/* ⚠️ 쓸 수 없는 것은 숨기지 않는다. 왜 안 되는지 보여야 사람이 고칠 수 있다. */
+.devtrail-qc-row.is-off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.devtrail-qc-icon {
+  display: flex;
+  color: var(--text-muted);
+}
+.devtrail-qc-icon .svg-icon {
+  width: 16px;
+  height: 16px;
+}
+.devtrail-qc-name {
+  font-size: 13px;
+  color: var(--text-normal);
+}
+.devtrail-qc-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.devtrail-qc-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+
+.devtrail-cc-make:hover {
+  color: var(--text-normal);
+}
+.devtrail-cc-make:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* 검색창 안의 단축키 — 배정된 것을 읽어 보여준다. 없으면 아예 안 그린다. */
+.devtrail-cc-searchkbd {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-faint);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 1px 4px;
 }
