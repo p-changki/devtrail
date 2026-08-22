@@ -351,13 +351,12 @@ const TEXT = {
     stage: '단계',
     next: '다음',
     open: '열기',
-    navHome: '홈', navToday: '오늘', navCapture: '기록',
+    navHome: '홈', navToday: '오늘',
     navProjects: '프로젝트', navReviews: '리뷰',
     tasks: '오늘 할 일',
     noTasks: '체크박스가 없습니다',
     openDevlog: '개발일지 열기',
     makeDevlog: '개발일지 만들기',
-    captureHelp: '무엇을 남기시겠습니까',
     cDevlog: '개발일지', cDevnote: '개발메모', cIdea: '아이디어',
     cWorklog: '워크로그', cReport: '회고', cProject: '프로젝트',
     notReady: '이 명령이 아직 준비되지 않았습니다',
@@ -416,13 +415,12 @@ const TEXT = {
     stage: 'Stage',
     next: 'Next',
     open: 'Open',
-    navHome: 'Home', navToday: 'Today', navCapture: 'Capture',
+    navHome: 'Home', navToday: 'Today',
     navProjects: 'Projects', navReviews: 'Reviews',
     tasks: "Today's tasks",
     noTasks: 'No checkboxes',
     openDevlog: "Open today's devlog",
     makeDevlog: "Create today's devlog",
-    captureHelp: 'What would you like to record',
     cDevlog: 'Devlog', cDevnote: 'Dev note', cIdea: 'Idea',
     cWorklog: 'Worklog', cReport: 'Retro', cProject: 'Project',
     notReady: 'That command is not ready yet',
@@ -500,9 +498,11 @@ class CommandCenterView extends obsidian.ItemView {
       return;
     }
 
+    // 어디를 보고 있는가(탭) → 무엇을 찾는가(검색) → 무엇을 남기는가(빠른 실행).
+    // 순서가 곧 위계다.
+    this.nav(root, t);
     this.searchBar(root, t);
     this.launchBar(root, t, map.data);
-    this.nav(root, t);
 
     const model = collect(this.app, map.data.paths);
     const devlog = todayDevlog(this.app, map.data);
@@ -510,7 +510,6 @@ class CommandCenterView extends obsidian.ItemView {
 
     // 라우트마다 한 가지 질문에 답한다. 홈은 전체를 훑는다.
     if (this.route === 'today')    return this.viewToday(body, t, map.data, devlog);
-    if (this.route === 'capture')  return this.viewCapture(body, t, map.data);
     if (this.route === 'projects') return this.viewProjects(body, t, model);
     if (this.route === 'reviews')  return this.viewReviews(body, t, map.data, model);
 
@@ -685,8 +684,10 @@ class CommandCenterView extends obsidian.ItemView {
       bar.createEl('p', { text: t.searchMissingHelp, cls: 'devtrail-cc-muted' });
       return;
     }
+    // ⚠️ 도구설명에 명령 id(global-search:open)를 띄우지 않는다 — 사용자에게는
+    //    뜻 없는 문자열이다. 무엇이 실행되는지는 이름으로 말한다.
     b.setAttr('aria-label', `${t.search}: ${found.name}`);
-    b.setAttr('title', found.id);
+    b.setAttr('title', found.name);
     b.addEventListener('click', () => this.app.commands.executeCommandById(found.id));
   }
 
@@ -726,9 +727,8 @@ class CommandCenterView extends obsidian.ItemView {
     const items = [
       ['home', t.navHome, 'layout-dashboard'],
       ['today', t.navToday, 'sun'],
-      ['capture', t.navCapture, 'plus-circle'],
       ['projects', t.navProjects, 'folder-git-2'],
-      ['reviews', t.navReviews, 'rotate-ccw'],
+      ['reviews', t.navReviews, 'history'],
     ];
     for (const [key, label, ic] of items) {
       const b = bar.createEl('button', { cls: 'devtrail-cc-tab' });
@@ -773,20 +773,9 @@ class CommandCenterView extends obsidian.ItemView {
     this.card(body, t.devlog, 1, (list) => this.row(list, devlog.basename, devlog, t.openDevlog));
   }
 
-  /* ── 기록 ────────────────────────────────────────────────────────────
-   * ⚠️ 노트를 만들지 않는다. 등록된 Templater 명령을 부른다. */
-  viewCapture(body, t, data) {
-    body.createEl('p', { text: t.captureHelp, cls: 'devtrail-cc-muted' });
-    const grid = body.createEl('div', { cls: 'devtrail-cc-grid' });
-    const labels = {
-      devlog: t.cDevlog, devnote: t.cDevnote, idea: t.cIdea,
-      worklog: t.cWorklog, report: t.cReport, project: t.cProject,
-    };
-    for (const c of CAPTURES) {
-      const id = templaterCommandId(data.paths, captureFile(c, data.lang));
-      this.action(grid, labels[c.key] || c.key, id, t);
-    }
-  }
+  /* ⚠️ '기록' 탭을 없앴다. 화면 위 빠른 실행 바가 같은 Templater 명령 6개를
+   *    **항상** 보여준다 — 같은 일을 두 곳에서 하면 한쪽만 고쳐지고, 사용자는
+   *    어느 쪽이 진짜인지 모른다. */
 
   /* ── 프로젝트 보드 ─────────────────────────────────────────────────
    *

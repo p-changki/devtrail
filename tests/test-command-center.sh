@@ -256,7 +256,8 @@ t_contains "빈 상태 문구가 있다" "empty" "$(cat "$JS")"
 # Phase 3 의 종료 기준: 각 화면이 구체적인 다음 행동을 주고,
 #                      노트 생성 로직을 중복하지 않는다.
 t_start "라우트가 존재한다"
-for r in home today capture projects reviews; do
+# ⚠️ 'capture' 는 없앴다 — 빠른 실행 바가 같은 6개를 항상 보여준다.
+for r in home today projects reviews; do
   t_contains "$r" "'$r'" "$(cat "$JS")"
 done
 
@@ -492,8 +493,45 @@ t_contains "포커스가 보인다" "focus-visible" "$(cat "$CSS")"
 t_contains "네비에 aria-label" "aria-label" "$(cat "$JS")"
 t_contains "현재 탭을 알린다" "aria-current" "$(cat "$JS")"
 # ⚠️ 움직임에 민감한 사람이 있다. 애니메이션을 넣었다면 끌 수 있어야 한다.
-t_eq "감소된 모션을 존중한다" "1" \
+# ⚠️ 블록이 '있다' 와 '듣는다' 는 다르다. 같은 특정도라면 **나중 규칙이 이긴다** —
+#    감소된 모션 블록이 transition 선언보다 앞에 있으면 아무 효과가 없다.
+#    2026-08-22 에 실제로 그랬고, 개수만 세던 이 검사는 그것을 못 봤다.
+t_eq "감소된 모션 블록은 하나다" "1" \
   "$(grep -c 'prefers-reduced-motion' "$CSS" | tr -d ' ')"
+t_eq "그 블록이 마지막 transition 뒤에 온다" "yes" \
+  "$(python3 - "$CSS" <<'"'"'PYEOF'"'"'
+import re, sys
+css = open(sys.argv[1], encoding='utf-8').read()
+blk = css.find('@media (prefers-reduced-motion: reduce)')
+if blk < 0:
+    print('no'); raise SystemExit
+# 블록 앞쪽에서 마지막으로 transition 을 선언한 자리
+before = css[:blk]
+last = before.rfind('transition:')
+# 블록 뒤에 transition 선언이 남아 있으면 그것이 이긴다 — 실패다.
+after = css[blk:]
+end = after.find('\n}\n')
+tail = after[end:] if end > 0 else ''
+print('no' if 'transition:' in tail else 'yes')
+PYEOF
+)"
+# ⚠️ 그리고 실제로 움직이는 것을 겨냥해야 한다. 이름을 바꾼 뒤 옛 이름이 남으면
+#    블록은 멀쩡해 보이는데 아무것도 끄지 않는다.
+for sel in $(grep -B40 'transition:' "$CSS" | grep -oE '^\.devtrail-cc-[a-z-]+(?= \{)' 2>/dev/null | sort -u); do :; done
+t_eq "움직이는 것을 다 겨냥한다" "" \
+  "$(python3 - "$CSS" <<'"'"'PYEOF'"'"'
+import re, sys
+css = open(sys.argv[1], encoding='utf-8').read()
+# transition 을 선언한 최상위 선택자들
+animated = set()
+for m in re.finditer(r'(?m)^(\.devtrail-cc-[a-z-]+)[^{]*\{([^}]*)\}', css):
+    if 'transition:' in m.group(2):
+        animated.add(m.group(1))
+blk = re.search(r'@media \(prefers-reduced-motion: reduce\) \{(.*?)\n\}', css, re.S)
+covered = set(re.findall(r'\.devtrail-cc-[a-z-]+', blk.group(1))) if blk else set()
+print(' '.join(sorted(animated - covered)))
+PYEOF
+)"
 
 t_start "지표 카드"
 # 숫자만 있으면 무엇의 숫자인지 모른다. 아이콘·설명·이동이 함께 간다.
@@ -1105,5 +1143,43 @@ t_start "최근 기록이 한 줄로 늘어지지 않는다"
 t_contains "여러 열로 나눈다" "devtrail-cc-recent" "$(cat "$JS")"
 t_contains "CSS 가 열을 만든다" "auto-fit" \
   "$(sed -n '/^\.devtrail-cc-recent {/,/^}/p' "$CSS")"
+
+# ── 탭과 동작을 형태로 가른다 ───────────────────────────────────────────────
+#
+# ⚠️ 위 줄은 노트를 만들고 아래 줄은 화면을 바꾼다. 둘이 똑같이 생기면
+#    사용자는 누르기 전까지 무엇이 일어날지 모른다 — 위계가 아니라 종류가
+#    다르므로 형태로 갈라야 한다.
+t_start "탭이 알약이 아니다"
+TAB="$(sed -n '/^\.devtrail-cc-tab {/,/^}/p' "$CSS")"
+t_contains "배경 없이 둔다" "background: none" "$TAB"
+t_contains "현재 탭에 밑줄" "border-bottom" \
+  "$(sed -n '/^\.devtrail-cc-tab.is-active {/,/^}/p' "$CSS")"
+
+t_start "기록 탭을 없앤다"
+# ⚠️ 빠른 실행 바가 같은 6개를 항상 보여준다. 같은 일을 두 곳에서 하면
+#    한쪽만 고쳐지고, 사용자는 어느 쪽이 진짜인지 모른다.
+t_eq "탭은 넷이다" "4" "$(sed -n "/const items = \[/,/\];/p" "$JS" | grep -c "^      \['")"
+t_eq "capture 라우트가 없다" "0" "$(grep -c "route === 'capture'" "$JS")"
+t_eq "viewCapture 가 없다" "0" "$(grep -c 'viewCapture' "$JS")"
+
+t_start "아이콘이 겹치지 않는다"
+# ⚠️ 같은 그림이 두 가지를 뜻하면 그림이 아무것도 뜻하지 않게 된다.
+# 나란히 놓인 두 줄 안에서만 본다. 지표가 같은 개념에 같은 아이콘을 쓰는 것은
+# 충돌이 아니라 일관성이다 — 개발일지 지표와 개발일지 버튼은 같은 것을 가리킨다.
+NAVICONS=$(sed -n '/const items = \[/,/\];/p' "$JS" | grep -oE "'[a-z0-9-]+'\]" | tr -d "']")
+LAUNCHICONS=$(sed -n '/const icons = {/,/};/p' "$JS" | grep -oE ": '[a-z0-9-]+'" | sed "s/: '//;s/'//")
+dup=$(printf '%s\n%s\n' "$NAVICONS" "$LAUNCHICONS" | grep -v '^$' | sort | uniq -d | tr '\n' ' ')
+t_eq "탭과 동작이 같은 그림을 쓰지 않는다" "" "$dup"
+
+t_start "검색창이 검색창처럼 생겼다"
+SB="$(sed -n '/^\.devtrail-cc-search-btn {/,/^}/p' "$CSS")"
+# ⚠️ 화면 끝까지 늘어나면 입력창이 아니라 띠로 보인다. 폭을 잡고 가운데 둔다.
+t_contains "폭을 제한한다" "max-width" "$(sed -n '/^\.devtrail-cc-search {/,/^}/p' "$CSS")"
+t_contains "가운데 둔다" "margin: 0 auto" "$(sed -n '/^\.devtrail-cc-search {/,/^}/p' "$CSS")"
+# ⚠️ Obsidian 의 button 은 내용을 가운데로 모은다. 검색창은 아이콘과 글자가
+#    왼쪽에서 시작해야 입력창으로 읽힌다.
+t_contains "내용이 왼쪽에서 시작한다" "justify-content: flex-start" "$SB"
+t_contains "충분한 높이를 갖는다" "min-height" "$SB"
+t_contains "둥글게" "border-radius: 999px" "$SB"
 
 t_end

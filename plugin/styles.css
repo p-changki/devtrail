@@ -77,34 +77,46 @@
 
 /* ── 네비게이션 ─────────────────────────────────────────────────────────── */
 .devtrail-cc-nav {
+  /* ⚠️ 탭은 '어디에 있는가' 를 말한다. 아래 줄의 빠른 실행은 '무엇을 하는가'
+   *    를 말한다 — 둘이 똑같은 알약이면 누르기 전까지 무엇이 일어날지 모른다.
+   *    탭은 밑줄로, 동작은 알약으로 형태를 가른다. */
   display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
-  /* 좁은 패널에서 탭이 잘리지 않게 감싼다. */
   flex-wrap: wrap;
+  gap: 4px;
   margin-bottom: 16px;
+  border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .devtrail-cc-tab {
-  padding: 4px 8px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  background: var(--background-primary);
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  cursor: pointer;
+  /* 현재 탭이 될 때 글자가 밀리지 않게 자리를 미리 잡아 둔다. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.devtrail-cc-tab:hover { color: var(--text-normal); }
+
+.devtrail-cc-tab:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
 }
 
 .devtrail-cc-tab:hover { color: var(--text-normal); }
 
 .devtrail-cc-tab.is-active {
-  background: var(--background-modifier-hover);
   color: var(--text-normal);
-  border-color: var(--interactive-accent);
+  font-weight: 600;
+  /* ⚠️ 색만으로 현재 탭을 말하지 않는다 — 밑줄과 굵기가 함께 온다. */
+  border-bottom-color: var(--interactive-accent);
 }
 
 .devtrail-cc-tab:focus-visible {
@@ -328,13 +340,6 @@
 .devtrail-cc-searchrow { padding: 8px 14px 12px; }
 
 /* ⚠️ 움직임에 민감한 사람이 있다. 전환을 끌 수 있어야 한다. */
-@media (prefers-reduced-motion: reduce) {
-  .devtrail-cc-metric,
-  .devtrail-cc-action,
-  .devtrail-cc-tab { transition: none; }
-  .devtrail-cc-card { transition: none; }
-  .devtrail-cc-card:active { transform: none; }
-}
 
 /* ── 프로젝트 보드 ──────────────────────────────────────────────────────────
  *
@@ -482,27 +487,47 @@
 /* ── 검색 진입점 ────────────────────────────────────────────────────────────
  * 입력창처럼 보이되 입력창이 아니다 — 누르면 진짜 검색이 열린다.
  * ⚠️ 있는 척하지 않는다. 검색 플러그인이 없으면 눌리지 않고, 왜인지 말한다. */
-.devtrail-cc-search { margin-top: 16px; }
+.devtrail-cc-search {
+  /* ⚠️ 화면 끝까지 늘어나면 입력창이 아니라 띠로 보인다. 폭을 잡고 가운데
+   *    두면 '여기에 검색이 있다' 가 한눈에 읽힌다. */
+  max-width: 640px;
+  margin: 0 auto 16px;
+}
 
 .devtrail-cc-search-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* ⚠️ Obsidian 의 button 은 내용을 가운데로 모은다. 검색창은 아이콘과 글자가
+   *    왼쪽에서 시작해야 입력창으로 읽힌다 — height 와 같은 종류의 함정이다. */
+  justify-content: flex-start;
+  gap: 12px;
   width: 100%;
-  padding: 12px;
+  /* 손가락과 눈이 모두 찾기 쉬운 높이. */
+  min-height: 48px;
+  height: auto;
+  padding: 12px 20px;
   text-align: left;
   border: 1px solid var(--background-modifier-border);
-  border-radius: 8px;
-  background: var(--background-primary);
+  border-radius: 999px;
+  background: var(--background-secondary);
   color: var(--text-muted);
+  font-size: var(--font-ui-small);
   cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 
-.devtrail-cc-search-btn:hover:not(:disabled) { border-color: var(--interactive-accent); }
+.devtrail-cc-search-btn:hover:not(:disabled) {
+  border-color: var(--interactive-accent);
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
 .devtrail-cc-search-btn:focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
 }
+
+/* 아이콘이 글자보다 조금 크게 — 검색이라는 신호가 먼저 읽힌다. */
+.devtrail-cc-search-icon .svg-icon { width: 18px; height: 18px; }
 .devtrail-cc-search-btn:disabled { cursor: not-allowed; opacity: 0.6; }
 .devtrail-cc-search-icon { color: var(--color-blue); display: flex; }
 .devtrail-cc-search-text { min-width: 0; overflow-wrap: anywhere; }
@@ -510,6 +535,8 @@
 /* ── 빠른 실행 ──────────────────────────────────────────────────────────────
  * 찾기 다음은 남기기다. 검색 바로 아래에 둔다. */
 .devtrail-cc-launch {
+  /* 검색 바로 아래 — 찾기 다음은 남기기다. 탭과 달리 알약이다: 누르면 화면이
+   * 바뀌는 게 아니라 노트가 생긴다. */
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -572,4 +599,24 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 0 16px;
+}
+
+/* ── 감소된 모션 ────────────────────────────────────────────────────────────
+ *
+ * ⚠️ 이 블록은 **파일 맨 끝**에 있어야 한다. @media 는 특정도를 올리지 않으므로
+ *    같은 선택자라면 나중 규칙이 이긴다 — transition 선언보다 앞에 두면
+ *    블록은 멀쩡해 보이는데 아무 효과가 없다. 2026-08-22 에 실제로 그랬다.
+ *
+ * ⚠️ 겨냥하는 이름은 위에서 실제로 움직이는 것들이다. 클래스 이름을 바꾸면
+ *    여기도 함께 바꿔야 한다 — 테스트가 그것을 지킨다.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .devtrail-cc-pcard,
+  .devtrail-cc-search-btn {
+    transition: none;
+  }
+  .devtrail-cc-pcard:active,
+  .devtrail-cc-search-btn:active {
+    transform: none;
+  }
 }
