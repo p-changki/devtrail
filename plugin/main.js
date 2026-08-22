@@ -142,6 +142,20 @@ function todayDevlog(app, data) {
   return app.vault.getAbstractFileByPath(path) || null;
 }
 
+/* leaf 가 메인 워크스페이스에 있는가.
+ *
+ * ⚠️ Obsidian 은 메인 영역과 좌·우 사이드독을 각각 다른 루트로 관리한다.
+ *    leaf.getRoot() 가 workspace.rootSplit 과 같으면 메인이다.
+ *
+ * ⚠️ 이게 없으면 getLeavesOfType 이 사이드에 남아 있던 옛 뷰를 찾아 그걸
+ *    재사용한다. 메인 탭으로 여는 코드가 아예 실행되지 않는다 — Phase 1·2 를
+ *    써본 사람은 갱신해도 화면이 옛 자리에 그대로 있었다(2026-08-22 확인).
+ */
+function isMainLeaf(leaf, rootSplit) {
+  if (!leaf || typeof leaf.getRoot !== 'function') return false;
+  return leaf.getRoot() === rootSplit;
+}
+
 /* ── 기존 명령에 위임 ────────────────────────────────────────────────────
  *
  * ⚠️ 노트를 여기서 만들지 않는다. Templater 명령을 부른다.
@@ -588,11 +602,15 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
 
   async activate() {
     const { workspace } = this.app;
-    const existing = workspace.getLeavesOfType(VIEW_TYPE);
-    if (existing.length > 0) {
-      workspace.revealLeaf(existing[0]);
-      return;
-    }
+    const open = workspace.getLeavesOfType(VIEW_TYPE);
+
+    // 메인에 이미 있으면 그걸 보여준다.
+    const main = open.find((l) => isMainLeaf(l, workspace.rootSplit));
+    if (main) { workspace.revealLeaf(main); return; }
+
+    // ⚠️ 사이드에 남아 있는 것은 재사용하지 않고 닫는다. 예전 버전이 거기에
+    //    열어둔 것이라, 그대로 두면 같은 화면이 둘이 된다.
+    for (const l of open) l.detach();
     // ⚠️ 메인 워크스페이스 탭으로 연다. 사이드 패널(폭 300px)에는 정보
     //    밀도를 담을 수 없다.
     //    getLeaf(true) 가 아니라 getLeaf('tab') 이다 — true 는 "새 leaf 를
@@ -609,4 +627,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { isUserNote, templaterCommandId, captureFile, CAPTURES };
+module.exports.__test = { isUserNote, templaterCommandId, captureFile, CAPTURES, isMainLeaf };

@@ -320,6 +320,35 @@ t_contains "메인 탭 API 를 쓴다" "getLeaf('tab')" "$(cat "$JS")"
 t_eq "사이드 패널로 열지 않는다" "0" \
   "$(grep -c 'getRightLeaf' "$JS" | tr -d ' ')"
 
+# ⚠️ 회귀: 이미 열린 뷰가 사이드 패널에 있으면 그걸 재사용해서, 메인 탭
+#    코드가 아예 실행되지 않았다. Phase 1·2 를 써본 사람은 전부 그 상태다 —
+#    갱신해도 화면이 옛 자리에 그대로 있다(2026-08-22 실물 확인).
+#    사이드에 있는 뷰는 재사용하지 않고 옮긴다.
+t_contains "사이드에 있으면 옮긴다" "isMainLeaf" "$(cat "$JS")"
+# ⚠️ 함수가 있는 것과 '쓰는' 것은 다르다. activate 가 실제로 걸러야 한다.
+t_contains "activate 가 메인을 고른다" "isMainLeaf(l, workspace.rootSplit)" "$(cat "$JS")"
+# 아무 leaf 나 재사용하면 사이드에 남은 옛 뷰가 이긴다.
+t_eq "아무 leaf 나 재사용하지 않는다" "0" \
+  "$(grep -c 'revealLeaf(open\[0\])' "$JS" | tr -d ' ')"
+# 사이드에 남은 것은 닫아야 같은 화면이 둘이 되지 않는다.
+t_contains "남은 뷰를 닫는다" "l.detach()" "$(cat "$JS")"
+
+cat > "$T_TMP/leaf.js" <<'JSEOF'
+const Module = require('module'); const orig = Module._load;
+Module._load = (r,p,m) => r === 'obsidian' ? { Plugin: class{}, ItemView: class{} } : orig(r,p,m);
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.isMainLeaf !== 'function') { console.log('NOHOOK'); process.exit(0); }
+// 메인 탭의 leaf 는 루트 컨테이너 아래에 있다. 사이드는 좌·우 split 아래다.
+const root = { type: 'split' };
+const main  = { getRoot: () => root, parent: { type: 'tabs' } };
+const side  = { getRoot: () => ({ type: 'sidedock' }), parent: { type: 'tabs' } };
+const ok = f.isMainLeaf(main, root) === true && f.isMainLeaf(side, root) === false;
+console.log(ok ? 'OK' : 'FAIL');
+JSEOF
+if command -v node >/dev/null 2>&1; then
+  t_eq "메인/사이드를 구분한다" "OK" "$(node "$T_TMP/leaf.js" "$JS" 2>&1 | tail -1)"
+fi
+
 # ── 지표 ────────────────────────────────────────────────────────────────────
 #
 # ⚠️ 지표는 DevTrail 개념이다. Meetings·Events·Focus 같은 것을 넣으면 볼트에
