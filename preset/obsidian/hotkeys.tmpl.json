@@ -124,6 +124,24 @@
         "Mod",
         "Shift"
       ]
+    },
+    {
+      "command": "devtrail-command-center:open",
+      "key": "J",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ],
+      "_why": "DevTrail Command Center 열기. 우리 플러그인이라 명령 id 가 확정적이다."
+    },
+    {
+      "command": "devtrail-command-center:quick-capture",
+      "key": "N",
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ],
+      "_why": "DevTrail 빠른 기록. 화면의 키캡이 이 배정을 읽어 표시한다 — 손으로 박지 않는다."
     }
   ],
   "fallback_keys": [

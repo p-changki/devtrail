@@ -14,6 +14,8 @@ struct MenuView: View {
 
     private let panelWidth: CGFloat = 274
 
+    @State private var captureURL = ""
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -55,7 +57,10 @@ struct MenuView: View {
                            help: showSettings ? "뒤로" : "설정") {
                     showSettings.toggle()
                 }
-                iconButton("arrow.clockwise", help: "새로고침") { status.refresh() }
+                iconButton("arrow.clockwise", help: "새로고침") {
+                    status.refresh()
+                    status.refreshSnapshot()
+                }
             }
         }
     }
@@ -66,11 +71,115 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 0) {
             stats
             Divider().padding(.vertical, 8)
+            vaultState
+            Divider().padding(.vertical, 8)
+            captureRow
+            Divider().padding(.vertical, 8)
             toolbar
             Divider().padding(.vertical, 8)
             backfillRow
             Divider().padding(.vertical, 8)
             openRow
+        }
+    }
+
+    // MARK: - Obsidian 없이 보는 상태
+    //
+    // ⚠️ 여기 숫자는 전부 CLI 의 snapshot 에서 온다. 앱이 Markdown 을
+    //    읽거나 경로를 짐작하지 않는다 — 그러면 화면과 볼트가 갈린다.
+    private var vaultState: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if let err = status.snapshotError {
+                // ⚠️ 못 읽은 것을 '0' 으로 보여주지 않는다.
+                Label(err, systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+            } else if let s = status.snapshot {
+                if !s.vaultAvailable {
+                    Label("볼트를 찾지 못했습니다", systemImage: "folder.badge.questionmark")
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                } else {
+                    stateLine("오늘",
+                              s.today.map { $0.devlogExists ? "개발일지 있음" : "개발일지 없음" } ?? "확인 불가",
+                              detail: s.today?.openTasks.map { $0 > 0 ? "할 일 \($0)개" : "" } ?? "")
+                    stateLine("프로젝트",
+                              s.activeProjects.map { "활성 \($0)개" } ?? "확인 불가",
+                              detail: s.nextActions.first.map { "\($0.project) · \($0.text)" } ?? "")
+                    stateLine("Inbox",
+                              s.inboxCount.map { $0 == 0 ? "비어 있음" : "\($0)개" } ?? "확인 불가",
+                              detail: (s.inboxCount ?? 0) > 0 ? (s.inboxPreview.first?.title ?? "") : "")
+                    stateLine("Command Center", s.commandCenterLine, detail: "")
+                }
+            } else {
+                Text("상태를 읽는 중…").font(.system(size: 10.5)).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("볼트 상태")
+    }
+
+    private func stateLine(_ label: String, _ value: String, detail: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 92, alignment: .leading)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value).font(.system(size: 11))
+                if !detail.isEmpty {
+                    Text(detail).font(.system(size: 9.5)).foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value). \(detail)")
+    }
+
+    // MARK: - 링크 받아두기
+    //
+    // ⚠️ Obsidian 이 꺼져 있어도 된다. 노트를 만드는 것은 CLI 이고,
+    //    저널에 남아 undo 로 사라진다 (ADR 0003).
+    private var captureRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "link").font(.system(size: 10))
+                Text("링크 받아두기").font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("클립보드") {
+                    // ⚠️ 자동으로 읽지 않는다. 누를 때만 읽는다.
+                    captureURL = NSPasteboard.general.string(forType: .string) ?? ""
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 9.5))
+                .foregroundStyle(.secondary)
+                .help("클립보드의 링크를 붙여넣습니다")
+            }
+            HStack(spacing: 6) {
+                TextField("https://youtu.be/…", text: $captureURL)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11))
+                    .disabled(status.captureBusy)
+                    .accessibilityLabel("유튜브 링크")
+                Button(status.captureBusy ? "저장 중…" : "저장") {
+                    status.captureYouTube(captureURL, apply: true)
+                }
+                .font(.system(size: 11))
+                // ⚠️ 두 번 누르면 노트가 두 개 생긴다.
+                .disabled(status.captureBusy || captureURL.trimmingCharacters(in: .whitespaces).isEmpty)
+                .help("Obsidian 없이 볼트에 저장합니다")
+            }
+            if let e = status.captureError {
+                Text(e).font(.system(size: 9.5)).foregroundStyle(.red).lineLimit(3)
+            } else if let r = status.captureResult {
+                Text(r).font(.system(size: 9.5)).foregroundStyle(.secondary).lineLimit(4)
+                if let job = status.captureUndoJob {
+                    Text("되돌리기: devtrail undo \(job) --apply")
+                        .font(.system(size: 9)).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+            }
         }
     }
 

@@ -23,6 +23,8 @@ lib/setup/spec.sh     셋업 스펙 검증·기본값 (기본값의 단일 출�
 lib/setup/plan.sh     "적용하면 무엇이 바뀌는가" — 적용부와 같은 함수를 쓴다
 lib/obsidian_app.sh   Obsidian 앱 자체 — 볼트 '밖' (설치·볼트목록·등록·실행)
 lib/plugins.sh        커뮤니티 플러그인 설치 (버전은 preset/plugins.json 에 고정)
+lib/commandcentercmd.sh  우리 Obsidian 플러그인 설치·활성화
+plugin/               그 플러그인 소스 — 빌드 없음, 이 파일이 곧 배포물 (ADR 0002)
 lib/init/             init 의 단계 5개
 lib/gen/*.py          생성기 — 셸이 못 하는 것만
 lib/migrations/       설정 스키마 마이그레이션

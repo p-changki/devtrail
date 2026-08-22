@@ -107,6 +107,35 @@ _pl_fetch_one() {
 #
 # ⚠️ 사용자가 이미 쓰던 목록을 덮어쓰면 그 사람의 플러그인이 전부 꺼진다.
 #    반드시 '더하기'다.
+# 코어 플러그인을 켠다 — **정한 적 없을 때만**.
+#
+# ⚠️ 사용자의 Obsidian 설정을 우리가 건드리는 자리다. 규칙 하나로 못박는다:
+#
+#      키가 없다  → 정한 적 없다 → 켠다
+#      false 다   → 끈 것이다   → **되돌리지 않는다**
+#
+#    "우리가 필요하니까" 로 남의 결정을 뒤집으면 다음에 또 뒤집는다. 꺼 둔
+#    사람에게는 화면이 안내로 떨어진다 — 그게 맞다.
+pl_core_enable() {
+  local dot="$1" id="$2"
+  local f="$dot/core-plugins.json"
+  if [ ! -f "$f" ]; then
+    printf '%s\n' '{}' > "$f" || return 1
+    jr_created "$f"
+  else
+    # 이미 정해져 있으면(true 든 false 든) 손대지 않는다.
+    local cur; cur=$(jq -r --arg k "$id" 'if type=="object" then (if has($k) then .[$k]|tostring else "unset" end) else "unset" end' "$f" 2>/dev/null)
+    [ "$cur" = "unset" ] || return 0
+    jr_backup "$f" >/dev/null || return 1
+  fi
+  local tmp; tmp=$(mktemp)
+  # ⚠️ 배열 형식(옛 Obsidian)이면 건드리지 않는다 — 우리가 모르는 형식을
+  #    고쳐 쓰면 설정을 망가뜨린다.
+  jq --arg k "$id" 'if type=="object" then .[$k] = true else . end' "$f" > "$tmp" \
+    && mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+  return 0
+}
+
 _pl_enable() {
   local dot="$1" id="$2"
   local f="$dot/community-plugins.json"
@@ -178,6 +207,10 @@ pl_install() {
   done <<EOF
 $(_pl_rows)
 EOF
+
+  # ⚠️ Obsidian 은 시작할 때만 플러그인 폴더를 훑는다. 실행 중에 넣으면
+  #    그 자리에서는 아무 일도 일어나지 않는다 — 말해주지 않으면 고장으로 본다.
+  [ "$done_n" -gt 0 ] && { . "$DEVTRAIL_ROOT/lib/obsidian_app.sh"; oa_warn_if_running || true; }
 
   if [ "$failed_required" = 1 ]; then
     echo

@@ -114,6 +114,29 @@ oa_open() {
   open -a "$(oa_app_path)" >/dev/null 2>&1
 }
 
+# Obsidian 이 실행 중이면 알려준다. 막지는 않는다.
+#
+# ⚠️ 볼트 레지스트리와 성격이 다르다. 레지스트리는 Obsidian 이 종료할 때
+#    자기 상태로 덮어쓰므로 실행 중에는 아예 쓰지 않는다(oa_register 호출부).
+#    반면 플러그인 파일과 community-plugins.json 은 우리가 쓴 것이 살아남는다.
+#    문제는 '언제 반영되는가' 다 — Obsidian 은 시작할 때만 플러그인 폴더를
+#    훑는다. 실행 중에 넣으면 그 자리에서는 아무 일도 일어나지 않는다.
+#
+#    2026-08-22 실물 확인에서 실제로 그랬다. 설치·활성화가 다 됐는데 화면이
+#    안 나왔고, 사용자는 고장으로 봤다. 우리는 "설치했습니다" 라고만 했다.
+#
+# ⚠️ 실행 중에 목록을 바꾸면 Obsidian 이 종료할 때 자기 기억으로 덮어쓸 수
+#    있다. 그래서 '종료한 뒤 실행하는 편이 확실하다' 까지 말한다.
+oa_warn_if_running() {
+  oa_running || return 1
+  warn "$(L "Obsidian 이 실행 중입니다" "Obsidian is running")"
+  dim "   $(L "지금 넣은 것은 Obsidian 을 재시작해야 보입니다" \
+             "What we just wrote shows up after you restart Obsidian")"
+  dim "   $(L "확실히 하려면 Obsidian 을 종료한 뒤 다시 실행하세요" \
+             "To be sure, quit Obsidian first, then run this again")"
+  return 0
+}
+
 # 볼트의 노트 수. 목록에서 "어느 게 내 진짜 볼트인지" 를 가르는 유일한 단서다.
 #
 # 전체 scan 을 돌리지 않는다 — 볼트가 여러 개면 목록 하나 띄우는 데 몇 초씩

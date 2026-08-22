@@ -27,6 +27,7 @@ struct DevTrailApp: App {
 
     private func start() {
         status.refresh()
+        status.refreshSnapshot()
         guard timer == nil else { return }
 
         // 앱이 띄운 대시보드 서버는 앱과 함께 정리한다.
@@ -39,7 +40,9 @@ struct DevTrailApp: App {
         // 패널이 열려 있지 않아도 아이콘 색은 최신이어야 한다.
         let t = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
             Task { @MainActor in
-                if status.busy == nil { status.refresh() }
+                // ⚠️ 앱이 앞으로 나올 때만 갱신한다. 렌더마다 부르면
+                //    메뉴를 여는 것만으로 CLI 가 수십 번 뜬다.
+                if status.busy == nil { status.refresh(); status.refreshSnapshot() }
             }
         }
         RunLoop.main.add(t, forMode: .common)

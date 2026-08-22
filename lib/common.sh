@@ -44,8 +44,19 @@ C_RED="$C_DANGER"; C_BLUE="$C_INFO"
 info()  { printf '%s\n' "$*"; }
 step()  { printf '%s▶%s %s\n' "$C_INFO" "$C_RESET" "$*"; }
 ok()    { printf '%s✅%s %s\n' "$C_SUCCESS" "$C_RESET" "$*"; }
-warn()  { printf '%s⚠️ %s %s\n' "$C_WARNING" "$C_RESET" "$*"; }
-fail()  { printf '%s❌%s %s\n' "$C_DANGER" "$C_RESET" "$*"; }
+# ⚠️ 경고·오류는 stderr 로 낸다.
+#
+#    stdout 으로 내면 명령 치환에 갇힌다:
+#
+#      spec=$(sp_read "$file")    # 안에서 die 하면 메시지가 $() 에 삼켜진다
+#
+#    스펙이 잘못돼도 화면에 아무것도 나오지 않았다(2026-08-22 실측).
+#    사용자는 무엇이 틀렸는지 알 길이 없었다.
+#
+#    ⚠️ 성공 출력(ok · info · step · dim)은 stdout 그대로 둔다.
+#       $(devtrail path devlog) 처럼 값으로 받는 곳이 있다.
+warn()  { printf '%s⚠️ %s %s\n' "$C_WARNING" "$C_RESET" "$*" >&2; }
+fail()  { printf '%s❌%s %s\n' "$C_DANGER" "$C_RESET" "$*" >&2; }
 dim()   { printf '%s%s%s\n' "$C_MUTED" "$*" "$C_RESET"; }
 die()   { fail "$*"; exit 1; }
 
@@ -93,6 +104,18 @@ vault_root() {
 vault_rel() {
   local r; r=$(cfg '.vault.root')
   if [ -n "$r" ]; then printf '%s/%s' "$r" "$1"; else printf '%s' "$1"; fi
+}
+
+# dt_devlog_name <날짜> — 그 날짜의 개발일지 파일명.
+#
+# ⚠️ 이 기본값을 다른 곳에 두지 않는다. '{{DATE}} devlog.md' 가 생성 스크립트·
+#    메뉴바 앱·snapshot 세 곳에 각자 있었고, 그중 하나만 바뀌면 "파일이 있는데
+#    없다" 고 말하는 화면이 생긴다. 이 저장소는 dirs.devlog 로 같은 병을 네 번
+#    고쳤다.
+dt_devlog_name() {
+  local d="$1" pat
+  pat=$(cfg '.naming.devlog_file' '{{DATE}} devlog.md')
+  printf '%s' "${pat//\{\{DATE\}\}/$d}"
 }
 
 # dt_dir <key> — 볼트 루트 기준 상대경로.

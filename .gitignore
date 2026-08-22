@@ -26,6 +26,12 @@ docs/*
 !docs/decisions/
 !docs/design-tokens.md
 !docs/ARCHITECTURE.md
+# 사용 가이드는 제품과 함께 나간다 — 구현계획이 아니다.
+!docs/command-center-usage.md
+
+# 저장소 루트의 로컬 학습·메모 — 결정 기록이 아니므로 추적하지 않는다.
+# 오래 갈 결정은 docs/decisions/ 에 ADR 로 쓴다.
+/programming-principles-study.md
 
 # 로그·백업
 logs/
