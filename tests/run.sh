@@ -315,6 +315,7 @@ run guard "버전"          check_version
 run guard "마이그레이션"   check_migrations
 run guard "시크릿"         ./tests/scan-secrets.sh
 run guard "스킬 규약"      ./tests/check-skills.sh
+run guard "CI 커버리지"   python3 ./tests/check-ci-coverage.py
 run guard "문서 정합성"   check_docs
 
 # 동작 — 실제로 실행해 봐야 아는 것

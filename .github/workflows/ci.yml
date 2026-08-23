@@ -12,8 +12,27 @@
 #    변수명에 흡수해 죽는 이 프로젝트 고유의 함정을 통과시켜 버린다.
 #    실제로 세 번 사고가 났고, 세 번 다 3.2 에서만 재현됐다.
 #
-# ⚠️ macOS 러너는 무료 한도를 10배로 소모한다. 그래서 behav 는 한 잡만,
-#    app 은 태그에서만 돈다.
+# ⚠️ macOS 러너는 무료 한도를 10배로 소모한다. 실측(2026-08-23):
+#
+#     동작 (macOS)  3.8분 × 10 = 청구 38분   ← 실행 1회의 거의 전부
+#     문법 (ubuntu)  0.1분 ×  1 = 청구  0분
+#     시크릿 (ubuntu) 0.2분 ×  1 = 청구  0분
+#
+#    실행 1회 ≈ 38분이고, 3000분이면 79회다. 그런데 PR 하나를 머지하면
+#    **2회**가 돌았다 — PR 검사와 그 직후 main push. 같은 코드를 두 번
+#    돌린 셈이다. 2026-08 에 한도를 다 써 CI 가 9일간 막혔다.
+#
+#    그래서 behav 는 **PR 과 태그에서만** 돈다. branch push 에서는 건너뛴다.
+#
+# ⚠️ 대가를 분명히 적는다:
+#
+#    1. main 에 **직접 푸시**하면 bash 3.2 검사가 돌지 않는다.
+#       main 은 PR 로만 들어와야 한다.
+#    2. PR 검사는 *그 시점의* 병합 결과를 본다. 사이에 다른 PR 이
+#       들어오면 main 의 조합 자체는 시험되지 않은 것이 된다.
+#       릴리스 태그에서 behav 가 다시 도는 이유가 이것이다.
+#
+#    필요하면 Actions 탭에서 손으로 돌릴 수 있다(workflow_dispatch).
 
 name: CI
 
@@ -23,6 +42,8 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main, dev]
+  # 위 규칙이 건너뛴 것을 확인하고 싶을 때 손으로 돌린다.
+  workflow_dispatch:
 
 # 같은 브랜치에 연달아 푸시하면 앞의 실행을 취소한다.
 concurrency:
@@ -62,6 +83,14 @@ jobs:
 
   behav:
     name: 동작 (macOS · bash 3.2)
+    # ⚠️ branch push 에서는 돌지 않는다. 바로 앞의 PR 검사가 같은 코드를
+    #    이미 봤고, macOS 러너가 이 워크플로 비용의 거의 전부이기 때문이다.
+    #    태그에서는 반드시 돈다 — app 잡이 이 결과에 기대고, 릴리스는
+    #    "시험되지 않은 조합" 을 허용하지 않는다.
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
