@@ -77,7 +77,7 @@ function mainInjectionList() {
 const PATHS = { templates: 'notes/템플릿', devlog: 'notes/개발/개발일지',
                 weekly: 'notes/개발/주간리뷰', projects: 'notes/개발/프로젝트' };
 
-async function render(route, notes) {
+async function render(route, notes, onApp) {
   // ⚠️ 전부 넘기지 않는다. main.js 가 **실제로 넘기는 것만** 넘긴다 —
   //    ...model 로 뭉뚱그리면 main 이 하나를 빠뜨려도 여기선 통과하고,
   //    실물에서만 죽는다. 실제로 daysBetween 이 그랬다(2026-08-23).
@@ -99,6 +99,8 @@ async function render(route, notes) {
   const V = view.CommandCenterView;
   const v = new V({ getRoot: () => ({}) });
   v.app = fakeApp(notes);
+  // 계측 훅 — 벤치가 볼트 스캔 횟수를 셀 수 있게 한다. 테스트는 넘기지 않는다.
+  if (onApp) onApp(v.app);
   v.route = route;
   await v.render();
   return v.contentEl;

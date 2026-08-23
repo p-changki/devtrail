@@ -43,8 +43,36 @@ function fm(app, file) {
   return (c && c.frontmatter) || {};
 }
 
-function collect(app, paths) {
-  const files = app.vault.getMarkdownFiles().filter((f) => isUserNote(f.path, paths));
+/* ⚠️ files 를 넘기면 볼트를 다시 훑지 않는다. 한 번의 렌더가 같은 목록을
+ *    세 번 만들던 것을 한 번으로 줄이기 위한 통로다 — 넘기지 않으면
+ *    예전처럼 스스로 훑으므로 이 함수만 따로 부르는 곳은 그대로 산다. */
+/* 볼트에서 사용자 노트만. 한 곳에서만 훑는다. */
+function userNotes(app, paths) {
+  return app.vault.getMarkdownFiles().filter((f) => isUserNote(f.path, paths));
+}
+
+/* 폴더별 노트 수정 시각.
+ *
+ * ⚠️ 프로젝트 행마다 볼트를 훑던 자리를 대신한다. 예전에는 행 N개에
+ *    전체 스캔 N번이었다(2026-08-23 측정: 프로젝트 200개 → 스캔 203회).
+ *    여기서는 한 번 훑으며 각 파일을 자기 **상위 폴더 전부**에 넣는다 —
+ *    startsWith(dir + '/') 와 정확히 같은 집합이고, 경로 깊이만큼만 든다. */
+function noteTimesByDir(files) {
+  const out = new Map();
+  for (const f of files) {
+    const parts = f.path.split('/');
+    for (let i = 1; i < parts.length; i++) {
+      const dir = parts.slice(0, i).join('/');
+      const at = out.get(dir);
+      if (at) at.push(f.stat.mtime);
+      else out.set(dir, [f.stat.mtime]);
+    }
+  }
+  return out;
+}
+
+function collect(app, paths, files) {
+  files = files || userNotes(app, paths);
 
   const projects = [];
   const inbox = [];
@@ -153,12 +181,14 @@ function bearsTasks(meta) {
  *    열린 작업이 있는지 안다 — 그 파일만 읽는다. 볼트가 커져도 읽는 양이
  *    작업 수에 비례한다.
  * ⚠️ 빈 자리표시('- [ ]' 뒤에 아무것도 없는 것)는 작업이 아니다. */
-async function openTasksInVault(app, paths, limit) {
+async function openTasksInVault(app, paths, limit, files) {
   const out = [];
-  const files = app.vault.getMarkdownFiles().filter((f) => isUserNote(f.path, paths));
+  // ⚠️ 넘겨받은 목록을 제자리에서 정렬하지 않는다. 부르는 쪽이 같은 배열을
+  //    다른 용도로도 쓰고 있고, 여기서 순서를 바꾸면 그쪽이 조용히 달라진다.
+  const list = (files || userNotes(app, paths)).slice();
   // 최근에 손댄 것부터 — 지금 하려는 일이 거기 있다.
-  files.sort((a, b) => b.stat.mtime - a.stat.mtime);
-  for (const f of files) {
+  list.sort((a, b) => b.stat.mtime - a.stat.mtime);
+  for (const f of list) {
     if (out.length >= limit) break;
     const cache = app.metadataCache.getFileCache(f);
     // ⚠️ 먼저 '이 노트가 할 일을 담는 곳인가' 를 본다. 파일을 읽기 전에
@@ -377,6 +407,7 @@ module.exports = {
   bearsTasks, openTasks, openTasksInVault,
   buildFlow, weeklyBars, parseDue, daysBetween, isStale,
   relativeDays, normalizeStage, todayDevlog, collect,
+  userNotes, noteTimesByDir,
 };
 
 // 이 파일은 전부 순수하다 — 테스트가 통째로 부른다.

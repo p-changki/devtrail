@@ -1567,7 +1567,13 @@ t_eq "배열은 건드리지 않는다" "true" \
 
 # ④ 되돌릴 수 있어야 한다
 printf '%s' '{"file-explorer":true}' > "$CPF"
+# ⚠️ 저널을 비우고 시작한다. 작업 ID 는 `초 단위 시각-PID` 라서 같은 초에
+#    두 작업이 생기면 이름순 정렬이 PID 순이 되고, PID 는 시간순이 아니다 —
+#    ls | tail -1 이 **이른** 작업을 고른다. 실제로 한 번 빨간불이 났다
+#    (2026-08-23). 하나만 있게 만들어 고를 여지를 없앤다.
+rm -rf "$CPH/journal"
 cprun command-center install --apply >/dev/null 2>&1
+t_eq "작업이 하나만 기록됐다" "1" "$(ls -1 "$CPH/journal" 2>/dev/null | wc -l | tr -d ' ')"
 job=$(ls -1 "$CPH/journal" | tail -1)
 cprun undo "$job" --apply >/dev/null 2>&1
 t_eq "undo 로 원래대로" "null" "$(jq -r '."global-search" // "null"' "$CPF")"
@@ -1803,21 +1809,80 @@ body = m.group(1).split('\n')
 call = next((i for i, l in enumerate(body) if 'm.makeView({' in l), None)
 if call is None:
     print('makeView 호출을 찾지 못함'); raise SystemExit
-# makeView 에 넘기는 이름들
+# makeView 에 넘기는 이름들. 주석 줄은 뺀다 — 주석 속 영어 낱말이
+# 이름으로 섞이면 없는 것을 찾게 된다.
 args = []
 for l in body[call:]:
     args.append(l)
     if l.strip().startswith('});'):
         break
-passed = set(re.findall(r'[A-Za-z_][A-Za-z0-9_]*', ' '.join(args)[len('const view = m.makeView({'):]))
-# 대입이 호출보다 뒤에 오는 이름
+body_text = ' '.join(x for x in args if not x.strip().startswith('//'))
+passed = set(re.findall(r'[A-Za-z_][A-Za-z0-9_]*', body_text[len('const view = m.makeView({'):]))
+passed.discard('const'); passed.discard('view'); passed.discard('m'); passed.discard('makeView')
+
+# ① 대입이 호출보다 뒤에 오는 이름
 late = []
 for i, l in enumerate(body):
     a = re.match(r'\s*([A-Za-z_][A-Za-z0-9_]*) = m\.', l)
     if a and i > call and a.group(1) in passed:
         late.append(a.group(1))
-print(' '.join(sorted(set(late))))
+
+# ② ⚠️ 순서만으로는 부족하다. **아예 없는** 이름은 순서 검사에 걸리지 않는다 —
+#    2026-08-23 에 userNotes 를 인자에만 넣고 선언·대입을 빼먹어 플러그인이
+#    통째로 안 떴다: ReferenceError: userNotes is not defined (bindModules).
+#    MODEL_KEYS 검사도 못 잡는다. 그건 **모듈이 내보내는지**만 보지,
+#    main 스코프에 들어왔는지는 보지 않는다.
+head = src.index('const view = m.makeView({')
+rest = src[:head] + src[src.index('});', head):]
+# ⚠️ 문자열과 주석을 걷어낸다. MODEL_KEYS 안의 'userNotes' 같은 **문자열**이
+#    선언으로 오인돼 이 검사가 변이에서 살아남았다(2026-08-23). 이름이
+#    어딘가 적혀 있다는 것과 그 이름이 **스코프에 있다**는 것은 다르다.
+rest = re.sub(r'//[^\n]*', '', rest)
+rest = re.sub(r'/\*.*?\*/', '', rest, flags=re.S)
+rest = re.sub(r'\'(?:\\.|[^\'\\])*\'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`', '""', rest)
+missing = [n for n in sorted(passed) if not re.search(r'\b' + re.escape(n) + r'\b', rest)]
+
+print(' '.join(sorted(set(late))) + '|' + ' '.join(missing))
 PYEOF
-t_eq "늦게 대입되는 이름이 없다" "" "$(python3 "$T_TMP/order.py" "$JS")"
+ORDER=$(python3 "$T_TMP/order.py" "$JS")
+t_eq "늦게 대입되는 이름이 없다" "" "${ORDER%%|*}"
+t_eq "선언조차 없는 이름이 없다" "" "${ORDER##*|}"
+
+t_start "폴더별 수정 시각이 예전 필터와 같은 집합이다"
+# ⚠️ 이건 성능 수정이 **동작을 바꾸지 않았는지** 를 본다. 예전 코드는 행마다
+#    files.filter(f => f.path.startsWith(dir + '/')) 였다. noteTimesByDir 는
+#    한 번 훑으며 각 파일을 상위 폴더 전부에 넣는다 — 두 결과가 폴더마다
+#    같아야 한다. 빠르지만 다른 답은 고친 게 아니라 깨뜨린 것이다.
+cat > "$T_TMP/bydir.js" <<'JSEOF'
+const Module = require('module');
+const orig = Module._load;
+Module._load = (r, p, m) => (r === 'obsidian' ? { Plugin: class {}, ItemView: class {}, Modal: class {} } : orig(r, p, m));
+const f = require(process.argv[2]).__test;
+if (!f || typeof f.noteTimesByDir !== 'function') { console.log('NOHOOK'); process.exit(0); }
+
+// 깊이·공백·한글·점·같은 접두어(p1 / p10)를 섞는다 — 접두어만 비교하면
+// 'a/p1' 이 'a/p10/x.md' 를 삼키는 실수를 여기서 잡는다.
+const paths = [
+  'a/p1/README.md', 'a/p1/note.md', 'a/p1/sub/deep.md',
+  'a/p10/README.md', 'a/p10/note.md',
+  'a/b c/한글 노트.md', 'a/b c/d.e/f.md',
+  'top.md', 'a/loose.md',
+];
+const files = paths.map((path, i) => ({ path, stat: { mtime: 1000 + i } }));
+const map = f.noteTimesByDir(files);
+
+const dirs = ['a', 'a/p1', 'a/p10', 'a/b c', 'a/b c/d.e', 'a/p1/sub', 'a/nope'];
+const bad = [];
+for (const dir of dirs) {
+  const was = files.filter((x) => x.path.startsWith(dir + '/')).map((x) => x.stat.mtime).sort((x, y) => x - y);
+  const now = (map.get(dir) || []).slice().sort((x, y) => x - y);
+  if (JSON.stringify(was) !== JSON.stringify(now)) bad.push(dir + ': ' + JSON.stringify(was) + ' vs ' + JSON.stringify(now));
+}
+console.log(bad.length ? 'DIFF ' + bad.join(' | ') : 'SAME');
+JSEOF
+# ⚠️ read-model 을 본다. main.js 를 넘기면 훅이 없어 조용히 건너뛴다 —
+#    이 저장소가 이미 네 번 겪은 무효 단언이다. 훅이 없으면 **실패**다.
+BYDIR=$(node "$T_TMP/bydir.js" "$RMJS" 2>&1)
+t_eq "모든 폴더에서 같은 결과" "SAME" "$BYDIR"
 
 t_end

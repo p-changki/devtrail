@@ -76,14 +76,14 @@ function loadModules(plugin) {
 
 const COMMAND_KEYS = ['CAPTURES', 'SEARCH_PLUGINS', 'CORE_SEARCH', 'SEARCH_VERBS', 'SEARCH_TARGETS', 'SEARCH_EXCLUDE', 'templaterCommandId', 'captureFile', 'commandExists', 'findSearchCommand', 'searchRunner', 'hotkeyLabel', 'isSubmitKey'];
 
-const MODEL_KEYS = ['DAY_MS', 'STALE_DAYS', 'FLOW_WEEKS', 'RECENT_PAGE', 'DOC_TYPES', 'BOARD_COLUMNS', 'STAGE_ALIASES', 'isUserNote', 'fm', 'localDate', 'dayStart', 'bearsTasks', 'openTasks', 'openTasksInVault', 'buildFlow', 'weeklyBars', 'parseDue', 'daysBetween', 'isStale', 'relativeDays', 'normalizeStage', 'todayDevlog', 'collect'];
+const MODEL_KEYS = ['DAY_MS', 'STALE_DAYS', 'FLOW_WEEKS', 'RECENT_PAGE', 'DOC_TYPES', 'BOARD_COLUMNS', 'STAGE_ALIASES', 'isUserNote', 'fm', 'localDate', 'dayStart', 'bearsTasks', 'openTasks', 'openTasksInVault', 'buildFlow', 'weeklyBars', 'parseDue', 'daysBetween', 'isStale', 'relativeDays', 'normalizeStage', 'todayDevlog', 'collect', 'userNotes', 'noteTimesByDir'];
 
 /* 로드한 모듈을 이 파일의 이름들에 묶는다.
  *
  * ⚠️ 호출부를 RM.collect(...) 로 바꾸지 않는 이유: 호출부가 40곳이 넘고,
  *    한 곳만 놓쳐도 화면이 조용히 깨진다. 묶는 자리를 하나 두는 편이
  *    실수할 자리가 적다. */
-let DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, DOC_TYPES, BOARD_COLUMNS, STAGE_ALIASES, isUserNote, fm, localDate, dayStart, bearsTasks, openTasks, openTasksInVault, buildFlow, weeklyBars, parseDue, daysBetween, isStale, relativeDays, normalizeStage, todayDevlog, collect;
+let DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, DOC_TYPES, BOARD_COLUMNS, STAGE_ALIASES, isUserNote, fm, localDate, dayStart, bearsTasks, openTasks, openTasksInVault, buildFlow, weeklyBars, parseDue, daysBetween, isStale, relativeDays, normalizeStage, todayDevlog, collect, userNotes, noteTimesByDir;
 
 let CAPTURES, SEARCH_PLUGINS, CORE_SEARCH, SEARCH_VERBS, SEARCH_TARGETS, SEARCH_EXCLUDE, templaterCommandId, captureFile, commandExists, findSearchCommand, searchRunner, hotkeyLabel, isSubmitKey;
 
@@ -135,6 +135,8 @@ function bindModules(m) {
   normalizeStage = m.model.normalizeStage;
   todayDevlog = m.model.todayDevlog;
   collect = m.model.collect;
+  userNotes = m.model.userNotes;
+  noteTimesByDir = m.model.noteTimesByDir;
 
   // ⚠️ 화면에 필요한 것을 **명시적으로** 넘긴다. 전역으로 새어 들어가면
   //    무엇이 무엇에 기대는지 아무도 모르게 된다.
@@ -143,8 +145,9 @@ function bindModules(m) {
     //    플러그인 진입점에서만 풀리는 이름이다.
     obsidian,
     DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, BOARD_COLUMNS,
-    isUserNote, localDate, openTasks, openTasksInVault, buildFlow, weeklyBars,
+    localDate, openTasks, openTasksInVault, buildFlow, weeklyBars,
     parseDue, isStale, relativeDays, daysBetween, normalizeStage, todayDevlog, collect,
+  userNotes, noteTimesByDir,
     CAPTURES, CORE_SEARCH, templaterCommandId, captureFile, commandExists,
     findSearchCommand, searchRunner, hotkeyLabel, isSubmitKey,
     icon, isMainLeaf, readPathMap, VIEW_TYPE, PLUGIN_ID, PATH_MAP_FILE, textFor,
