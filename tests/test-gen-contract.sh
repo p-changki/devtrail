@@ -415,6 +415,50 @@ genv scan-en en -- python3 "$ROOT/lib/gen/scan.py" "$VAULT"
 DT_NOW="$FIXED_NOW" DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 \
   python3 "$ROOT/lib/gen/scan.py" "$VAULT" > "$SCANOUT" 2>/dev/null
 
+# genhub <이름> <언어> <review%> <status%> — hub 는 **환경변수로만** 받는다.
+#
+# ⚠️ 커버리지에 따라 쿼리가 세 갈래로 갈린다(full ≥50 · mixed 10~50 ·
+#    fallback <10). 예전 골든은 커버리지를 안 넘겨 **fallback 하나만**
+#    지났다 — 세 갈래 중 둘이 시험되지 않았다.
+#
+#    이건 사용자에게 직접 보이는 갈래다. 커버리지를 무시하고 정식 쿼리를
+#    박으면 Dataview 가 필드 없는 노트를 조용히 제외해 빈 결과가 나오고,
+#    사용자는 그걸 "밀린 게 없다" 로 읽는다.
+genhub() {
+  local name="$1" lang="$2" rev="$3" st="$4"
+  CASES=$((CASES + 1))
+  local out="$T_TMP/$name.out"
+  env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC \
+      DT_HUB_FROM="notes/개발/개발일지" DT_HUB_TITLE="개발일지" \
+      DT_HUB_KEY=devlog DT_HUB_DATE="$FIXED_DATE" \
+      DT_HUB_COV_REVIEW="$rev" DT_HUB_COV_STATUS="$st" \
+      python3 "$ROOT/lib/gen/hub.py" 2>/dev/null | norm > "$out"
+  local g; g=$(golden_path "$name")
+  if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then cp "$out" "$g"; return 0; fi
+  if [ ! -f "$g" ]; then _t_bad "$name" "골든 없음" "$g"; FAILED=1; return 0; fi
+  if cmp -s "$out" "$g"; then _t_ok "$name"; else
+    _t_bad "$name" "골든과 다릅니다" "$(diff "$g" "$out" | head -6)"; FAILED=1
+  fi
+}
+
+t_start "hub — 커버리지 세 갈래"
+genhub hub-full-ko     ko 80    72.5
+genhub hub-full-en     en 80    72.5
+genhub hub-mixed-ko    ko 33.3  12
+genhub hub-mixed-en    en 33.3  12
+genhub hub-low-ko      ko 4.2   0
+genhub hub-low-en      en 4.2   0
+# ⚠️ 경계값. 50 은 full, 49.9 는 mixed, 10 은 mixed, 9.9 는 fallback.
+genhub hub-edge50-ko   ko 50    10
+genhub hub-edge49-ko   ko 49.9  9.9
+# ⚠️ 숫자가 아니면 0.0 으로 떨어진다 — 그 가지도 태운다.
+genhub hub-nan-ko      ko "abc" ""
+# ⚠️ 반올림 경계. python 의 round 는 **은행가 반올림**이고 실제 double 값에
+#    적용된다. Swift 의 .rounded() 로 옮기면 여기서 갈린다 —
+#    실측(2026-08-24) 5개 중 4개가 달랐다.
+genhub hub-round-ko    ko 0.25  0.35
+genhub hub-round2-ko   ko 33.35 72.55
+
 t_start "hub — L3 폴더 허브"
 # ⚠️ DT_HUB_TITLE 의 **기본값**은 시험하지 않는다 — 동등 변이로 확인했다.
 #    기본값을 바꿔도 이 테스트는 통과하는데, 그건 테스트가 약해서가 아니라
@@ -614,6 +658,38 @@ else
   cmpxenv templater-have-ko  ko "$TDIR" ""       -- gen-hotkeys templater "$TMPL" "$PATHS" ""
   cmpxenv hotkeys-ours-ko    ko ""      ""       -- gen-hotkeys hotkeys "$TMPL" "$PATHS" "$EXIST_HK_OURS" "$IDS_REAL"
   cmpxenv templater-keep-ko  ko ""      ""       -- gen-hotkeys templater "$TMPL" "$PATHS" "$EXIST_TPL"
+
+  # hub — 이관 완료. 환경변수로만 받으므로 전용 대조를 쓴다.
+  cmphub() {   # cmphub <이름> <언어> <review%> <status%>
+    local name="$1" lang="$2" rev="$3" st="$4"
+    local g; g=$(golden_path "$name")
+    [ -f "$g" ] || { _t_bad "헬퍼 = $name" "골든 없음" "$g"; FAILED=1; return 0; }
+    local out="$T_TMP/helper-$name.out"
+    env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC \
+        DT_HUB_FROM="notes/개발/개발일지" DT_HUB_TITLE="개발일지" \
+        DT_HUB_KEY=devlog DT_HUB_DATE="$FIXED_DATE" \
+        DT_HUB_COV_REVIEW="$rev" DT_HUB_COV_STATUS="$st" \
+        "$HELPER" gen-hub 2>/dev/null | norm > "$out"
+    PORTED=$((PORTED + 1))
+    if cmp -s "$out" "$g"; then _t_ok "헬퍼 = $name"; else
+      _t_bad "헬퍼 ≠ $name" "python 골든과 다릅니다" "$(diff "$g" "$out" | head -6)"
+      FAILED=1
+    fi
+  }
+  cmphub hub-full-ko   ko 80    72.5
+  cmphub hub-full-en   en 80    72.5
+  cmphub hub-mixed-ko  ko 33.3  12
+  cmphub hub-mixed-en  en 33.3  12
+  cmphub hub-low-ko    ko 4.2   0
+  cmphub hub-low-en    en 4.2   0
+  cmphub hub-edge50-ko ko 50    10
+  cmphub hub-edge49-ko ko 49.9  9.9
+  cmphub hub-nan-ko    ko "abc" ""
+  cmphub hub-round-ko  ko 0.25  0.35
+  cmphub hub-round2-ko ko 33.35 72.55
+  # 기존 두 케이스(커버리지 미지정)도 같은 방식으로 본다.
+  cmphub hub-ko ko "" ""
+  cmphub hub-en en "" ""
 
   # ⚠️ 아직 이관하지 않은 것을 **세어서 말한다.** 침묵하면 "다 됐다" 로 읽힌다.
   TOTAL=$(find "$GOLDEN" -type f | wc -l | tr -d ' ')
