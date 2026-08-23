@@ -26,12 +26,6 @@ _cc_dot() { printf '%s/.obsidian' "$(vault_path)"; }
 _cc_dest() { printf '%s/plugins/%s' "$(_cc_dot)" "$DT_CC_ID"; }
 
 # 배포물 목록. manifest 와 main 은 필수, styles 는 있으면 함께 간다.
-_cc_files() {
-  local f
-  for f in ${DT_CC_FILES_OVERRIDE:-manifest.json main.js styles.css}; do
-    [ -f "$DT_CC_SRC/$f" ] && printf '%s\n' "$f"
-  done
-}
 
 _cc_require_src() {
   [ -f "$DT_CC_SRC/manifest.json" ] && [ -f "$DT_CC_SRC/main.js" ] \
@@ -235,8 +229,18 @@ _cc_validate_src() {
     || die "$(L "manifest 에 version 이 없습니다 — 무엇으로 바꾸는지 알 수 없습니다" \
                "The manifest has no version — there is no way to tell what this would install")"
   # 필수 파일이 다 있고 읽히는가.
+  # ⚠️ 목록이 없으면 유효한 릴리스가 아니다. 무엇을 배포할지 모르는 채로
+  #    파일을 옮기면 지워야 할 것도 남겨야 할 것도 알 수 없다.
+  [ -f "$DT_CC_SRC/files.json" ] \
+    || die "$(L "배포 목록이 없습니다" "The deployment list is missing"): $DT_CC_SRC/files.json"
+  _cc_manifest_list "$DT_CC_SRC" | grep -q . \
+    || die "$(L "배포 목록이 비었거나 형식이 다릅니다" \
+               "The deployment list is empty or malformed"): $DT_CC_SRC/files.json"
+
+  # ⚠️ _cc_files 는 실재하는 것만 낸다 — 그것으로 검사하면 누락이 영영 안
+  #    잡힌다. 목록이 **선언한** 것을 기준으로 본다.
   local f
-  for f in manifest.json main.js styles.css; do
+  for f in $(_cc_manifest_list "$DT_CC_SRC"); do
     [ -r "$DT_CC_SRC/$f" ] \
       || die "$(L "원본에 필수 파일이 없습니다 — 절반만 바꾸지 않습니다" \
                  "The source is missing a required file — refusing a partial update"): $f"
@@ -330,6 +334,10 @@ $(_cc_files)
 EOF
   [ "$staged" -gt 0 ] || { rm -rf "$stage"; die "$(L "옮길 파일이 없습니다" "Nothing to install")"; }
 
+  # ⚠️ 고아를 **복사 전에** 계산한다. 복사하면 설치본의 files.json 이 새것으로
+  #    덮여 옛 목록이 사라진다 — 그러면 지울 것을 영영 모른다.
+  local orphans; orphans=$(_cc_orphans "$dest")
+
   # ── 교체 ──────────────────────────────────────────────────────────────────
   jr_begin command-center-update
   local failed=""
@@ -346,6 +354,25 @@ EOF
   done <<EOF
 $(_cc_files)
 EOF
+  # ⚠️ 이전 릴리스가 깔았는데 이번 목록에 없는 것을 지운다. 백업 없이 지우면
+  #    undo 가 되살릴 수 없다.
+  if [ -z "$failed" ]; then
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      [ -f "$dest/$f" ] || continue
+      # ⚠️ 설치 폴더 밖은 절대 지우지 않는다. 설치본의 files.json 은 사용자
+      #    폴더에 있어 누구나 고칠 수 있다 — 거기에 ../ 가 들어오면 남의
+      #    파일을 지우게 된다.
+      _cc_inside "$dest" "$dest/$f" || {
+        warn "$(L "설치 폴더 밖을 가리켜 건너뜁니다" "Skipping a path outside the plugin folder"): $f"
+        continue
+      }
+      jr_backup "$dest/$f" >/dev/null || { failed="$f"; break; }
+      rm -f "$dest/$f" || { failed="$f"; break; }
+    done <<EOF
+$orphans
+EOF
+  fi
   rm -rf "$stage"
 
   if [ -n "$failed" ]; then
@@ -500,69 +527,12 @@ EOF
   jr_end
 }
 
-# ── Snapshot ─────────────────────────────────────────────────────────────────
-#
-# Obsidian 이 꺼져 있어도 답한다. 메뉴바 앱이 이것만 소비하고, Markdown 이나
-# 경로 규칙을 스스로 해석하지 않는다.
-#
-# ⚠️ 읽기 전용이다. 네트워크도 쓰지 않는다.
-# ⚠️ 모르는 것은 unknown 이나 null 이다. 0 이나 false 로 사실을 꾸며내면
-#    화면이 "확인해 봤더니 없다" 고 말하게 되는데, 실은 못 본 것이다.
-_cc_snapshot() {
-  local limit=5
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --json) : ;;
-      --limit) shift; limit="${1:-5}" ;;
-      *) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
-    esac
-    shift
-  done
-  require_config; require_bins jq python3
+# 배포물 계약은 별도 파일에 있다 — 이 파일이 600줄을 넘었고, 그 계약은
+# 설치·업데이트·undo 가 공유하는 독립된 관심사다.
+. "$DEVTRAIL_ROOT/lib/cc/files.sh"
+. "$DEVTRAIL_ROOT/lib/cc/snapshot.sh"
 
-  local root today devlog_rel devlog_path tpl_rel
-  root=$(vault_root)
-  today=$(date +%F)
-  # 경로는 dt_dir 하나에서만 온다.
-  tpl_rel=$(dt_dir templates)
-  devlog_rel=$(dt_dir devlog)
-  devlog_path=""
-  # ⚠️ 파일명은 dt_devlog_name 하나에서만 온다.
-  [ -n "$devlog_rel" ] && devlog_path="$root/$devlog_rel/$(dt_devlog_name "$today")"
 
-  local vault_state
-  vault_state=$(python3 "$DEVTRAIL_ROOT/lib/snapshot.py" \
-    "$(jq -nc --arg r "$root" --arg t "$tpl_rel" --arg d "$devlog_path" \
-         --arg today "$today" --argjson lim "$limit" \
-         '{root:$r, templates_rel:$t, devlog_path:$d, today:$today, limit:$lim}')" \
-    2>/dev/null) || vault_state=""
-  [ -n "$vault_state" ] || vault_state='{"available":false}'
-
-  # Command Center 와 Obsidian 상태는 이미 있는 것을 재사용한다.
-  local cc; cc=$(_cc_status --json 2>/dev/null) || cc='{}'
-  . "$DEVTRAIL_ROOT/lib/obsidian_app.sh"
-  local running=false; oa_running && running=true
-
-  jq -n --argjson vault "$vault_state" --argjson cc "$cc" \
-        --argjson running "$running" --arg root "$root" '{
-    configured: true,
-    vault: { available: ($vault.available // false), path: $root },
-    today: ($vault.today // null),
-    projects: ($vault.projects // null),
-    inbox: ($vault.inbox // null),
-    notes: ($vault.notes // null),
-    recent: ($vault.recent // null),
-    command_center: {
-      installed: ($cc.installed // "unknown"),
-      enabled: ($cc.enabled // "unknown"),
-      installed_version: ($cc.installed_version // "unknown"),
-      available_version: ($cc.available_version // "unknown"),
-      update_state: ($cc.update_state // "unknown"),
-      restart_recommended: ($cc.restart_required // false)
-    },
-    obsidian: { running: $running }
-  }'
-}
 
 command_center_cmd() {
   local sub="${1:-status}"

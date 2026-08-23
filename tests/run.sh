@@ -329,6 +329,8 @@ run behav "setup 계약"     ./tests/test-setup.sh
 run behav "command center" ./tests/test-command-center.sh
 run behav "capture"        ./tests/test-capture.sh
 run behav "snapshot"       ./tests/test-snapshot.sh
+run behav "배포 목록"      ./tests/test-plugin-files.sh
+run behav "화면 렌더"      ./tests/test-view-render.sh
 run behav "app 경계"       ./tests/test-app.sh
 
 [ "$GROUP" = all ] && run swift "swift 빌드" \

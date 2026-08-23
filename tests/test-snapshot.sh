@@ -119,7 +119,9 @@ Module._load = function (r, p, m) {
   return orig(r, p, m);
 };
 const fs = require('fs'), path = require('path');
-const P = require(process.argv[2]).__test;
+// ⚠️ collect 는 read-model.js 로 옮겨갔다(ADR 0004). 계약은 그대로다 —
+//    같은 볼트에서 CLI 와 이 구현이 같은 수를 내야 한다.
+const P = require(process.argv[2]);
 if (!P || typeof P.collect !== 'function') { console.log('NOHOOK'); process.exit(0); }
 
 const root = process.argv[3];
@@ -180,7 +182,7 @@ console.log(JSON.stringify({
 }));
 JSEOF
 if command -v node >/dev/null 2>&1; then
-  PLUG=$(node "$T_TMP/contract.js" "$ROOT/plugin/main.js" "$N" "템플릿" 2>&1 | tail -1)
+  PLUG=$(node "$T_TMP/contract.js" "$ROOT/plugin/read-model.js" "$N" "템플릿" 2>&1 | tail -1)
   printf '%s' "$PLUG" > "$T_TMP/plug.json"
   t_json "플러그인 결과가 JSON" "$T_TMP/plug.json"
   # CLI 쪽 같은 수치

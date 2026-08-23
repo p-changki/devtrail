@@ -1297,3 +1297,15 @@
   border-radius: 4px;
   padding: 1px 4px;
 }
+
+/* 렌더 실패 안내 안의 스택 — 좁은 폭에서도 읽히게. */
+.devtrail-cc-recovery pre {
+  margin: 8px 0 0;
+  padding: 8px;
+  font-size: 11px;
+  background: var(--background-secondary);
+  border-radius: 6px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
