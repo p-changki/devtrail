@@ -13,7 +13,7 @@ _init_scan() {
   DT_SCAN=$(mktemp); export DT_SCAN
   echo
   printf '%s\n' "${C_BOLD}$(L "볼트 진단" "Scanning the vault")${C_RESET}"
-  if ! python3 "$DEVTRAIL_ROOT/lib/gen/scan.py" "$vault" \
+  if ! dt_gen gen-scan "$vault" \
         "$DEVTRAIL_ROOT/preset/tree.json" \
         "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" > "$DT_SCAN" 2>/dev/null; then
     warn "$(L "진단에 실패했습니다 — 빈 볼트로 간주합니다" \

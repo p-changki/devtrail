@@ -200,6 +200,68 @@ confirm() {
   [[ "$reply" =~ ^[Yy]$ ]]
 }
 
+# ── 생성기 통로 ──────────────────────────────────────────────────────────────
+#
+# ⚠️ 생성기를 부르는 곳은 **여기 하나**다. 호출부 11곳이 각자 python3 를
+#    부르면, 헬퍼로 옮길 때 하나를 빠뜨린다 — 이 저장소가 dirs.devlog 로
+#    네 번 겪은 병이다.
+#
+# ⚠️ 헬퍼가 없으면 **python3 로 떨어진다.** 이관이 끝나기 전에도 저장소가
+#    그대로 돌고, 기존 Git 설치형 사용자는 아무것도 잃지 않는다 (ADR 0006).
+#
+# ⚠️ 어느 쪽을 썼는지 조용히 넘기지 않는다. `devtrail doctor` 가 말한다.
+
+# 헬퍼 실행 파일. 없으면 빈 문자열.
+dt_helper() {
+  local p
+  # 1) 테스트·개발용 명시 지정
+  p="${DT_HELPER_OVERRIDE:-}"
+  [ -n "$p" ] && [ -x "$p" ] && { printf '%s' "$p"; return 0; }
+  # 2) .app 번들 안 (DMG 설치본)
+  p="$DEVTRAIL_ROOT/../Helpers/devtrail-helper"
+  [ -x "$p" ] && { printf '%s' "$p"; return 0; }
+  # 3) 저장소의 빌드 산출물 (개발 중)
+  for p in "$DEVTRAIL_ROOT/app/.build/release/DevTrailHelper" \
+           "$DEVTRAIL_ROOT/app/.build/debug/DevTrailHelper"; do
+    [ -x "$p" ] && { printf '%s' "$p"; return 0; }
+  done
+  return 1
+}
+
+# 하위 명령 → python 스크립트. 폴백에 쓴다.
+#
+# ⚠️ 이 표가 곧 "무엇이 이관됐는가" 다. 헬퍼에 없는 명령을 여기 적으면
+#    폴백이 영원히 도는데 아무도 모른다 — 새 명령을 더할 때 양쪽을 함께 본다.
+_dt_gen_script() {
+  case "$1" in
+    gen-smartenv) printf '%s' "$DEVTRAIL_ROOT/lib/gen/smartenv.py" ;;
+    gen-anm)      printf '%s' "$DEVTRAIL_ROOT/lib/gen/anm.py" ;;
+    gen-hotkeys)  printf '%s' "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" ;;
+    gen-hub)      printf '%s' "$DEVTRAIL_ROOT/lib/gen/hub.py" ;;
+    gen-hubs)     printf '%s' "$DEVTRAIL_ROOT/lib/gen/hubs.py" ;;
+    gen-scan)     printf '%s' "$DEVTRAIL_ROOT/lib/gen/scan.py" ;;
+    gen-snapshot) printf '%s' "$DEVTRAIL_ROOT/lib/snapshot.py" ;;
+    *) return 1 ;;
+  esac
+}
+
+# dt_gen <하위명령> [인자…]
+#
+# 헬퍼가 있으면 헬퍼, 없으면 python3. 표준입출력·종료코드를 그대로 전달한다.
+dt_gen() {
+  local sub="$1"; shift
+  local helper script
+  if helper=$(dt_helper); then
+    "$helper" "$sub" "$@"
+    return $?
+  fi
+  script=$(_dt_gen_script "$sub") || {
+    printf '%s\n' "알 수 없는 생성기: $sub" >&2
+    return 2
+  }
+  python3 "$script" "$@"
+}
+
 # 언어. dt_dir 이 dt_lang 을 쓰므로 저널보다 먼저 읽는다.
 # shellcheck source=lib/i18n.sh
 . "$DEVTRAIL_ROOT/lib/i18n.sh"

@@ -35,7 +35,7 @@ _cc_snapshot() {
   [ -n "$devlog_rel" ] && devlog_path="$root/$devlog_rel/$(dt_devlog_name "$today")"
 
   local vault_state
-  vault_state=$(python3 "$DEVTRAIL_ROOT/lib/snapshot.py" \
+  vault_state=$(dt_gen gen-snapshot \
     "$(jq -nc --arg r "$root" --arg t "$tpl_rel" --arg d "$devlog_path" \
          --arg today "$today" --argjson lim "$limit" \
          '{root:$r, templates_rel:$t, devlog_path:$d, today:$today, limit:$lim}')" \

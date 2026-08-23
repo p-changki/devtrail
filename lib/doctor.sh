@@ -23,6 +23,20 @@ doctor_run() {
   _d_bin python3   required "$(L "볼트 백업(권한 우회 경유)" "vault backups (works around permissions)")"
   _d_bin fswatch   optional "$(L "실시간 파일 감시 (미설치 시 주기 동기화만)" "live file watching (without it, periodic sync only)")"
 
+  # ⚠️ 생성기를 **누가 돌리는지** 말한다. 조용히 폴백하면, python3 가 없는
+  #    기계에서 왜 안 되는지 아무도 모른다 (ADR 0006 M3).
+  local _h
+  if _h=$(dt_helper); then
+    ok "$(L "생성기" "Generators"): devtrail-helper"
+    dim "   $_h"
+    dim "   $(L "python3 없이 동작합니다" "Works without python3")"
+  else
+    warn "$(L "생성기" "Generators"): python3 $(L "폴백" "fallback")"
+    dim "   $(L "헬퍼 실행 파일이 없어 python 스크립트로 돕니다." \
+                "No helper binary — running the python scripts.")"
+    dim "   $(L "빌드" "Build"): (cd app && swift build -c release --product DevTrailHelper)"
+  fi
+
   local ai; ai=$(cfg '.ai.provider' 'claude')
   if [ "$(cfg '.ai.summary_enabled' 'true')" = "true" ]; then
     _d_bin "$ai" required "$(L "PR 쉬운말 요약" "plain-language PR summaries") (ai.provider=$ai)"

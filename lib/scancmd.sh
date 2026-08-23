@@ -34,10 +34,13 @@ scan_cmd() {
     vault="$(vault_path)"
   fi
   [ -d "$vault" ] || die "$(L "볼트 경로 없음" "Vault not found"): $vault"
-  [ -f "$DT_SCAN_PY" ] || die "$(L "진단기 없음" "Scanner missing"): $DT_SCAN_PY"
+  # ⚠️ 헬퍼가 있으면 python 스크립트는 필요 없다. 헬퍼도 스크립트도 없을
+  #    때만 막는다 — 있지도 않은 것을 요구하면 DMG 설치본에서 죽는다.
+  dt_helper >/dev/null 2>&1 || [ -f "$DT_SCAN_PY" ] \
+    || die "$(L "진단기 없음" "Scanner missing"): $DT_SCAN_PY"
 
   local out; out=$(mktemp); trap 'rm -f "$out"' RETURN
-  python3 "$DT_SCAN_PY" "$vault" \
+  dt_gen gen-scan "$vault" \
     "$DEVTRAIL_ROOT/preset/tree.json" \
     "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" > "$out" \
     || die "$(L "진단 실패" "Scan failed")"

@@ -26,7 +26,7 @@ _ob_hotkeys() {
 
   local out; out=$(mktemp)
   if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates/$(dt_lang)" \
-     python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" hotkeys \
+     dt_gen gen-hotkeys hotkeys \
       "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$hk" ] && printf '%s' "$hk")" "$ids" > "$out"; then
     jr_backup "$hk" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $hk"; }

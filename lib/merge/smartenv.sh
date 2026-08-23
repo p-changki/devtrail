@@ -33,7 +33,7 @@ _ob_smartenv() {
 
   local out; out=$(mktemp)
   DT_FOREIGN_FOLDERS="$(_ob_foreign_folders)" \
-  python3 "$DEVTRAIL_ROOT/lib/gen/smartenv.py" \
+  dt_gen gen-smartenv \
     "$DEVTRAIL_ROOT/preset/tree.json" "$CONFIG_FILE" \
     "$(vault_root)/$(dt_dir templates)" \
     "$([ -f "$data" ] && printf '%s' "$data")" > "$out" || {
