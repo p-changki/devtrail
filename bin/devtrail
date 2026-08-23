@@ -35,6 +35,7 @@ ${C_BOLD}설치${C_RESET}
   devtrail plugins <sub>     Obsidian 플러그인 (install|status)
   devtrail command-center <sub>  Obsidian 화면 (install|update|enable|disable|status|uninstall)
   devtrail app <sub>         메뉴바 앱 (install|start|stop|status)
+  devtrail link <sub>        터미널에서도 쓰기 (status|create)
   devtrail install-schedule  launchd 자동 실행 등록
   devtrail update            DevTrail 자체를 최신으로 (기본 dry-run)
   devtrail undo [ID]         마지막 변경 되돌리기 (인자 없으면 이력)
@@ -103,6 +104,8 @@ case "$cmd" in
     . "$DEVTRAIL_ROOT/lib/capturecmd.sh"; capture_cmd "$@" ;;
   app)
     . "$DEVTRAIL_ROOT/lib/appcmd.sh"; app_cmd "$@" ;;
+  link)
+    . "$DEVTRAIL_ROOT/lib/linkcmd.sh"; link_cmd "$@" ;;
   dashboard)
     # ⚠️ 폐지됨 (2026-08-24, ADR 0006 D5).
     #

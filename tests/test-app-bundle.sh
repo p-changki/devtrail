@@ -347,6 +347,28 @@ if [ -x "$CLI_B" ]; then
   rm -rf "$FAKE" "$QH"
 fi
 
+t_start "온보딩 — UI 에 판정이 없다 (M4-4b)"
+# ⚠️ 이 저장소의 규칙이다: **UI 에 로직을 넣지 말 것.** 같은 판정을 CLI 와
+#    앱에 두 벌 두면 반드시 어긋나고, 어긋난 쪽이 화면이면 사용자가 먼저 본다.
+MV=$(grep -vE '^\s*//' "$ROOT/app/Sources/DevTrailApp/MenuView.swift")
+t_eq "화면이 link 상태를 직접 계산하지 않는다" "0" \
+  "$(printf '%s\n' "$MV" | grep -cE 'linked_here|linked_other|occupied' \
+     | tr -d ' ' | awk '{ print ($1 > 4) ? 1 : 0 }')"
+t_eq "화면이 파일 시스템을 직접 보지 않는다" "0" \
+  "$(printf '%s\n' "$MV" | grep -cE 'FileManager|readlink|symlink' | tr -d ' ')"
+# ⚠️ 판정은 CLI 가 낸 것을 읽기만 한다.
+ST=$(grep -vE '^\s*//' "$ROOT/app/Sources/DevTrailApp/Status.swift")
+t_eq "Status 가 link status --json 을 읽는다" "1" \
+  "$(printf '%s\n' "$ST" | grep -c '"link", "status", "--json"' | tr -d ' ')"
+t_eq "연결은 CLI 에 맡긴다" "1" \
+  "$(printf '%s\n' "$ST" | grep -c '"link", "create"' | tr -d ' ')"
+
+t_start "온보딩 — 번들에서 거짓 안내를 하지 않는다"
+# ⚠️ 앱 안에 CLI 가 실려 나가므로(M4-3), 번들인데 CLI 가 없다면 그건
+#    **번들이 손상된** 것이다. 그때 "curl | bash 로 설치하세요" 는 거짓말이다.
+t_eq "curl 안내는 번들이 아닐 때만" "1" \
+  "$(printf '%s\n' "$MV" | grep -c 'if CLI.bundled == nil' | tr -d ' ')"
+
 t_start "번들 CLI 자산이 코드와 어긋나지 않는다"
 # ⚠️ 목록을 손으로 관리하지 않는다. 코드의 $DEVTRAIL_ROOT/<무엇> 참조에서
 #    유도한다 — 새 참조가 생기면 여기서 잡힌다.
