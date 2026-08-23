@@ -94,3 +94,6 @@ Thumbs.db
 
 # 번들 jq — 빌드 산출물이다. 출처와 해시는 vendor/jq/jq.lock.json 이 정본.
 vendor/jq/build/
+
+# DMG 배포물 — 빌드 산출물이다.
+dist/
