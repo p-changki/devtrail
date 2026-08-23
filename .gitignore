@@ -91,3 +91,6 @@ Thumbs.db
 # 로컬 QA 게이트 결과물 (Phase 2 의 QA 볼트 하니스가 남기는 것)
 /qa-results/
 *.qa.json
+
+# 번들 jq — 빌드 산출물이다. 출처와 해시는 vendor/jq/jq.lock.json 이 정본.
+vendor/jq/build/
