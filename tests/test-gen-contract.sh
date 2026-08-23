@@ -675,6 +675,26 @@ bundle() {   # bundle <디렉터리>
     cat "$f"
   done)
 }
+# ⚠️ scan 의 status 커버리지가 10 이상이면 '근사' 안내 가지를 안 지난다.
+#    실제 픽스처는 10.0 이라 경계 **바로 위**다 — 그 아래 값을 따로 만든다.
+# ⚠️ 설정값이 **실제로 읽히는지** 보려면 기본값과 **다른** 값을 줘야 한다.
+#    기본 픽스처는 templates 가 "notes/템플릿" 이고 naming.devlog_file 이
+#    없어서, 그 둘을 하드코딩하는 변이가 폴백과 같은 답을 내며 살아남았다
+#    (2026-08-24). 둘 다 다른 값으로 바꾼 케이스를 둔다.
+PATHS_CUSTOM="$T_TMP/paths-custom.json"
+jq '.paths.templates = "notes/MyTemplates"' "$PATHS" > "$PATHS_CUSTOM"
+CFG_NAMING="$T_TMP/config-naming.json"
+jq '.naming = {devlog_file: "{{DATE}}-일지.md"}' "$CFG" > "$CFG_NAMING"
+
+SCAN_LOWCOV="$T_TMP/scan-lowcov.json"
+jq '.fields.status.value_pct = 3.4' "$SCANOUT" > "$SCAN_LOWCOV"
+
+# ⚠️ 이미 파일이 있으면 **건드리지 않는다**. 그 가지를 태우려면 미리 하나를
+#    만들어 둬야 한다 — 사용자가 고친 대시보드를 덮어쓰지 않는다는 계약이다.
+PRESET_OUT="$T_TMP/hubs-preset"
+mkdir -p "$PRESET_OUT"
+printf '내가 고친 대시보드\n' > "$PRESET_OUT/대시보드.md"
+
 for lang in ko en; do
   CASES=$((CASES + 1))
   NAME="hubs-$lang"
@@ -692,6 +712,46 @@ for lang in ko en; do
     FAILED=1
   fi
 done
+
+t_start "hubs — 안 지나던 갈래"
+# 커버리지 <10 → 근사 안내가 붙는다.
+CASES=$((CASES + 1))
+LOWDIR="$T_TMP/hubs-lowcov"; mkdir -p "$LOWDIR"
+env DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 TZ=UTC DT_DATE="$FIXED_DATE" \
+  python3 "$ROOT/lib/gen/hubs.py" "$PATHS" "$CFG" "$SCAN_LOWCOV" "$LOWDIR" >/dev/null 2>&1
+bundle "$LOWDIR" | norm > "$T_TMP/hubs-lowcov-ko.out"
+G=$(golden_path "hubs-lowcov-ko")
+if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then cp "$T_TMP/hubs-lowcov-ko.out" "$G"
+elif cmp -s "$T_TMP/hubs-lowcov-ko.out" "$G" 2>/dev/null; then _t_ok "hubs-lowcov-ko"
+else _t_bad "hubs-lowcov-ko" "골든과 다릅니다" "$(diff "$G" "$T_TMP/hubs-lowcov-ko.out" 2>/dev/null | head -6)"; FAILED=1
+fi
+
+# 이미 있는 파일은 건드리지 않는다 — stdout 에 그 이름이 안 나와야 한다.
+CASES=$((CASES + 1))
+KEEPDIR="$T_TMP/hubs-keep"; mkdir -p "$KEEPDIR"
+cp "$PRESET_OUT/대시보드.md" "$KEEPDIR/"
+env DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 TZ=UTC DT_DATE="$FIXED_DATE" \
+  python3 "$ROOT/lib/gen/hubs.py" "$PATHS" "$CFG" "$SCANOUT" "$KEEPDIR" \
+  > "$T_TMP/hubs-keep-stdout.txt" 2>/dev/null
+{ echo "=== stdout ==="; cat "$T_TMP/hubs-keep-stdout.txt"; echo "=== files ==="; bundle "$KEEPDIR"; } \
+  | norm > "$T_TMP/hubs-keep-ko.out"
+G=$(golden_path "hubs-keep-ko")
+if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then cp "$T_TMP/hubs-keep-ko.out" "$G"
+elif cmp -s "$T_TMP/hubs-keep-ko.out" "$G" 2>/dev/null; then _t_ok "hubs-keep-ko"
+else _t_bad "hubs-keep-ko" "골든과 다릅니다" "$(diff "$G" "$T_TMP/hubs-keep-ko.out" 2>/dev/null | head -6)"; FAILED=1
+fi
+
+# 설정값을 실제로 읽는가 — 템플릿 폴더명 · 개발일지 파일명 접미.
+CASES=$((CASES + 1))
+CUSTDIR="$T_TMP/hubs-custom"; mkdir -p "$CUSTDIR"
+env DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 TZ=UTC DT_DATE="$FIXED_DATE" \
+  python3 "$ROOT/lib/gen/hubs.py" "$PATHS_CUSTOM" "$CFG_NAMING" "$SCANOUT" "$CUSTDIR" >/dev/null 2>&1
+bundle "$CUSTDIR" | norm > "$T_TMP/hubs-custom-ko.out"
+G=$(golden_path "hubs-custom-ko")
+if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then cp "$T_TMP/hubs-custom-ko.out" "$G"
+elif cmp -s "$T_TMP/hubs-custom-ko.out" "$G" 2>/dev/null; then _t_ok "hubs-custom-ko"
+else _t_bad "hubs-custom-ko" "골든과 다릅니다" "$(diff "$G" "$T_TMP/hubs-custom-ko.out" 2>/dev/null | head -6)"; FAILED=1
+fi
 
 t_start "snapshot — 메뉴바용 볼트 상태"
 # ⚠️ cfg 를 **JSON 문자열 인자**로 받는다. today 와 now_ms 를 못 박는다.
@@ -924,6 +984,49 @@ else
   cmpscan scan-en          en -- "$VAULT"
   cmpscan scan-conflict-ko ko -- "$VAULT" "$SCAN_TREE" "$TMPL"
   cmpscan scan-missing-ko  ko -- "/tmp/devtrail-없는볼트"
+
+  # hubs — 이관 완료. 디렉터리에 파일을 쓰므로 결과 전체를 묶어 비교한다.
+  cmphubs() {   # cmphubs <골든이름> <언어> <scan파일> [<미리둘파일>]
+    local name="$1" lang="$2" scanf="$3" preset="${4:-}"
+    local g; g=$(golden_path "$name")
+    [ -f "$g" ] || { _t_bad "헬퍼 = $name" "골든 없음" "$g"; FAILED=1; return 0; }
+    local d="$T_TMP/helper-$name"
+    rm -rf "$d"; mkdir -p "$d"
+    [ -n "$preset" ] && cp "$preset" "$d/"
+    local so="$T_TMP/helper-$name-stdout.txt"
+    env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC DT_DATE="$FIXED_DATE" \
+      "$HELPER" gen-hubs "$PATHS" "$CFG" "$scanf" "$d" > "$so" 2>/dev/null
+    local out="$T_TMP/helper-$name.out"
+    if [ -n "$preset" ]; then
+      { echo "=== stdout ==="; cat "$so"; echo "=== files ==="; bundle "$d"; } | norm > "$out"
+    else
+      bundle "$d" | norm > "$out"
+    fi
+    PORTED=$((PORTED + 1))
+    if cmp -s "$out" "$g"; then _t_ok "헬퍼 = $name"; else
+      _t_bad "헬퍼 ≠ $name" "python 골든과 다릅니다" "$(diff "$g" "$out" | head -8)"
+      FAILED=1
+    fi
+  }
+  cmphubs hubs-ko        ko "$SCANOUT"
+  cmphubs hubs-en        en "$SCANOUT"
+  cmphubs hubs-lowcov-ko ko "$SCAN_LOWCOV"
+  cmphubs hubs-keep-ko   ko "$SCANOUT" "$PRESET_OUT/대시보드.md"
+  # 설정값을 실제로 읽는가 — 전용 대조(paths·cfg 가 다르다).
+  {
+    g=$(golden_path "hubs-custom-ko")
+    d="$T_TMP/helper-hubs-custom"; rm -rf "$d"; mkdir -p "$d"
+    env DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 TZ=UTC DT_DATE="$FIXED_DATE" \
+      "$HELPER" gen-hubs "$PATHS_CUSTOM" "$CFG_NAMING" "$SCANOUT" "$d" >/dev/null 2>&1
+    bundle "$d" | norm > "$T_TMP/helper-hubs-custom.out"
+    PORTED=$((PORTED + 1))
+    if cmp -s "$T_TMP/helper-hubs-custom.out" "$g"; then _t_ok "헬퍼 = hubs-custom-ko"
+    else
+      _t_bad "헬퍼 ≠ hubs-custom-ko" "python 골든과 다릅니다" \
+        "$(diff "$g" "$T_TMP/helper-hubs-custom.out" | head -8)"
+      FAILED=1
+    fi
+  }
 
   # ⚠️ 아직 이관하지 않은 것을 **세어서 말한다.** 침묵하면 "다 됐다" 로 읽힌다.
   TOTAL=$(find "$GOLDEN" -type f | wc -l | tr -d ' ')
