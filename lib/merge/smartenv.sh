@@ -18,7 +18,7 @@ _ob_smartenv() {
   local se; se="$(vault_path)/.smart-env"
   local data="$se/smart_env.json"
   local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
+  local profile="$DT_PRESET/profiles/${mode}.json"
 
   step "$(L "RAG 제외 설정" "RAG exclusions")"
   if [ "$(jq -r '.merge.smart_env // false' "$profile" 2>/dev/null)" != "true" ]; then
@@ -34,7 +34,7 @@ _ob_smartenv() {
   local out; out=$(mktemp)
   DT_FOREIGN_FOLDERS="$(_ob_foreign_folders)" \
   dt_gen gen-smartenv \
-    "$DEVTRAIL_ROOT/preset/tree.json" "$CONFIG_FILE" \
+    "$DT_PRESET/tree.json" "$CONFIG_FILE" \
     "$(vault_root)/$(dt_dir templates)" \
     "$([ -f "$data" ] && printf '%s' "$data")" > "$out" || {
       rm -f "$out"; warn "$(L "제외 설정 생성 실패 — 건드리지 않습니다" "Could not build exclusions — leaving them alone")"; return 0; }

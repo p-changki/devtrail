@@ -63,8 +63,8 @@ _pl_templates() {
   lang=$(printf '%s' "$spec"  | jq -r '.lang')
   vault=$(printf '%s' "$spec" | jq -r '.vault.path')
   vroot=$(printf '%s' "$spec" | jq -r '.vault.root')
-  local src="$DEVTRAIL_ROOT/preset/templates/$lang"
-  [ -d "$src" ] || src="$DEVTRAIL_ROOT/preset/templates/ko"
+  local src="$DT_PRESET/templates/$lang"
+  [ -d "$src" ] || src="$DT_PRESET/templates/ko"
   local tdir; tdir=$(DEVTRAIL_LANG="$lang" dt_dir templates)
   local base="$vault"; [ -n "$vroot" ] && base="$vault/$vroot"
   local f name
@@ -101,7 +101,7 @@ EOF
 _pl_settings() {
   local spec="$1" mode
   mode=$(printf '%s' "$spec" | jq -r '.vault.mode')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
+  local profile="$DT_PRESET/profiles/${mode}.json"
   [ -f "$profile" ] || return 0
   jq -r '
     (.merge // {}) | to_entries | map(select(.value != false)) | map(.key) | .[]
@@ -129,7 +129,7 @@ _pl_risks() {
   local mode vault
   mode=$(printf '%s' "$spec"  | jq -r '.vault.mode')
   vault=$(printf '%s' "$spec" | jq -r '.vault.path')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
+  local profile="$DT_PRESET/profiles/${mode}.json"
 
   local trigger; trigger=$(jq -r '.automove.trigger // "Manual"' "$profile" 2>/dev/null)
   if [ "$trigger" = "Automatic" ]; then

@@ -41,8 +41,8 @@ scan_cmd() {
 
   local out; out=$(mktemp); trap 'rm -f "$out"' RETURN
   dt_gen gen-scan "$vault" \
-    "$DEVTRAIL_ROOT/preset/tree.json" \
-    "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" > "$out" \
+    "$DT_PRESET/tree.json" \
+    "$DT_PRESET/obsidian/hotkeys.tmpl.json" > "$out" \
     || die "$(L "진단 실패" "Scan failed")"
 
   if jq -e '.error' "$out" >/dev/null 2>&1; then

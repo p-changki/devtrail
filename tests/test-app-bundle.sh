@@ -478,6 +478,66 @@ t_start "온보딩 — 번들에서 거짓 안내를 하지 않는다"
 t_eq "curl 안내는 번들이 아닐 때만" "1" \
   "$(printf '%s\n' "$MV" | grep -c 'if CLI.bundled == nil' | tr -d ' ')"
 
+t_start "⚠️ 이름 정규화로 서명이 깨지지 않는다 (M4-5)"
+# ⚠️ 2026-08-24 실물 QA 에서 **배포를 막던** 결함이다.
+#
+#    Finder 로 앱을 드래그하면 한글 파일 이름이 NFC → NFD 로 정규화된다.
+#    코드 서명은 NFC 이름을 봉인했으므로 그 순간 "손상되었습니다" 가 뜬다.
+#    cp·ditto·rsync 는 NFC 를 보존해서 **개발 중에는 재현되지 않았다.**
+#
+#    "NFD 로 바뀌어도 되게" 가 아니라 **"정규화될 이름이 아예 없게"** 고쳤다.
+t_eq "번들에 비ASCII 이름이 없다" "0" \
+  "$(find "$APP" -depth 1 -o -true 2>/dev/null >/dev/null; \
+     python3 -c '
+import os, sys
+n = 0
+for r, d, f in os.walk(sys.argv[1]):
+    for x in f + d:
+        if any(ord(c) > 127 for c in x):
+            n += 1
+print(n)' "$APP")"
+
+# ⚠️ 그리고 **실제로 정규화해 보고** 서명이 버티는지 본다. 위 검사가
+#    "없다" 를 말한다면, 이 검사는 "없어서 안전하다" 를 보인다.
+NTMP=$(mktemp -d)
+ditto "$APP" "$NTMP/DevTrail.app" 2>/dev/null
+python3 -c '
+import os, sys, unicodedata
+for r, d, f in os.walk(sys.argv[1], topdown=False):
+    for name in f + d:
+        nd = unicodedata.normalize("NFD", name)
+        if nd != name:
+            os.rename(os.path.join(r, name), os.path.join(r, nd))' "$NTMP/DevTrail.app" 2>/dev/null
+t_eq "NFD 로 정규화해도 서명이 유효하다" "0" \
+  "$(codesign --verify --deep --strict "$NTMP/DevTrail.app" >/dev/null 2>&1; echo $?)"
+rm -rf "$NTMP"
+
+t_start "⚠️ preset 이 압축돼 실리고 풀린다"
+t_eq "preset.zip 이 있다" "yes" \
+  "$([ -f "$APP/Contents/Resources/preset.zip" ] && echo yes || echo no)"
+t_eq "preset/ 디렉터리는 없다" "no" \
+  "$([ -d "$APP/Contents/Resources/preset" ] && echo yes || echo no)"
+# ⚠️ 압축했다는 것과 쓸 수 있다는 것은 다르다. 번들 CLI 로 실제로 풀어 본다.
+PH=$(mktemp -d)
+PDIR=$(DEVTRAIL_ROOT="$APP/Contents/Resources" DEVTRAIL_HOME="$PH" \
+       bash -c '. "$1/lib/common.sh" >/dev/null 2>&1; echo "$DT_PRESET"' \
+       _ "$APP/Contents/Resources" 2>/dev/null)
+t_eq "번들에서 preset 이 풀린다" "yes" \
+  "$([ -d "$PDIR/templates" ] && echo yes || echo no)"
+t_eq "노트 수가 저장소와 같다" "$(find "$ROOT/preset" -name '*.md' | wc -l | tr -d ' ')" \
+  "$(find "$PDIR" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+# ⚠️ **NFC 로 풀려야** 한다. tar 는 여기서 NFD 로 분해한다 — 그러면 서명은
+#    지켜져도 사용자 볼트에 들어가는 노트 이름이 바뀐다.
+t_eq "한글 이름이 NFC 로 풀린다" "0" \
+  "$(python3 -c '
+import os, sys, unicodedata
+d = os.path.join(sys.argv[1], "guides", "ko")
+if not os.path.isdir(d):
+    print(1); raise SystemExit
+bad = [n for n in os.listdir(d) if unicodedata.normalize("NFC", n) != n]
+print(len(bad))' "$PDIR" 2>/dev/null)"
+rm -rf "$PH"
+
 t_start "번들 CLI 자산이 코드와 어긋나지 않는다"
 # ⚠️ 목록을 손으로 관리하지 않는다. 코드의 $DEVTRAIL_ROOT/<무엇> 참조에서
 #    유도한다 — 새 참조가 생기면 여기서 잡힌다.

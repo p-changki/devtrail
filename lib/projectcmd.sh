@@ -13,7 +13,7 @@
 #    여러 레포를 한 섹션에 모으려면 각각 등록하고 같은 --section 을 준다.
 # ⚠️ 한글 앞 변수는 중괄호로: "${n}개"  (bash 3.2)
 
-DT_SKELETON="${DEVTRAIL_ROOT}/preset/project-skeleton.json"
+DT_SKELETON="${DT_PRESET}/project-skeleton.json"
 
 project_cmd() {
   require_config
@@ -95,8 +95,8 @@ _pj_readme() {
   [ -d "$dir" ] || return 0
   [ -f "$out" ] && return 0
 
-  local src="$DEVTRAIL_ROOT/preset/hub/project-readme.$(dt_lang).md"
-  [ -f "$src" ] || src="$DEVTRAIL_ROOT/preset/hub/project-readme.ko.md"
+  local src="$DT_PRESET/hub/project-readme.$(dt_lang).md"
+  [ -f "$src" ] || src="$DT_PRESET/hub/project-readme.ko.md"
   [ -f "$src" ] || { warn "$(L "허브 원본 없음" "Hub source missing"): $src"; return 0; }
 
   local folder; folder="$(vault_rel "$(dt_dir projects)")/$key"

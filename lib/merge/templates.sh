@@ -19,7 +19,7 @@
 _ob_templates() {
   step "$(L "노트 템플릿" "Note templates")"
   local dest; dest="$(vault_root)/$(dt_dir templates)"
-  local base="$DEVTRAIL_ROOT/preset/templates"
+  local base="$DT_PRESET/templates"
   local src="$base/$(dt_lang)"
   [ -d "$base/ko" ] || { warn "$(L "템플릿 없음" "Template missing"): $base"; return 0; }
 
@@ -58,8 +58,8 @@ _ob_templates() {
   # ⚠️ 이건 사용자가 삽입하는 템플릿이 아니라 '데이터'다. _devtrail-paths.md 와
   #    같은 성격이라 밑줄로 시작하는 이름을 쓴다.
   # ⚠️ 갱신본을 받아야 하므로 이건 매번 덮어쓴다. 사용자가 고칠 파일이 아니다.
-  local hub="$DEVTRAIL_ROOT/preset/hub/project-readme.$(dt_lang).md"
-  [ -f "$hub" ] || hub="$DEVTRAIL_ROOT/preset/hub/project-readme.ko.md"
+  local hub="$DT_PRESET/hub/project-readme.$(dt_lang).md"
+  [ -f "$hub" ] || hub="$DT_PRESET/hub/project-readme.ko.md"
   if [ -f "$hub" ]; then
     local hubdst="$dest/_devtrail-project-readme.md"
     local existed=0

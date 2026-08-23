@@ -127,7 +127,7 @@ dt_dir() {
   local key="$1" v tree
   v=$(cfg ".dirs[\"$key\"]" '')
   [ -n "$v" ] && { printf '%s' "$v"; return 0; }
-  tree="${DEVTRAIL_TREE:-$DEVTRAIL_ROOT/preset/tree.json}"
+  tree="${DEVTRAIL_TREE:-$DT_PRESET/tree.json}"
   [ -f "$tree" ] || return 0
   # 언어에 따라 path 또는 path_en 을 고른다.
   #
@@ -182,6 +182,66 @@ require_bins() {
     die "$(L "필수 도구 없음" "Missing required tools"): ${missing[*]}  ('devtrail doctor')"
   fi
 }
+
+# preset 자산이 있는 곳 (ADR 0006 M4-5).
+#
+# ⚠️ 왜 이런 우회가 필요한가 — 2026-08-24 실물 QA
+#
+#    preset 안에는 **한글 이름 파일 27개**가 있다(가이드·템플릿). 그런데
+#    Finder 로 앱을 드래그하면 파일 이름이 **NFC → NFD 로 정규화**된다.
+#    코드 서명은 NFC 이름을 봉인했으므로, 이름이 바뀌는 순간 macOS 는
+#    "봉인된 파일이 없다" 로 보고 **"손상되었습니다"** 를 띄운다.
+#
+#    같은 바이너리 · 같은 195개 파일인데도 그렇다. 손상이 아니라 **이름
+#    표기가 달라진 것**이다.
+#
+#    cp·ditto·rsync 는 NFC 를 보존해서 개발 중에는 한 번도 재현되지 않았다.
+#    **사용자가 하는 방법(드래그)에서만** 깨졌다.
+#
+# ⚠️ 그래서 번들에는 `preset/` 대신 **`preset.tar` 하나**를 넣는다. 봉인되는
+#    이름이 ASCII 하나뿐이면 정규화가 무엇이든 서명이 깨지지 않는다.
+#    안의 이름은 tar 가 바이트 그대로 지킨다.
+#
+# ⚠️ 푸는 곳은 사용자 홈이다. 번들 안은 읽기 전용이고, 그래야 서명도 성하다.
+dt_preset_dir() {
+  # 1) 그냥 있으면 그것을 쓴다 (저장소 · git 설치본)
+  [ -d "$DEVTRAIL_ROOT/preset" ] && { printf '%s' "$DEVTRAIL_ROOT/preset"; return 0; }
+
+  # ⚠️ **zip 이다, tar 가 아니다.** macOS 의 bsdtar 는 푸는 과정에서 한글
+  #    이름을 NFD 로 분해한다(실측). 그러면 서명은 지켜져도 **사용자 볼트에
+  #    들어가는 노트 이름이 바뀐다.** `ditto -c -k` 로 만든 zip 은 NFC 를
+  #    그대로 지킨다 — 확인하고 골랐다.
+  local arc="$DEVTRAIL_ROOT/preset.zip"
+  [ -f "$arc" ] || { printf '%s' "$DEVTRAIL_ROOT/preset"; return 1; }
+
+  # 2) 내용으로 캐시 이름을 정한다 — 앱이 바뀌면 자동으로 새 디렉터리다.
+  #    버전 문자열을 쓰면 같은 버전에서 자산만 바뀔 때 낡은 것을 계속 쓴다.
+  local sum dst
+  sum=$(shasum -a 256 "$arc" 2>/dev/null | cut -c1-16)
+  [ -n "$sum" ] || { printf '%s' "$DEVTRAIL_ROOT/preset"; return 1; }
+  dst="$DEVTRAIL_HOME/assets/preset-$sum"
+
+  [ -d "$dst" ] && { printf '%s' "$dst"; return 0; }
+
+  # 3) 원자적으로 푼다. 반쯤 풀린 디렉터리를 다음 사람이 진짜라고 읽으면 안 된다.
+  local tmp
+  tmp="$dst.tmp.$$"
+  rm -rf "$tmp"
+  mkdir -p "$tmp" || { printf '%s' "$DEVTRAIL_ROOT/preset"; return 1; }
+  if ditto -x -k "$arc" "$tmp" 2>/dev/null; then
+    mv "$tmp" "$dst" 2>/dev/null || rm -rf "$tmp"
+  else
+    rm -rf "$tmp"
+  fi
+  [ -d "$dst" ] && printf '%s' "$dst" || printf '%s' "$DEVTRAIL_ROOT/preset"
+}
+
+# ⚠️ 여기서 **한 번만** 정한다. 35곳이 각자 부르면 그 자체가 두 번째 출처다.
+#
+#    저장소·git 설치본에는 preset/ 이 그대로 있으므로 값만 넣고 끝난다 —
+#    번들일 때만 압축을 푼다.
+DT_PRESET=$(dt_preset_dir)
+export DT_PRESET
 
 # 생성기를 돌릴 수 있는가 (ADR 0006 D7-B).
 #

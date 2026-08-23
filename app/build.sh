@@ -154,13 +154,32 @@ chmod +x "$OUT/Contents/Helpers/jq"
 # ⚠️ 목록의 정본은 **코드다.** tests/check-bundle-assets.py 가
 #    `$DEVTRAIL_ROOT/<무엇>` 참조를 훑어 여기 빠진 게 있으면 세운다 —
 #    손으로 적은 목록은 새 참조가 생기는 순간 조용히 낡는다.
-for _a in bin lib plugin preset templates skills VERSION CHANGELOG.md; do
+for _a in bin lib plugin templates skills VERSION CHANGELOG.md; do
   [ -e "../$_a" ] || { echo "❌ CLI 자산 없음: $_a"; exit 1; }
   cp -R "../$_a" "$OUT/Contents/Resources/$_a" \
     || { echo "❌ CLI 자산 복사 실패: $_a"; exit 1; }
 done
 chmod +x "$OUT/Contents/Resources/bin/devtrail" \
   || { echo "❌ bin/devtrail 에 실행 권한을 주지 못했습니다"; exit 1; }
+
+# ⚠️ preset 만 **압축해서** 넣는다 (ADR 0006 M4-5).
+#
+#    preset 에는 한글 이름 파일 27개가 있다. 그런데 Finder 로 앱을 드래그하면
+#    파일 이름이 **NFC → NFD 로 정규화**된다. 코드 서명은 NFC 이름을
+#    봉인했으므로, 이름이 바뀌는 순간 macOS 가 **"손상되었습니다"** 를 띄운다.
+#    같은 바이너리 · 같은 파일인데도 그렇다.
+#
+#    cp·ditto·rsync 는 NFC 를 보존해서 개발 중에는 한 번도 재현되지 않았다.
+#    **사용자가 하는 방법에서만** 깨졌다 (2026-08-24 실물 QA).
+#
+#    봉인되는 이름이 ASCII 하나(`preset.zip`)뿐이면 정규화가 무엇이든
+#    서명이 깨지지 않는다. 안의 이름은 zip 이 바이트 그대로 지킨다.
+#
+# ⚠️ **zip 이다, tar 가 아니다.** bsdtar 는 푸는 과정에서 한글 이름을 NFD 로
+#    분해한다(실측). 그러면 서명은 지켜져도 사용자 볼트에 들어가는 노트
+#    이름이 바뀐다. `ditto -c -k` 는 NFC 를 지킨다.
+ditto -c -k --sequesterRsrc ../preset "$OUT/Contents/Resources/preset.zip" \
+  || { echo "❌ preset 을 압축하지 못했습니다"; exit 1; }
 
 # ⚠️ 라이선스를 **원본 그대로** 넣는다. MIT 하나가 아니라 다섯 블록이다
 #    (jq · Lucent decNumber · ICU · KTH · NetBSD strptime). 요약하면 틀린다.
@@ -233,6 +252,25 @@ JQ_GOT=$("$OUT/Contents/Helpers/jq" --version 2>/dev/null) || {
 }
 [ "$JQ_GOT" = "$JQ_WANT" ] || { echo "❌ 번들 jq 가 $JQ_GOT 라고 답합니다 (락: $JQ_WANT)"; exit 1; }
 echo "  jq 실행 확인 ($JQ_GOT)"
+
+# ⚠️ preset.zip 이 **실제로 풀리고 이름이 성한지** 본다. 압축했다는 것과
+#    쓸 수 있다는 것은 다르다.
+PTMP=$(mktemp -d)
+if ditto -x -k "$OUT/Contents/Resources/preset.zip" "$PTMP" 2>/dev/null; then
+  want=$(find ../preset -name '*.md' | wc -l | tr -d ' ')
+  got=$(find "$PTMP" -name '*.md' | wc -l | tr -d ' ')
+  if [ "$want" != "$got" ]; then
+    echo "❌ preset.zip 의 노트 수가 다릅니다: 원본 ${want} · 푼 것 ${got}"
+    rm -rf "$PTMP"; exit 1
+  fi
+  # ⚠️ 한글 이름이 그대로인지 — 이게 이번 사고의 핵심이다.
+  if [ -n "$(find "$PTMP" -name '*.md' -print0 2>/dev/null | xargs -0 -n1 basename 2>/dev/null | grep -c '[가-힣]')" ]; then
+    echo "  preset.zip 확인 (${got}개 · 한글 이름 보존)"
+  fi
+  rm -rf "$PTMP"
+else
+  echo "❌ preset.zip 을 풀지 못했습니다"; rm -rf "$PTMP"; exit 1
+fi
 
 echo "✅ $OUT"
 

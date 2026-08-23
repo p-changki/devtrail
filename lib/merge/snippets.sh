@@ -19,8 +19,8 @@ _ob_snippets() {
   local dir="$dot/snippets"
   local app="$dot/appearance.json"
   local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
-  local src="$DEVTRAIL_ROOT/preset/obsidian/snippets"
+  local profile="$DT_PRESET/profiles/${mode}.json"
+  local src="$DT_PRESET/obsidian/snippets"
 
   step "$(L "CSS 스니펫" "CSS snippets")"
   [ "$(jq -r '.merge.snippets // false' "$profile" 2>/dev/null)" = "true" ] \

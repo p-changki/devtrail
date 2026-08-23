@@ -29,6 +29,11 @@ RES = APP / "Contents" / "Resources"
 SCAN_DIRS = ["bin", "lib"]
 
 # ⚠️ 넣지 **않는** 것과 그 이유. 이유가 사라지면 예외도 사라져야 한다.
+# ⚠️ 압축해서 싣는 것. 이름이 달라지므로 존재 검사를 따로 한다.
+ARCHIVED = {
+    "preset": "preset.zip",
+}
+
 EXEMPT = {
     "app": "`devtrail app` 은 개발자 명령이고(앱 자신을 빌드한다), "
            "dt_helper 는 번들 Contents/Helpers 를 2순위로 먼저 본다",
@@ -78,6 +83,10 @@ def main():
     for name in sorted(refs):
         if name in EXEMPT:
             continue
+        if name in ARCHIVED:
+            if not (RES / ARCHIVED[name]).is_file():
+                bad.append("압축 자산이 번들에 없습니다: Resources/%s" % ARCHIVED[name])
+            continue
         if not (RES / name).exists():
             bad.append("번들에 없습니다: Resources/%s  (참조: %s)"
                        % (name, ", ".join(sorted(refs[name])[:3])))
@@ -90,7 +99,27 @@ def main():
         if name not in refs:
             bad.append("예외가 더 이상 쓰이지 않습니다: %s — EXEMPT 에서 지우세요" % name)
 
-    # ── ③ 실린 CLI 가 실제로 도는가 ─────────────────────────────────────────
+    # ── ③ ⚠️ 번들에 **비ASCII 이름이 없어야** 한다 ──────────────────────────
+    #
+    # ⚠️ 2026-08-24 실물 QA 에서 배포를 막던 결함이다.
+    #
+    #    preset 에는 한글 이름 파일 27개가 있었다. Finder 로 앱을 드래그하면
+    #    파일 이름이 **NFC → NFD 로 정규화**되는데, 코드 서명은 NFC 이름을
+    #    봉인했으므로 그 순간 macOS 가 **"손상되었습니다"** 를 띄운다.
+    #    같은 바이너리 · 같은 195개 파일인데도 그렇다.
+    #
+    #    cp·ditto·rsync 는 NFC 를 보존해서 개발 중에는 한 번도 재현되지
+    #    않았다 — **사용자가 하는 방법에서만** 깨졌다.
+    #
+    # ⚠️ 그래서 "NFD 로 바뀌어도 되게" 가 아니라 **"정규화될 이름이 아예
+    #    없게"** 로 고쳤다. 이 검사가 그 성질을 지킨다.
+    for p in sorted(RES.rglob("*")):
+        name = p.name
+        if any(ord(c) > 127 for c in name):
+            bad.append("번들에 비ASCII 이름이 있습니다 — 서명이 깨집니다: %s"
+                       % p.relative_to(RES))
+
+    # ── ④ 실린 CLI 가 실제로 도는가 ─────────────────────────────────────────
     #
     # ⚠️ 파일이 다 있다는 것과 도는 것은 다르다.
     cli = RES / "bin" / "devtrail"
@@ -103,8 +132,8 @@ def main():
             print("   - %s" % b)
         return 1
 
-    print("✅ 번들 CLI 자산 일치 — 참조 %d종 · 예외 %d종 (이유 기록됨)"
-          % (len(refs) - len(EXEMPT), len(EXEMPT)))
+    print("✅ 번들 CLI 자산 일치 — 참조 %d종 · 압축 %d종 · 예외 %d종 · 비ASCII 이름 0"
+          % (len(refs) - len(EXEMPT), len(ARCHIVED), len(EXEMPT)))
     return 0
 
 
