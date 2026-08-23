@@ -1,0 +1,64 @@
+{
+  "_why": "골든이 지나지 않는 가지를 태우기 위한 **합성 트리**다. preset/tree.json 은 실제 데이터라 (1) no_automove 폴더에 태그 달린 자식이 없고 (2) 중복 태그가 없다. 그래서 anm 의 '부모 제외를 자식에 전파' 와 '안정 정렬' 이 한 번도 시험되지 않았다 — 변이가 살아남아서 알았다(2026-08-23). 트리는 앞으로 바뀔 데이터이므로 이 가지들도 지켜야 한다. 또 프리셋에는 **슬래시 없는 태그**가 없어서 project(-1)와 구체성 0을 구별할 수 없었다 — 'flat' 을 둔다. 'flat' 만으로는 부족했다 — 알파벳순으로도 project 보다 앞이라 구체성 -1 을 0 으로 바꿔도 순서가 같았다. project 뒤로 정렬되는 'zflat' 을 함께 둔다.",
+  "folders": [
+    {
+      "key": "flat",
+      "path": "평면",
+      "tag": "flat",
+      "children": []
+    },
+    {
+      "key": "zflat",
+      "path": "제트평면",
+      "tag": "zflat",
+      "children": []
+    },
+    {
+      "key": "kept",
+      "path": "보관",
+      "no_automove": true,
+      "tag": "type/kept",
+      "children": [
+        {
+          "key": "kept-a",
+          "path": "가",
+          "tag": "type/kept/a"
+        },
+        {
+          "key": "kept-b",
+          "path": "나",
+          "tag": "type/kept/b"
+        }
+      ]
+    },
+    {
+      "key": "dup1",
+      "path": "중복1",
+      "tag": "type/same",
+      "children": []
+    },
+    {
+      "key": "dup2",
+      "path": "중복2",
+      "tag": "type/same",
+      "children": []
+    },
+    {
+      "key": "deep",
+      "path": "깊이",
+      "tag": "type/deep",
+      "children": [
+        {
+          "key": "deep-x",
+          "path": "x",
+          "tag": "type/deep/x/y"
+        }
+      ]
+    },
+    {
+      "key": "noidx",
+      "path": "색인제외",
+      "no_index": true
+    }
+  ]
+}

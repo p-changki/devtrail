@@ -1,0 +1,52 @@
+{
+  "trigger_auto_manual": "Automatic",
+  "use_regex_to_check_for_tags": false,
+  "use_regex_to_check_for_excluded_folder": false,
+  "statusBar_trigger_indicator": true,
+  "excluded_folder": [
+    {
+      "folder": "notes/보관"
+    },
+    {
+      "folder": "notes/색인제외"
+    },
+    {
+      "folder": ".obsidian"
+    },
+    {
+      "folder": ".trash"
+    }
+  ],
+  "folder_tag_pattern": [
+    {
+      "folder": "notes/깊이/x",
+      "tag": "#type/deep/x/y",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/깊이",
+      "tag": "#type/deep",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/중복1",
+      "tag": "#type/same",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/중복2",
+      "tag": "#type/same",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/평면",
+      "tag": "#flat",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/제트평면",
+      "tag": "#zflat",
+      "pattern": ""
+    }
+  ]
+}

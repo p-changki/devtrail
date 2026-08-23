@@ -23,6 +23,7 @@ func usage() -> Never {
     사용법: devtrail-helper <명령> [인자…]
 
       gen-smartenv <tree> <config> <templates_dir> [<existing>]
+      gen-anm      <tree> <config> <profile> [<existing>]
       version
 
     ⚠️ 아직 이관 중입니다. 없는 명령은 셸이 python3 로 폴백합니다.
@@ -37,6 +38,8 @@ let rest = Array(args.dropFirst())
 switch command {
 case "gen-smartenv":
     exit(SmartEnv.run(rest))
+case "gen-anm":
+    exit(AutoNoteMover.run(rest))
 case "version":
     // ⚠️ 버전을 여기 박지 않는다. VERSION 파일이 정본이다 (ADR 0006 §6).
     //    빌드가 주입하기 전까지는 모른다고 말한다 — 지어내지 않는다.
