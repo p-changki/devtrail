@@ -1707,7 +1707,82 @@ else
   dim "   node 없음 — 건너뜀"
 fi
 # ⚠️ 모듈이 안 붙었을 때 화면이 조용히 비지 않는다.
-t_contains "미로드를 화면이 말한다" "if (!RM) {" "$(cat "$VIEWJS")"
+# ⚠️ 이 검사는 화면 모듈이 아니라 main 에 있어야 한다 — 화면은 로딩이
+#    성공해야 존재하므로 거기서 '안 붙었으면' 을 보는 것은 닿지 않는다.
+t_contains "미로드를 main 이 말한다" "LoadFailureView" "$(cat "$JS")"
 t_contains "무엇을 하면 되는지" "install --apply" "$(cat "$JS")"
+
+t_start "모듈이 obsidian 을 직접 부르지 않는다"
+# ⚠️ 절대 경로로 불러온 모듈은 'obsidian' 을 못 찾는다 — 그 이름은 플러그인
+#    진입점(main.js)에서만 풀린다. 2026-08-23 에 view.js 가 그것을 부르는
+#    바람에 플러그인이 통째로 안 떴다:
+#
+#      Cannot find module 'obsidian'
+#      Require stack: …/plugins/devtrail-command-center/view.js
+#
+#    main.js 만 부를 수 있고, 나머지는 인자로 받는다.
+# (주석의 설명은 세지 않는다 — 왜 안 하는지 적어 둔 자리다.)
+cat > "$T_TMP/bare.py" <<'PYEOF'
+import io, os, re, sys
+# 주석이 아닌 줄의 require('pkg') 만 센다 — 왜 안 하는지 적어 둔 주석은
+# 위반이 아니다.
+pat = re.compile(r"require\('[a-z@]")
+out = []
+for f in sorted(sys.argv[1:]):
+    for line in io.open(f, encoding='utf-8'):
+        st = line.strip()
+        if st.startswith(('*', '//', '/*')):
+            continue
+        if pat.search(line):
+            out.append(os.path.basename(f))
+            break
+print(' '.join(out))
+PYEOF
+t_eq "main.js 만 부른다" "main.js" \
+  "$(python3 "$T_TMP/bare.py" "$ROOT/plugin"/*.js)"
+# ⚠️ 절대 경로 require 는 우리 파일에만 쓴다. 패키지 이름을 그렇게 부르면
+#    같은 방식으로 죽는다.
+t_eq "모듈이 남의 패키지를 부르지 않는다" "" \
+  "$(python3 "$T_TMP/bare.py" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
+t_contains "화면이 obsidian 을 주입받는다" "obsidian," \
+  "$(sed -n '/module.exports = function makeView/,/} = deps;/p' "$VIEWJS")"
+
+t_start "화면이 main 의 변수를 넘겨다보지 않는다"
+# ⚠️ view.js 가 main.js 의 모듈 변수(RM)를 참조해 render 가 ReferenceError 로
+#    죽었다. 화면은 **빈 채로** 떴고 오류 메시지조차 없었다 — 오류가 보이는
+#    것보다 나쁘다. 2026-08-23.
+#
+#    화면은 인자로 받은 것만 쓴다. main 에만 있는 이름이 보이면 실패다.
+cat > "$T_TMP/scope.py" <<'PYEOF'
+import io, re, sys
+view = io.open(sys.argv[1], encoding='utf-8').read()
+# factory 가 받는 이름들
+m = re.search(r'const \{(.*?)\} = deps;', view, re.S)
+injected = set(re.findall(r'[A-Za-z_][A-Za-z0-9_]*', m.group(1))) if m else set()
+# main.js 에만 있는 모듈 변수 — 화면이 보면 안 된다
+main_only = ['RM', 'bindModules', 'loadModules', 'MODEL_KEYS', 'COMMAND_KEYS', 'TEXT']
+bad = []
+for name in main_only:
+    if name in injected:
+        continue
+    for i, line in enumerate(view.split('\n'), 1):
+        st = line.strip()
+        if st.startswith(('*', '//', '/*')):
+            continue
+        if re.search(r'(?<![A-Za-z0-9_.])' + name + r'(?![A-Za-z0-9_])', line):
+            bad.append(f'{name}:{i}')
+            break
+print(' '.join(bad))
+PYEOF
+t_eq "main 전용 이름이 없다" "" "$(python3 "$T_TMP/scope.py" "$VIEWJS")"
+
+t_start "로딩 실패를 main 이 화면으로 말한다"
+# ⚠️ 실패 처리는 실패를 아는 층에 둔다. 화면 모듈은 factory 가 돈 뒤에만
+#    존재하므로, 거기서 '안 붙었으면' 을 검사하는 것은 애초에 닿지 않는다.
+MAINSRC="$(cat "$JS")"
+t_contains "실패를 기억한다" "this.loadError" "$MAINSRC"
+t_contains "실패해도 뷰를 등록한다" "registerView" "$MAINSRC"
+t_contains "안내 화면이 있다" "devtrail-cc-recovery" "$MAINSRC"
+t_contains "무엇을 하면 되는지" "install --apply" "$MAINSRC"
 
 t_end

@@ -11,11 +11,20 @@
  *
  * ⚠️ 노트를 쓰지 않는다. 이 화면은 읽기 모델이고, 만드는 일은 등록된
  *    Templater 명령이 한다 (ADR 0002).
+ *
+ * ⚠️ **여기서 require('obsidian') 을 하지 않는다.** 절대 경로로 불러온 모듈은
+ *    'obsidian' 을 못 찾는다 — 그 이름은 플러그인 진입점(main.js)에서만
+ *    풀린다. 2026-08-23 에 이것으로 플러그인이 통째로 안 떴다:
+ *
+ *      Cannot find module 'obsidian'
+ *      Require stack: …/plugins/devtrail-command-center/view.js
+ *
+ *    obsidian 도 다른 의존성과 똑같이 인자로 받는다.
  */
-const obsidian = require('obsidian');
 
 module.exports = function makeView(deps) {
   const {
+    obsidian,
     // 읽기 모델
     DAY_MS,
     STALE_DAYS,
@@ -31,6 +40,7 @@ module.exports = function makeView(deps) {
     parseDue,
     isStale,
     relativeDays,
+    daysBetween,
     normalizeStage,
     todayDevlog,
     collect,
@@ -69,23 +79,6 @@ module.exports = function makeView(deps) {
       const root = this.contentEl;
       root.empty();
       root.addClass('devtrail-command-center');
-
-      // ⚠️ 모듈이 안 붙었으면 여기서 멈춘다. 없는 함수를 부르면 화면이 텅 비고
-      //    사용자는 왜인지 모른다.
-      const plugin = this.app.plugins && this.app.plugins.plugins
-        ? this.app.plugins.plugins[PLUGIN_ID] : null;
-      if (!RM) {
-        const box = root.createEl('div', { cls: 'devtrail-cc-recovery' });
-        box.createEl('p', { text: 'DevTrail 플러그인 파일을 불러오지 못했습니다' });
-        if (plugin && plugin.loadError) {
-          box.createEl('p', { text: plugin.loadError, cls: 'devtrail-cc-muted' });
-        }
-        box.createEl('p', {
-          text: '터미널에서 devtrail command-center install --apply 를 실행한 뒤 Obsidian 을 다시 여세요.',
-          cls: 'devtrail-cc-muted',
-        });
-        return;
-      }
 
       const map = await readPathMap(this.app);
       const t = textFor(map.ok ? map.data.lang : 'ko');

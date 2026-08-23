@@ -99,9 +99,12 @@ function bindModules(m) {
   // ⚠️ 화면에 필요한 것을 **명시적으로** 넘긴다. 전역으로 새어 들어가면
   //    무엇이 무엇에 기대는지 아무도 모르게 된다.
   const view = m.makeView({
+    // ⚠️ obsidian 을 넘긴다. 절대 경로로 불러온 모듈은 그 이름을 못 푼다 —
+    //    플러그인 진입점에서만 풀리는 이름이다.
+    obsidian,
     DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, BOARD_COLUMNS,
     isUserNote, localDate, openTasks, openTasksInVault, buildFlow, weeklyBars,
-    parseDue, isStale, relativeDays, normalizeStage, todayDevlog, collect,
+    parseDue, isStale, relativeDays, daysBetween, normalizeStage, todayDevlog, collect,
     CAPTURES, CORE_SEARCH, templaterCommandId, captureFile, commandExists,
     findSearchCommand, searchRunner, hotkeyLabel, isSubmitKey,
     icon, isMainLeaf, readPathMap, VIEW_TYPE, PLUGIN_ID, PATH_MAP_FILE, textFor,
@@ -229,6 +232,37 @@ function isMainLeaf(leaf, rootSplit) {
 
 
 
+/* 모듈을 못 불러왔을 때의 화면.
+ *
+ * ⚠️ 빈 화면을 띄우지 않는다. 무엇이 왜 안 되는지, 무엇을 하면 되는지 말한다. */
+class LoadFailureView extends obsidian.ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.plugin = plugin;
+  }
+
+  getViewType() { return VIEW_TYPE; }
+  getDisplayText() { return 'DevTrail'; }
+  getIcon() { return 'alert-triangle'; }
+
+  async onOpen() {
+    const root = this.contentEl;
+    root.empty();
+    root.addClass('devtrail-command-center');
+    const box = root.createEl('div', { cls: 'devtrail-cc-recovery' });
+    box.createEl('p', { text: 'DevTrail 플러그인 파일을 불러오지 못했습니다' });
+    if (this.plugin && this.plugin.loadError) {
+      box.createEl('p', { text: this.plugin.loadError, cls: 'devtrail-cc-muted' });
+    }
+    box.createEl('p', {
+      text: '터미널에서 devtrail command-center install --apply 를 실행한 뒤 Obsidian 을 다시 여세요.',
+      cls: 'devtrail-cc-muted',
+    });
+  }
+
+  async onClose() { this.contentEl.empty(); }
+}
+
 module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
   async onload() {
     // ⚠️ 모듈을 가장 먼저 묶는다. 실패하면 뷰를 등록하지 않고 이유를 남긴다 —
@@ -245,7 +279,15 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
       );
     }
 
-    this.registerView(VIEW_TYPE, (leaf) => new CommandCenterView(leaf));
+    // ⚠️ 실패해도 뷰를 등록한다. 등록하지 않으면 사용자가 ⌘⇧Y 를 눌러도
+    //    아무 일이 안 일어나고, 무엇이 잘못됐는지 알 길이 없다.
+    //
+    // ⚠️ 이 안내는 여기 있어야 한다. 화면 모듈은 로딩이 성공해야 존재하므로
+    //    거기서 '안 붙었으면' 을 검사하는 것은 애초에 닿지 않는다 —
+    //    실제로 그렇게 만들었다가 render 가 ReferenceError 로 죽어 화면이
+    //    **빈 채로** 떴다(2026-08-23). 오류가 보이는 것보다 나쁘다.
+    this.registerView(VIEW_TYPE, (leaf) =>
+      CommandCenterView ? new CommandCenterView(leaf) : new LoadFailureView(leaf, this));
 
     this.addRibbonIcon('layout-dashboard', 'DevTrail', () => this.activate());
     this.addCommand({
