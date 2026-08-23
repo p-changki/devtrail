@@ -156,38 +156,17 @@ t_eq "늦게 실행"     "true"  "$(jq -r '.[] | select(.alias|test("자동")) |
 t_eq "일찍 실행 안 함" "false" "$(jq -r '.[] | select(.alias|test("자동")) | .debounce.executeEarly' "$SC")"
 t_ne "쿨다운이 0 이 아님" "0"   "$(jq -r '.[] | select(.alias|test("자동")) | .debounce.cooldownDuration' "$SC")"
 
-# ── 웹 대시보드도 같은 해석기를 쓰는가 ──────────────────────────────────────
+# ⚠️ 웹 대시보드의 경로 해석 테스트는 **폐지와 함께 지웠다**(2026-08-24,
+#    ADR 0006 D5). 그 회귀는 여기 남긴다 — 같은 병이 세 번째로 돌아오지
+#    않게 하기 위해서다:
 #
-# ⚠️ 회귀: server.py 가 dirs.devlog 를 직접 읽고 기본값 "devlog" 를 자기가
-#    갖고 있었다. 새로 설치한 볼트는 dirs 가 비어 있어서 화면이
-#    <루트>/devlog/... 를 가리키며 "개발일지 없음" 이라고 말했다 —
-#    파일은 개발/개발일지 에 멀쩡히 있었다(2026-08-22 실물 QA).
-t_start "대시보드의 경로 해석"
-SRV="$ROOT/templates/dashboard/server.py"
-t_file "server.py" "$SRV"
-t_contains "CLI 로 해석한다" 'DEVTRAIL_BIN, "path", "devlog", "--rel"' "$(cat "$SRV")"
-# 자기만의 기본값을 가지면 화면과 실제가 갈린다.
-t_not_contains "기본값을 품지 않는다" '"dirs.devlog", "devlog"' "$(cat "$SRV")"
-
-# 실제로 해석되는지 — 문자열 검사만으로는 '부르지만 결과를 버리는' 코드를 못 잡는다.
-t_vault dash
-t_config notes
-(
-  export DEVTRAIL_ROOT="$ROOT"
-  . "$ROOT/lib/common.sh"; . "$ROOT/lib/init/prompts.sh"; . "$ROOT/lib/init/write.sh"
-  _init_render_scripts >/dev/null 2>&1
-)
-got=$(DEVTRAIL_BIN="$ROOT/bin/devtrail" DEVTRAIL_CONFIG="$T_CONFIG" python3 -c '
-import os, sys, json, importlib.util
-spec = importlib.util.spec_from_file_location("srv", sys.argv[1])
-m = importlib.util.module_from_spec(spec)
-sys.argv = [sys.argv[0]]
-spec.loader.exec_module(m)
-cfg = json.load(open(os.environ["DEVTRAIL_CONFIG"], encoding="utf-8"))
-print(m.devlog_path(cfg, "2026-08-22"))
-' "$SRV" 2>/dev/null)
-t_eq "개발일지 경로가 실제 폴더" "$T_VAULT/notes/개발/개발일지/2026-08-22 devlog.md" "$got"
-t_not_contains "루트 바로 밑이 아니다" "notes/devlog/" "$got"
+#      server.py 가 dirs.devlog 를 직접 읽고 기본값 "devlog" 를 자기가
+#      갖고 있었다. 새로 설치한 볼트는 dirs 가 비어 있어 화면이
+#      <루트>/devlog/… 를 가리키며 "개발일지 없음" 이라고 말했다 —
+#      파일은 개발/개발일지 에 멀쩡히 있었다(2026-08-22 실물 QA).
+#
+#    같은 결함을 생성 스크립트에서 한 번, 대시보드에서 한 번, 메뉴바 앱
+#    에서 한 번 고쳤다. 아래 "메뉴바 앱의 경로 해석" 이 그 세 번째다.
 
 # ── 메뉴바 앱도 같은 해석기를 쓰는가 ────────────────────────────────────────
 #

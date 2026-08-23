@@ -438,7 +438,7 @@ t_contains "모르는 spec_version 을 말해준다" "spec_version" "$out2"
 #    라우터 한 곳에서 가로챈다.
 t_start "--help 은 설정 없이도 답한다"
 for c in scan augment doctor path config template project skills plugins \
-         update undo app dashboard setup activity weekly sync; do
+         update undo app setup activity weekly sync; do
   out=$(DEVTRAIL_CONFIG="$T_TMP/nope.json" "$ROOT/bin/devtrail" "$c" --help 2>&1)
   t_not_contains "$c — init 을 요구하지 않는다" "설정이 없습니다" "$out"
   t_ne "$c — 무언가 알려준다" "" "$out"

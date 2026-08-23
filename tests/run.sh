@@ -89,7 +89,7 @@ check_shell() {
 }
 
 check_python() {
-  python3 -m py_compile lib/gen/*.py templates/dashboard/server.py || return 1
+  python3 -m py_compile lib/gen/*.py lib/snapshot.py || return 1
   echo "  파이썬 OK"
 }
 

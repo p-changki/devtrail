@@ -205,7 +205,6 @@ devtrail undo [ID]         되돌리기
 devtrail config [get|set]  설정
 devtrail path [키]          볼트 경로 조회
 devtrail app <하위>         메뉴바 앱 (install|start|stop|status|uninstall)
-devtrail dashboard         웹 대시보드
 devtrail install-schedule  자동 실행 등록
 devtrail uninstall         자동화 제거 (볼트는 건드리지 않음)
 ```
