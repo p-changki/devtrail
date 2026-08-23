@@ -18,6 +18,16 @@ macOS 러너가 무료 한도의 거의 전부를 쓴다(실행 1회 38분 중 3
 세 전제 중 하나만 어긋나도 CI 는 **녹색인 채로** 아무것도 지키지 않는다.
 비용을 아끼는 설정이 안전을 대신 깎지 않도록 여기서 못 박는다.
 
+⚠️ 정책 (2026-08-23): **로컬 우선**
+
+이 워크플로는 일상 PR 에서 자동으로 돌지 않는다. 트리거는 태그와 수동
+실행뿐이다. DevTrail 의 정식 게이트는 로컬이고, GitHub Actions 는 릴리스
+검증만 맡는다 — 이 계정의 다른 프로덕션 저장소 예산을 지키기 위해서다.
+
+그래서 여기서 하나를 더 못 박는다: **pull_request 나 branch push 트리거가
+되살아나면 실패한다.** 편의로 한 줄 되돌리기가 너무 쉽고, 되돌아간 것을
+아무도 눈치채지 못한 채 예산이 나간다.
+
 ⚠️ CI ↔ run.sh ↔ 로컬 게이트의 **대응을 여기서 단언한다** (2026-08-23 추가)
 
 문서에 손으로 적은 대응표는 곧 거짓말이 된다. 이 저장소는 dirs.devlog
@@ -53,6 +63,29 @@ def job_block(src, name):
     return rest[:nxt.start()] if nxt else rest
 
 
+def check_triggers(src, bad):
+    """트리거가 태그·수동뿐인가 — 일상 자동 실행이 되살아나지 않았는가."""
+    head = src[:src.index('jobs:')] if 'jobs:' in src else src
+    # 주석을 걷어낸다. 주석에 적힌 pull_request 는 되살아난 게 아니다.
+    live = re.sub(r'#[^\n]*', '', head)
+
+    if re.search(r'^\s*pull_request:', live, re.M):
+        bad.append('pull_request 트리거가 되살아났습니다 — 일상 PR 이 다시 '
+                   'macOS 러너를 씁니다 (실행 1회 38분)')
+
+    m = re.search(r'^\s*push:\s*\n((?:\s+\S.*\n)*)', live, re.M)
+    if m:
+        block = m.group(1)
+        if re.search(r'^\s*branches:', block, re.M):
+            bad.append('push 에 branches 가 되살아났습니다 — main/dev 푸시마다 '
+                       'CI 가 돕니다. 태그만 남기세요')
+        if not re.search(r'^\s*tags:', block, re.M):
+            bad.append('push 에 tags 가 없습니다 — 릴리스 검증 경로가 사라집니다')
+
+    if not re.search(r'^\s*workflow_dispatch:', live, re.M):
+        bad.append('workflow_dispatch 가 없습니다 — 필요할 때 손으로 돌릴 '
+                   '길이 없어집니다')
+
 def run_groups(src):
     """run.sh 가 실제로 쓰는 그룹 이름. `run <group> "..."` 에서 읽는다."""
     return sorted(set(re.findall(r'^run\s+([a-z]+)\s', src, re.M)))
@@ -62,6 +95,38 @@ def run_vocab(src):
     """run.sh 가 인자로 받아들이는 모드. case 문에서 읽는다."""
     m = re.search(r'^case "\$GROUP" in\s*\n\s*([a-z|]+)\)', src, re.M)
     return sorted(m.group(1).split('|')) if m else []
+
+
+# ⚠️ 문구가 정책과 어긋나면 사람이 잘못된 기대를 갖는다. "CI 가 최종
+#    게이트" 라고 읽은 사람은 로컬을 건너뛰고, 그러면 아무도 안 본 코드가
+#    머지된다. 정책이 바뀌었으니 옛 문구가 되살아나면 실패한다.
+STALE_WORDING = [
+    '최종 게이트',
+    '최종 재검증',
+    '최종 안전망',
+    '독립적인 최종',
+    'CI 가 독립적으로',
+]
+WORDING_FILES = [
+    'README.md',
+    'scripts/verify-local.sh',
+    'scripts/hooks/pre-push',
+    '.github/workflows/ci.yml',
+]
+
+
+def check_wording(bad):
+    """정책이 바뀌기 전의 문구가 남아 있지 않은가."""
+    for rel in WORDING_FILES:
+        f = ROOT / rel
+        if not f.exists():
+            continue
+        text = f.read_text(encoding='utf-8')
+        for w in STALE_WORDING:
+            if w in text:
+                bad.append("%s 에 옛 정책 문구가 남아 있습니다: '%s' — "
+                           "GitHub Actions 는 더 이상 일상 PR 의 게이트가 "
+                           "아닙니다" % (rel, w))
 
 
 def check_correspondence(bad):
@@ -153,7 +218,10 @@ def main():
         if not re.search(r'runs-on:\s*macos', behav):
             bad.append('behav 가 macOS 러너가 아닙니다 — bash 3.2 함정을 재현하지 못합니다')
 
-        # ② 태그에서 도는가. if 가 없으면 항상 도니 통과.
+        # ② 태그에서 도는가.
+        #    ⚠️ 워크플로가 태그·수동에서만 뜨므로 if 가 **없는 것이 정상**이다.
+        #       if 를 달았다면 태그를 포함해야 한다 — 아니면 릴리스가 bash 3.2
+        #       검사 없이 빌드된다.
         cond = re.search(r'^    if:(.*?)(?=^    [a-z-]+:)', behav, re.M | re.S)
         if cond:
             text = ' '.join(cond.group(1).split())
@@ -173,6 +241,9 @@ def main():
         elif 'behav' not in needs.group(1):
             bad.append('app 이 behav 에 기대지 않습니다: [%s]' % needs.group(1))
 
+    check_triggers(src, bad)
+    check_wording(bad)
+
     check_correspondence(bad)
 
     if bad:
@@ -181,7 +252,7 @@ def main():
             print('   - %s' % b)
         return 1
 
-    print('✅ 릴리스 경로 + CI·run.sh·로컬 게이트 대응 확인')
+    print('✅ 트리거는 태그·수동뿐 · 릴리스 경로 · CI↔run.sh↔로컬 대응 확인')
     return 0
 
 
