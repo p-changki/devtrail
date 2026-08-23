@@ -204,6 +204,23 @@ confirm() {
 # shellcheck source=lib/i18n.sh
 . "$DEVTRAIL_ROOT/lib/i18n.sh"
 
+# ⚠️ 해결된 언어를 **자식 프로세스에 물려준다.** 여기 한 곳에서만 한다.
+#
+#    python 생성기들은 DEVTRAIL_LANG 환경변수로만 언어를 안다 (lib/gen/i18n.py).
+#    설정 파일을 인자로 받지만 거기서 lang 을 읽지 않는다. 그런데 이 변수를
+#    export 하던 곳은 init.sh 와 setup/spec.sh **둘뿐**이었다.
+#
+#    그래서 `devtrail obsidian apply` 처럼 그 둘을 안 거치는 경로에서는
+#    셸은 설정대로 en 인데 python 은 기본값 ko 로 떨어졌다. 영어 사용자의
+#    Templater 설정에 templates_folder 가 "템플릿" 으로 박혔다 — 그 볼트에
+#    없는 폴더다. 2026-08-23 에 골든 계약 테스트의 변이 검증에서 드러났다.
+#
+#    호출부 12곳에 흩뿌리지 않는다. 하나를 빠뜨리면 같은 병이 재발한다.
+#    dt_lang 은 이미 DEVTRAIL_LANG 을 1순위로 읽으므로 멱등이다 —
+#    바깥에서 넘긴 일회성 지정은 그대로 존중된다.
+DEVTRAIL_LANG="$(dt_lang)"
+export DEVTRAIL_LANG
+
 # 변경 저널. 모든 명령이 쓸 수 있어야 하므로 여기서 읽어들인다.
 # common.sh 의 die/warn/dim/vault_path 를 쓰므로 반드시 파일 끝에서 부른다.
 # shellcheck source=lib/journal.sh

@@ -90,10 +90,16 @@ gen() {
   local name="$1" lang="$2"; shift 3
   CASES=$((CASES + 1))
   local out="$T_TMP/$name.out" err="$T_TMP/$name.err" rc=0
-  # ⚠️ lang 이 'unset' 이면 DEVTRAIL_LANG 을 **넘기지 않는다.** 그게 실제
-  #    운영 경로다 — `devtrail augment` 는 이 변수를 export 하지 않는다.
-  #    항상 지정해서 시험하면 기본값 경로가 한 번도 안 돌고, i18n 의
-  #    기본 언어를 바꿔도 테스트가 통과한다(2026-08-23 변이 생존).
+  # ⚠️ lang 이 'unset' 이면 DEVTRAIL_LANG 을 **넘기지 않는다.**
+  #
+  #    2026-08-23 이전에는 이게 실제 운영 경로였다 — `devtrail obsidian apply`
+  #    가 이 변수를 export 하지 않아 영어 사용자도 python 쪽에서 ko 를 받았다.
+  #    그 결함은 lib/common.sh 에서 고쳤다(D6). 이제 CLI 를 거치면 항상
+  #    설정 언어가 전달된다.
+  #
+  #    그래도 이 케이스를 **남긴다**: python 을 직접 부르는 경로가 남아 있고,
+  #    Swift 헬퍼도 같은 기본값(ko)을 지켜야 한다. 그리고 이걸 빼면 i18n 의
+  #    기본 언어를 바꿔도 테스트가 통과한다(실제로 변이가 생존했다).
   if [ "$lang" = unset ]; then
     env -u DEVTRAIL_LANG LC_ALL=C.UTF-8 TZ=UTC \
       python3 "$@" > "$out" 2> "$err" || rc=$?
