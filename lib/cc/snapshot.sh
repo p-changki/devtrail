@@ -22,7 +22,7 @@ _cc_snapshot() {
     esac
     shift
   done
-  require_config; require_bins jq python3
+  require_config; require_bins jq; require_gen
 
   local root today devlog_rel devlog_path tpl_rel
   root=$(vault_root)

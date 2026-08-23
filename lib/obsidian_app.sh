@@ -54,6 +54,8 @@ oa_vault_id() {
   if has md5; then h=$(printf '%s' "$1" | md5)
   elif has md5sum; then h=$(printf '%s' "$1" | md5sum | cut -d' ' -f1)
   elif has python3; then
+    # ⚠️ macOS 에는 md5 가 항상 있으므로 여기까지 오지 않는다. python3 과
+    #    md5 가 같은 값을 내는 것은 확인했다 (빈 문자열 · 한글 포함).
     h=$(python3 -c 'import sys,hashlib; print(hashlib.md5(sys.argv[1].encode()).hexdigest())' "$1")
   else
     # 최후의 수단. hex 는 아니지만 키로만 쓰이므로 길이만 맞추면 된다.
@@ -106,9 +108,15 @@ oa_register() {
 oa_open() {
   local vault="$1"
   oa_installed || return 1
-  if has python3; then
+  # ⚠️ jq 로 인코딩한다 (D7-B). 예전에는 python3 만 이 일을 했고, python3 이
+  #    없는 기계에서는 **볼트를 지정하지 못한 채** Obsidian 만 열렸다.
+  #
+  #    jq 의 @uri 가 python 의 urllib.parse.quote(safe="") 와 같은 결과를
+  #    내는지 실측으로 확인했다 — 한글 · 공백 · `~._-` · `!()*'` · `%#?&` ·
+  #    `+=` · `@:` 8종 전부 일치 (2026-08-24).
+  if has jq; then
     local enc
-    enc=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$vault" 2>/dev/null)
+    enc=$(jq -rn --arg s "$vault" '$s|@uri' 2>/dev/null)
     [ -n "$enc" ] && { open "obsidian://open?path=$enc" >/dev/null 2>&1 && return 0; }
   fi
   open -a "$(oa_app_path)" >/dev/null 2>&1

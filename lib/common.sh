@@ -183,6 +183,21 @@ require_bins() {
   fi
 }
 
+# 생성기를 돌릴 수 있는가 (ADR 0006 D7-B).
+#
+# ⚠️ **python3 을 무조건 요구하지 않는다.** 생성기 8종은 Swift 헬퍼로
+#    이관됐다(M2·M3). 헬퍼가 있으면 python3 은 폴백일 뿐인데, 가드가 계속
+#    요구하면 **돌 수 있는 기능을 막는다** — 사용자에게는 그냥 버그다.
+#
+# ⚠️ 헬퍼가 없을 때의 python3 폴백과 안내는 그대로 둔다. 없앤 것은
+#    "헬퍼가 있는데도 막는" 경우뿐이다.
+require_gen() {
+  dt_helper >/dev/null 2>&1 && return 0
+  has python3 && return 0
+  die "$(L "생성기가 없습니다 — Swift 헬퍼도 python3 도 없습니다" \
+          "No generator — neither the Swift helper nor python3 is available"): ('devtrail doctor')"
+}
+
 # ── Misc ─────────────────────────────────────────────────────────────────────
 # 날짜(BSD/GNU 양쪽 지원). today_offset -1 → 어제
 today_offset() {

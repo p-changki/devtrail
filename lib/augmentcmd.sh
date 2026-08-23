@@ -17,7 +17,7 @@ DT_TREE="${DEVTRAIL_TREE:-$DEVTRAIL_ROOT/preset/tree.json}"
 
 augment_cmd() {
   require_config
-  require_bins jq python3
+  require_bins jq; require_gen
   [ -f "$DT_TREE" ] || die "$(L "트리 정의 없음" "Tree definition missing"): $DT_TREE"
 
   local apply=0 want=""
