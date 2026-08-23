@@ -108,6 +108,28 @@ cp "$HELPER_BIN" "$OUT/Contents/Helpers/devtrail-helper"
 cp ../vendor/jq/build/jq "$OUT/Contents/Helpers/jq"
 chmod +x "$OUT/Contents/Helpers/jq"
 
+# ── CLI 자산 ────────────────────────────────────────────────────────────────
+#
+# ⚠️ 왜 번들 안에 넣나 (ADR 0006 M4-3)
+#
+#    메뉴바 앱은 화면일 뿐이고, 실제 일은 전부 CLI 가 한다. 앱만 배포하면
+#    설치한 사람은 "켜지는데 아무것도 안 되는" 상태를 본다.
+#
+# ⚠️ 여기가 `Contents/Resources` **바로 아래**여야 한다. dt_helper 가
+#    `$DEVTRAIL_ROOT/../Helpers` 를 보기 때문이다 — 한 겹 더 넣으면
+#    `Resources/cli/../Helpers` 가 되어 헬퍼도 번들 jq 도 못 찾는다.
+#
+# ⚠️ 목록의 정본은 **코드다.** tests/check-bundle-assets.py 가
+#    `$DEVTRAIL_ROOT/<무엇>` 참조를 훑어 여기 빠진 게 있으면 세운다 —
+#    손으로 적은 목록은 새 참조가 생기는 순간 조용히 낡는다.
+for _a in bin lib plugin preset templates skills VERSION CHANGELOG.md; do
+  [ -e "../$_a" ] || { echo "❌ CLI 자산 없음: $_a"; exit 1; }
+  cp -R "../$_a" "$OUT/Contents/Resources/$_a" \
+    || { echo "❌ CLI 자산 복사 실패: $_a"; exit 1; }
+done
+chmod +x "$OUT/Contents/Resources/bin/devtrail" \
+  || { echo "❌ bin/devtrail 에 실행 권한을 주지 못했습니다"; exit 1; }
+
 # ⚠️ 라이선스를 **원본 그대로** 넣는다. MIT 하나가 아니라 다섯 블록이다
 #    (jq · Lucent decNumber · ICU · KTH · NetBSD strptime). 요약하면 틀린다.
 mkdir -p "$OUT/Contents/Resources/licenses"

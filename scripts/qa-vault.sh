@@ -27,14 +27,18 @@ DT="$ROOT/bin/devtrail"
 OUTDIR="$ROOT/qa-results"
 KEEP=0
 VAULT=""
+BUNDLE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --keep) KEEP=1 ;;
+    --bundle) BUNDLE=1 ;;
     --out) shift; OUTDIR="${1:-$OUTDIR}" ;;
     -h|--help)
       cat <<'USAGE'
-사용법: ./scripts/qa-vault.sh [--keep] [--out <디렉터리>]
+사용법: ./scripts/qa-vault.sh [--keep] [--bundle] [--out <디렉터리>]
+
+  --bundle  배포되는 .app 사본의 CLI·plugin 으로 돌린다 (M4-3)
 
   격리된 임시 볼트를 만들어 설치·업데이트·undo 를 돌리고,
   사람이 읽는 요약과 기계가 읽는 JSON 을 남깁니다.
@@ -137,12 +141,34 @@ jq -n --arg v "$VAULT" '{
 # ⚠️ 저장소의 plugin/ 을 **건드리지 않는다.** 사본을 만들어 그것만 고친다.
 #    예전 판은 원본을 고쳤다 되돌렸는데, 중간에 끊기면 저장소가 더럽혀진
 #    채로 남는다. DT_CC_SRC_OVERRIDE 가 있으니 쓸 이유가 없다.
-SRC="$TMP/plugin-src"
-cp -R "$ROOT/plugin" "$SRC"
+#
+# ⚠️ --bundle 은 다르다 (ADR 0006 M4-3). 배포되는 .app 을 사본으로 떠서
+#    **그 안의 CLI 와 그 안의 plugin** 으로 돌린다. 오버라이드를 **쓰지
+#    않는다** — 오버라이드를 쓰면 `$DEVTRAIL_ROOT/plugin` 해석 자체를
+#    건너뛰게 되어, 정작 확인하려던 경로를 안 태운다.
+if [ "$BUNDLE" = 1 ]; then
+  APPSRC="$ROOT/app/build/DevTrail.app"
+  [ -d "$APPSRC" ] || { printf '%s\n' "❌ 번들이 없습니다: $APPSRC (./app/build.sh)" >&2; exit 2; }
+  APPCOPY="$TMP/DevTrail.app"
+  cp -R "$APPSRC" "$APPCOPY" || { printf '%s\n' "❌ 번들 사본을 만들지 못했습니다" >&2; exit 2; }
+  DT="$APPCOPY/Contents/Resources/bin/devtrail"
+  [ -x "$DT" ] || { printf '%s\n' "❌ 번들 안 CLI 가 실행 가능하지 않습니다: $DT" >&2; exit 2; }
+  SRC="$APPCOPY/Contents/Resources/plugin"
+  CC_OVERRIDE=""
+else
+  SRC="$TMP/plugin-src"
+  cp -R "$ROOT/plugin" "$SRC"
+  CC_OVERRIDE="$SRC"
+fi
 
 run() {
-  DEVTRAIL_HOME="$QHOME" DEVTRAIL_CONFIG="$CFG" \
-  DT_CC_SRC_OVERRIDE="$SRC" "$DT" "$@"
+  if [ -n "$CC_OVERRIDE" ]; then
+    DEVTRAIL_HOME="$QHOME" DEVTRAIL_CONFIG="$CFG" \
+    DT_CC_SRC_OVERRIDE="$CC_OVERRIDE" "$DT" "$@"
+  else
+    # ⚠️ 번들 모드: $DEVTRAIL_ROOT/plugin 이 실제로 해석되는지 본다.
+    DEVTRAIL_HOME="$QHOME" DEVTRAIL_CONFIG="$CFG" "$DT" "$@"
+  fi
 }
 
 # ── 검사 기록 ────────────────────────────────────────────────────────────────
