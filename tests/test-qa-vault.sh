@@ -96,4 +96,41 @@ t_eq "kill/pkill/quit 을 부르지 않는다" "0" \
   "$(printf '%s' "$SRC" | grep -cE '^[^#]*(pkill|killall|osascript.*quit)' | tr -d ' ')"
 t_contains "떠 있으면 안내만 한다" "강제 종료하지 않습니다" "$SRC"
 
+t_start "⚠️ 결과 JSON 이 실제로 채워진다"
+# ⚠️ 2026-08-23: `printf ... | python3 - ... <<'PY'` 로 넘겼더니 heredoc 이
+#    stdin 을 가져가 파이프 데이터가 파이썬에 **도달하지 않았다.** JSON 은
+#    passed:19 로 멀쩡해 보이는데 checks 배열이 통째로 비어 있었다.
+#    그 뒤엔 jq 가 쓴 여러 줄 JSON 이 TSV 를 쪼개 1건이 사라졌다.
+#    "파일을 만들었다" 와 "그 안에 내용이 있다" 는 다른 문제다.
+SRC=$(cat "$HARNESS")
+t_eq "결과를 파이프로 파이썬에 넘기지 않는다" "0" \
+  "$(printf '%s' "$SRC" | grep -cE '^[^#]*\$RESULTS" \| python3' | tr -d ' ')"
+t_contains "결과를 파일로 넘긴다" 'results.tsv' "$SRC"
+t_contains "값을 한 줄로 편다" 'tr ' "$SRC"
+t_contains "개행을 지운다" "n\\t" "$SRC"
+# 하니스 스스로 기록 수를 대조하는가
+# ⚠️ 이름이 남아 있는 것과 그 비교가 **살아 있는** 것은 다르다.
+#    처음엔 'NREC' 만 찾아서, if 를 false 로 죽여도 통과했다(변이 생존).
+t_eq "기록 수 대조가 살아 있다" "1" \
+  "$(printf '%s' "$SRC" | grep -cE '^[^#]*\[ "\$NREC" != "\$\(\(PASS \+ FAIL\)\)" \]' | tr -d ' ')"
+t_contains "어긋나면 결과 파일을 믿지 말라고 한다" "결과 파일을 믿을 수 없습니다" "$SRC"
+
+t_start "실제로 돌려 JSON 을 확인한다"
+# ⚠️ 위는 소스를 읽을 뿐이다. 진짜로 채워지는지는 돌려 봐야 안다.
+if "$HARNESS" --out "$T_TMP/out" >"$T_TMP/run.log" 2>&1; then RC=0; else RC=$?; fi
+t_eq "하니스가 통과한다" "0" "$RC"
+J="$T_TMP/out/qa-vault.qa.json"
+t_file "JSON 이 생겼다" "$J"
+SUM=$(python3 -c "
+import json,io,sys
+d=json.load(io.open(sys.argv[1],encoding='utf-8'))
+n=len(d['checks'])
+print('%d %d %d %s %s' % (n, d['passed'], d['failed'],
+      all(c['ok'] for c in d['checks']), d['restart_verified']))" "$J" 2>/dev/null)
+set -- $SUM
+t_eq "기록 수 = 통과 + 실패" "$(( ${2:-0} + ${3:-0} ))" "${1:-x}"
+t_eq "0건이 아니다" "no" "$([ "${1:-0}" = 0 ] && echo yes || echo no)"
+t_eq "전부 통과" "True" "${4:-x}"
+t_eq "restart_verified 는 False 다" "False" "${5:-x}"
+
 t_end

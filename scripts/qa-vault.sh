@@ -158,7 +158,13 @@ chk() {   # chk <이름> <기대> <실제>
   else
     printf '  ✗ %s\n     기대: %s\n     실제: %s\n' "$name" "$want" "$got"
   fi
-  RESULTS="$RESULTS$(printf '%s\t%s\t%s\t%s\n' "$name" "$ok" "$want" "$got")"
+  # ⚠️ 값을 한 줄로 편다. jq 가 쓴 core-plugins.json 은 **여러 줄**이라
+  #    그대로 넣으면 TSV 한 줄이 여러 줄로 쪼개지고, 그 기록이 통째로
+  #    사라진다 — 2026-08-23 에 19건 중 1건이 그렇게 없어졌다.
+  local fw fg
+  fw=$(printf '%s' "$want" | tr '\n\t' '  ')
+  fg=$(printf '%s' "$got"  | tr '\n\t' '  ')
+  RESULTS="$RESULTS$(printf '%s\t%s\t%s\t%s\n' "$name" "$ok" "$fw" "$fg")"
   RESULTS="$RESULTS
 "
 }
@@ -314,12 +320,17 @@ echo
 mkdir -p "$OUTDIR"
 JSON="$OUTDIR/qa-vault.qa.json"
 
-printf '%s' "$RESULTS" | python3 - "$JSON" "$PASS" "$FAIL" "$OBS" "$VAULT" <<'PY'
+# ⚠️ 파이프로 넘기지 않는다. `python3 - ... <<'PY'` 는 heredoc 이 stdin 을
+#    가져가므로 파이프 데이터가 파이썬에 **도달하지 않는다.** 2026-08-23 에
+#    실제로 그랬다 — checks 배열이 통째로 빈 채로 passed:19 만 찍혀서,
+#    JSON 은 멀쩡해 보이는데 아무 상세도 없었다. 파일로 넘긴다.
+printf '%s' "$RESULTS" > "$TMP/results.tsv"
+python3 - "$JSON" "$PASS" "$FAIL" "$OBS" "$VAULT" "$TMP/results.tsv" <<'PY'
 import io, json, sys
 
-path, npass, nfail, obs, vault = sys.argv[1:6]
+path, npass, nfail, obs, vault, tsv = sys.argv[1:7]
 checks = []
-for line in sys.stdin.read().split('\n'):
+for line in io.open(tsv, encoding='utf-8').read().split('\n'):
     if not line.strip():
         continue
     parts = line.split('\t')
@@ -354,8 +365,17 @@ io.open(path, 'w', encoding='utf-8').write(
     json.dumps(out, ensure_ascii=False, indent=2) + '\n')
 PY
 
+# ⚠️ 쓴 것을 **읽어서 확인한다.** 파일을 만들었다는 것과 그 안에 내용이
+#    있다는 것은 다른 문제다.
+NREC=$(python3 -c "import json,io,sys;print(len(json.load(io.open(sys.argv[1],encoding='utf-8'))['checks']))" "$JSON" 2>/dev/null || echo 0)
+if [ "$NREC" != "$((PASS + FAIL))" ]; then
+  echo "❌ JSON 에 기록된 검사가 $NREC 건인데 실제로는 $((PASS + FAIL)) 건입니다"
+  echo "   결과 파일을 믿을 수 없습니다: $JSON"
+  FAIL=$((FAIL + 1))
+fi
+
 echo "━━ 결과"
-echo "  통과 ${PASS}건 · 실패 ${FAIL}건"
+echo "  통과 ${PASS}건 · 실패 ${FAIL}건 · JSON 기록 ${NREC}건"
 echo "  JSON: $JSON"
 echo
 echo "  ⚠️ 이 하니스는 **파일만** 봅니다. Obsidian 안에서 실제로 로드되고"
