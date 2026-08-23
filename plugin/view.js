@@ -31,10 +31,11 @@ module.exports = function makeView(deps) {
     FLOW_WEEKS,
     RECENT_PAGE,
     BOARD_COLUMNS,
-    isUserNote,
     localDate,
     openTasks,
     openTasksInVault,
+    userNotes,
+    noteTimesByDir,
     buildFlow,
     weeklyBars,
     parseDue,
@@ -150,7 +151,11 @@ module.exports = function makeView(deps) {
 
       this.paths = map.data.paths;
       this.lang = map.data.lang;
-      const model = collect(this.app, map.data.paths);
+      // ⚠️ 볼트는 렌더당 **한 번만** 훑는다. 예전에는 collect · 할 일 · 기록
+      //    흐름 · 그리고 프로젝트 **행마다** 따로 훑었다 — 2026-08-23 측정:
+      //    노트 10000 · 프로젝트 200 에서 스캔 203회 · 130ms.
+      this.files = userNotes(this.app, this.paths);
+      const model = collect(this.app, map.data.paths, this.files);
       const devlog = todayDevlog(this.app, map.data);
       const body = root.createEl('div', { cls: 'devtrail-cc-body' });
 
@@ -186,10 +191,7 @@ module.exports = function makeView(deps) {
      *    스크롤 아래로 밀어냈다. 만들기는 ⌘P 로 간다. */
     async viewHome(body, t, model, devlog) {
       const now = Date.now();
-      const files = this.app.vault.getMarkdownFiles()
-        .filter((f) => isUserNote(f.path, this.paths))
-        .map((f) => ({ ctime: f.stat.ctime }));
-      const flow = buildFlow(files, now, FLOW_WEEKS);
+      const flow = buildFlow(this.files, now, FLOW_WEEKS);
 
       const top = body.createEl('div', { cls: 'devtrail-cc-grid-2' });
       this.panelFlow(top, t, flow);
@@ -292,7 +294,7 @@ module.exports = function makeView(deps) {
 
       // ⚠️ 읽기는 비동기다. 화면을 먼저 그리고 채운다 — 목록을 기다리느라
       //    나머지 패널이 늦게 뜨면 "느린 대시보드" 가 된다.
-      const tasks = await openTasksInVault(this.app, this.paths, 5);
+      const tasks = await openTasksInVault(this.app, this.paths, 5, this.files);
       countEl.setText(String(tasks.length));
       if (tasks.length === 0) {
         list.createEl('p', { text: t.noTasks, cls: 'devtrail-cc-muted' });
@@ -343,6 +345,8 @@ module.exports = function makeView(deps) {
       const rows = model.projects.map((p) => ({
         p, col: normalizeStage(p.stage), stale: isStale(p.mtime, now, STALE_DAYS),
       }));
+      // 폴더별 수정 시각을 **한 번** 모은다. 행마다 볼트를 훑지 않는다.
+      const times = noteTimesByDir(this.files);
       const staleN = rows.filter((r) => r.stale).length;
       if (staleN > 0) {
         right.createEl('span', { text: `● ${t.stale} ${staleN}`, cls: 'devtrail-cc-warn devtrail-cc-mono' });
@@ -399,7 +403,8 @@ module.exports = function makeView(deps) {
 
         // 최근 4주 기록 — 프로젝트 폴더 안 노트를 주별로 센다.
         const spark = tr.createEl('span', { cls: 'devtrail-cc-spark' });
-        const bars = weeklyBars(this.projectNoteTimes(r.p), now, 4);
+        const dir = r.p.file.path.slice(0, r.p.file.path.lastIndexOf('/'));
+        const bars = weeklyBars(times.get(dir) || [], now, 4);
         const peak = Math.max(...bars, 1);
         for (const b of bars) {
           const lvl = b === 0 ? 0 : Math.min(4, 1 + Math.round((b / peak) * 3));
@@ -539,16 +544,6 @@ module.exports = function makeView(deps) {
           this.render();
         });
       }
-    }
-
-    /* 프로젝트 폴더 안 노트들의 수정 시각.
-     *
-     * ⚠️ 태그가 아니라 폴더로 본다 — 이 볼트는 프로젝트를 폴더로 나눈다. */
-    projectNoteTimes(p) {
-      const dir = p.file.path.slice(0, p.file.path.lastIndexOf('/'));
-      return this.app.vault.getMarkdownFiles()
-        .filter((f) => f.path.startsWith(dir + '/'))
-        .map((f) => f.stat.mtime);
     }
 
     /* ── 지표 ─────────────────────────────────────────────────────────────
