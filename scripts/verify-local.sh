@@ -84,6 +84,20 @@ if [ "$MODE" = all ]; then
   else
     FAIL=1
   fi
+
+  echo
+  echo "━━ QA 볼트 — 배포되는 .app 으로 (M4-3)"
+  # ⚠️ 위 실행은 **저장소의** CLI 로 돌았다. 사용자가 받는 것은 .app 안의
+  #    CLI 다 — 둘은 다를 수 있고, 다를 때 아무도 모른다.
+  #
+  #    여기서는 .app 사본의 bin/devtrail 과 그 안의 plugin 으로 같은 19건을
+  #    다시 돌린다. DT_CC_SRC_OVERRIDE 를 쓰지 않으므로
+  #    `$DEVTRAIL_ROOT/plugin` 해석 자체가 시험된다.
+  if ./scripts/qa-vault.sh --bundle; then
+    :
+  else
+    FAIL=1
+  fi
 fi
 
 echo

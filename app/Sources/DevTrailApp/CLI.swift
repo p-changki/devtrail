@@ -14,11 +14,32 @@ enum CLI {
         var text: String { (out + err).trimmingCharacters(in: .whitespacesAndNewlines) }
     }
 
+    /// 앱 번들 안에 함께 실린 CLI (ADR 0006 M4-3).
+    ///
+    /// ⚠️ `Contents/Resources/bin/devtrail` 이다. CLI 는 자기 위치에서
+    ///    `DEVTRAIL_ROOT` 를 계산하므로, 여기서 부르면 `lib`·`plugin`·
+    ///    `preset`·`templates`·`skills` 도 전부 번들 것을 쓴다.
+    static var bundled: String? {
+        let p = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/Resources/bin/devtrail").path
+        return FileManager.default.isExecutableFile(atPath: p) ? p : nil
+    }
+
     /// devtrail 실행 파일 위치.
-    /// 1) 환경변수 DEVTRAIL_BIN  2) 앱 번들 옆  3) 흔한 설치 경로
+    /// 1) 환경변수 DEVTRAIL_BIN  2) **앱 번들 안**  3) 흔한 설치 경로
+    ///
+    /// ⚠️ 번들이 설치본보다 **먼저**다. 앱과 CLI 는 한 릴리즈로 함께 나가고,
+    ///    섞이면 사용자 볼트가 조용히 어긋난다 — 릴리즈 매니페스트(M6)가
+    ///    막으려는 바로 그 어긋남이다. 사용자가 따로 설치한 CLI 는 터미널에서
+    ///    그대로 쓰인다(D4 공존); 앱이 그걸 대신 부르지 않을 뿐이다.
+    ///
+    /// ⚠️ 예전 주석은 "2) 앱 번들 옆" 이라고 적혀 있었는데 코드는 번들을
+    ///    보지 않았다. 주석이 거짓말을 하고 있었다.
     static var binary: String {
         if let env = ProcessInfo.processInfo.environment["DEVTRAIL_BIN"],
            FileManager.default.isExecutableFile(atPath: env) { return env }
+
+        if let b = bundled { return b }
 
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let candidates = [
@@ -45,6 +66,19 @@ enum CLI {
         let extra = "/opt/homebrew/bin:/usr/local/bin:\(home)/.local/bin"
         env["PATH"] = extra + ":" + (env["PATH"] ?? "/usr/bin:/bin")
         env["NO_COLOR"] = "1"          // 메뉴에 ANSI 이스케이프가 섞이지 않게
+
+        // ⚠️ **코드 위치를 바꾸는 환경변수는 물려주지 않는다** (ADR 0006 M4-3).
+        //
+        //    이 셋은 개발·테스트용 우회로다. 사용자 환경에 남아 있으면
+        //    (`launchctl setenv`, 터미널에서 띄운 경우) 번들 앱이 조용히
+        //    **저장소 쪽 코드**를 쓴다 — 그리고 그 기계에서만 그런다.
+        //
+        //    설정 위치(DEVTRAIL_HOME·DEVTRAIL_CONFIG)는 사용자의 정당한
+        //    선택이므로 건드리지 않는다. 지우는 건 **코드를 옮기는 것**뿐이다.
+        for k in ["DEVTRAIL_ROOT", "DT_CC_SRC_OVERRIDE", "DT_HELPER_OVERRIDE"] {
+            env.removeValue(forKey: k)
+        }
+
         p.environment = env
     }
 
