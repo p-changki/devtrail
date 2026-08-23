@@ -1,0 +1,20 @@
+{
+  "folder_templates": [
+    {
+      "folder": "notes/개발/개발일지",
+      "template": "notes/템플릿/개발일지양식.md"
+    },
+    {
+      "folder": "notes/회고",
+      "template": "notes/템플릿/회고 템플릿.md"
+    }
+  ],
+  "templates_folder": "notes/템플릿",
+  "syntax_highlighting": true,
+  "data_version": 3,
+  "trigger_on_file_creation_mode": "folder",
+  "enabled_templates_hotkeys": [
+    "notes/템플릿/개발일지양식.md",
+    "notes/템플릿/회고 템플릿.md"
+  ]
+}

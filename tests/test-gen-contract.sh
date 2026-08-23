@@ -35,6 +35,18 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 0
 fi
 
+# 볼트·저장소 경로가 출력에 새면 기계마다 골든이 달라진다. 지우고 비교한다.
+#
+# ⚠️ 정규화는 최소로만 한다. 많이 지울수록 "다른데 같다고 하는" 골든이 된다.
+#
+# ⚠️ 정의를 **파일 앞쪽**에 둔다. 예전에는 볼트 픽스처 옆에 있었는데,
+#    그보다 먼저 쓰는 자리가 생기자 `norm: command not found` 가 나면서
+#    **빈 골든**이 만들어졌다 — 그리고 빈 파일끼리 cmp 는 **통과한다.**
+#    (2026-08-23)
+#
+#    VAULT 는 아래에서 정해지지만 함수 안의 확장은 호출 시점이라 괜찮다.
+norm() { sed "s|${VAULT:-///none///}|<VAULT>|g; s|$ROOT|<ROOT>|g"; }
+
 # ── 고정 입력 ────────────────────────────────────────────────────────────────
 # ⚠️ 실물 preset 을 쓴다. 지어낸 픽스처는 실제로 도는 경로를 안 지난다.
 TREE="$ROOT/preset/tree.json"
@@ -57,13 +69,25 @@ cat > "$CFG" <<JSON
 }
 JSON
 
+# ⚠️ **모양이 중요하다.** hotkeys.py 는 `paths_json["paths"]` 를 읽는다
+#    (augmentcmd.sh 가 `jq '{paths: …}'` 로 감싸서 넘긴다). 래퍼 없이 주면
+#    전부 빈 값이 되고 folder_templates 가 **0개**로 나온다 — 골든은
+#    통과하지만 매핑 로직을 한 줄도 안 지난다(2026-08-23 변이 생존으로 발견).
+#
+# ⚠️ 폴더를 **여러 개** 둔다. 하나면 매핑 순서가 출력에 안 드러난다.
 PATHS="$T_TMP/paths.json"
 cat > "$PATHS" <<JSON
 {
-  "templates": "notes/템플릿",
-  "devlog": "notes/개발/개발일지",
-  "weekly": "notes/개발/주간리뷰",
-  "projects": "notes/개발/프로젝트"
+  "paths": {
+    "templates": "notes/템플릿",
+    "devlog": "notes/개발/개발일지",
+    "devnote": "notes/개발/개발메모",
+    "idea": "notes/아이디어",
+    "trouble": "notes/트러블슈팅",
+    "report": "notes/회고",
+    "weekly": "notes/개발/주간리뷰",
+    "projects": "notes/개발/프로젝트"
+  }
 }
 JSON
 
@@ -94,6 +118,70 @@ TREE_EDGE="$ROOT/tests/fixtures/tree-edge.json"
 
 IDS="$T_TMP/ids.json"
 printf '%s' '{}' > "$IDS"
+
+# ⚠️ 아래는 hotkeys 의 **안 지나던 가지**를 태우기 위한 것이다. anm 에서
+#    변이 5건이 살아남은 뒤 배운 것: 골든이 통과한다고 그 경로를 지나는 게
+#    아니다. 지금 hotkeys 골든은 셸커맨드·템플릿 필터·Templater 2.x·
+#    재배정·충돌을 **하나도** 지나지 않는다.
+
+# ① 셸커맨드 ID 가 있는 경우 — 없으면 place() 가 통째로 건너뛴다.
+IDS_REAL="$T_TMP/ids-real.json"
+printf '%s' '{"devtrail-activity":"aaa111","devtrail-worklog":"bbb222"}' > "$IDS_REAL"
+
+# ② 실제로 배포된 템플릿만 있는 폴더 — have 필터가 여기서 돈다.
+TDIR="$T_TMP/templates-partial"
+mkdir -p "$TDIR"
+for f in "개발일지양식.md" "회고 템플릿.md" "Devlog.md"; do
+  printf -- '---\ntype: template\n---\n' > "$TDIR/$f"
+done
+
+# ③ Templater 2.x 를 흉내 낸 플러그인 폴더 — data_version 을 읽는 가지.
+TPDIR="$T_TMP/templater-plugin"
+mkdir -p "$TPDIR"
+printf '%s' 'var x={ data_version : 3 , other:1};' > "$TPDIR/main.js"
+
+# ④ 우리 조합을 **선점한** 기존 단축키 — fallback 재배정이 여기서 돈다.
+#    그리고 우리가 이미 배정한 키를 사용자가 다른 명령에 준 상태(충돌).
+# ⑤ **우리 명령**이 이미 배정돼 있는 경우 — place() 의 '유지' 가지.
+#
+# ⚠️ 그리고 남의 명령이 **정렬되지 않은** modifiers 로 우리 조합 하나를
+#    점유한다. combo() 가 정렬하지 않으면 ["Shift","Mod"] 와 ["Mod","Shift"]
+#    가 다른 문자열이 되어 점유를 못 보고, 남의 키를 빼앗는다.
+#
+#    점유 대상은 **'유지' 로 빠지지 않는** 명령이어야 한다. 처음엔 개발일지
+#    (D)를 골랐는데 그건 이미 우리 것이라 combo 계산 전에 return 했고,
+#    변이가 살아남았다(2026-08-23). 개발메모(M)로 바꿨다.
+EXIST_HK_OURS="$T_TMP/existing-hotkeys-ours.json"
+cat > "$EXIST_HK_OURS" <<'JSON'
+{
+  "templater-obsidian:create-notes/템플릿/개발일지양식.md": [
+    { "modifiers": ["Shift", "Mod"], "key": "Z" }
+  ],
+  "남의명령": [{ "modifiers": ["Shift", "Mod"], "key": "M" }]
+}
+JSON
+
+# ⑥ 이미 폴더 매핑이 있는 Templater 설정 — 우리가 덮어쓰면 안 된다.
+EXIST_TPL="$T_TMP/existing-templater.json"
+cat > "$EXIST_TPL" <<'JSON'
+{
+  "folder_templates": [
+    { "folder": "notes/개발/개발일지", "template": "사용자/양식.md" }
+  ],
+  "templates_folder": "사용자템플릿",
+  "남의키": "건드리면 안 된다"
+}
+JSON
+
+EXIST_HK_BUSY="$T_TMP/existing-hotkeys-busy.json"
+cat > "$EXIST_HK_BUSY" <<'JSON'
+{
+  "editor:toggle-bold": [{ "modifiers": ["Mod", "Shift"], "key": "D" }],
+  "editor:toggle-italic": [{ "modifiers": ["Mod", "Shift"], "key": "M" }],
+  "workspace:split-vertical": [{ "modifiers": ["Mod"], "key": "N" }],
+  "남의명령": [{ "modifiers": ["Mod", "Shift"], "key": "Y" }]
+}
+JSON
 
 # 기존 설정이 있는 경우 — 병합 가지를 태운다.
 EXIST_HK="$T_TMP/existing-hotkeys.json"
@@ -130,7 +218,7 @@ CASES=0
 golden_path() {
   case "$1" in
     smartenv-*) printf '%s/%s.txt' "$GOLDEN" "$1" ;;
-    anm-*|hotkeys-*) printf '%s/%s.json' "$GOLDEN" "$1" ;;
+    anm-*|hotkeys-*|templater-*) printf '%s/%s.json' "$GOLDEN" "$1" ;;
     *) printf '%s/%s.txt' "$GOLDEN" "$1" ;;
   esac
 }
@@ -211,12 +299,55 @@ gen anm-ko-edge-proj ko -- "$ROOT/lib/gen/anm.py" "$TREE_EDGE" "$CFG_PROJ" "$ROO
 # ⚠️ DEVTRAIL_LANG 이 **없는** 경우 — 실제로 `devtrail augment` 가 도는 방식이다.
 gen anm-unset-new unset -- "$ROOT/lib/gen/anm.py" "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" ""
 
+# genenv <이름> <언어> <DT_TEMPLATES_DIR> <DT_TEMPLATER_DIR> -- <명령…>
+#
+# ⚠️ 이 둘은 **환경변수로만** 들어가는 숨은 입력이다. 고정하지 않으면
+#    골든이 기계 상태를 탄다.
+genenv() {
+  local name="$1" lang="$2" tdir="$3" tpdir="$4"; shift 5
+  CASES=$((CASES + 1))
+  local out="$T_TMP/$name.out"
+  env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC \
+      DT_TEMPLATES_DIR="$tdir" DT_TEMPLATER_DIR="$tpdir" \
+      "$@" 2>/dev/null | norm > "$out"
+  local g; g=$(golden_path "$name")
+  if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then cp "$out" "$g"; return 0; fi
+  if [ ! -f "$g" ]; then _t_bad "$name" "골든 없음" "$g"; FAILED=1; return 0; fi
+  if cmp -s "$out" "$g"; then _t_ok "$name"; else
+    _t_bad "$name" "골든과 다릅니다" "$(diff "$g" "$out" | head -6)"; FAILED=1
+  fi
+}
+
 t_start "hotkeys — 단축키 · Templater · daily-notes"
 for what in hotkeys templater daily; do
   gen "hotkeys-$what-ko-new" ko -- "$ROOT/lib/gen/hotkeys.py" "$what" "$TMPL" "$PATHS" "" "$IDS"
   gen "hotkeys-$what-en-new" en -- "$ROOT/lib/gen/hotkeys.py" "$what" "$TMPL" "$PATHS" "" "$IDS"
 done
 gen hotkeys-hotkeys-ko-merge ko -- "$ROOT/lib/gen/hotkeys.py" hotkeys "$TMPL" "$PATHS" "$EXIST_HK" "$IDS"
+
+t_start "hotkeys — 안 지나던 가지"
+# 셸커맨드가 실제로 배정되는가.
+genenv hotkeys-shell-ko ko "" "" -- \
+  python3 "$ROOT/lib/gen/hotkeys.py" hotkeys "$TMPL" "$PATHS" "" "$IDS_REAL"
+# 배포된 템플릿만 단축키를 받는가 (have 필터).
+genenv hotkeys-have-ko ko "$TDIR" "" -- \
+  python3 "$ROOT/lib/gen/hotkeys.py" hotkeys "$TMPL" "$PATHS" "" "$IDS_REAL"
+genenv hotkeys-have-en en "$TDIR" "" -- \
+  python3 "$ROOT/lib/gen/hotkeys.py" hotkeys "$TMPL" "$PATHS" "" "$IDS_REAL"
+# 선점된 조합 → fallback 재배정 · 충돌 보고.
+genenv hotkeys-busy-ko ko "" "" -- \
+  python3 "$ROOT/lib/gen/hotkeys.py" hotkeys "$TMPL" "$PATHS" "$EXIST_HK_BUSY" "$IDS_REAL"
+# Templater 2.x — data_version 을 읽어 새 키를 쓴다.
+genenv templater-v2-ko ko "$TDIR" "$TPDIR" -- \
+  python3 "$ROOT/lib/gen/hotkeys.py" templater "$TMPL" "$PATHS" ""
+genenv templater-have-ko ko "$TDIR" "" -- \
+  python3 "$ROOT/lib/gen/hotkeys.py" templater "$TMPL" "$PATHS" ""
+# 우리 명령이 이미 배정된 경우 — '유지' 가지 + 정렬 안 된 modifiers.
+genenv hotkeys-ours-ko ko "" "" -- \
+  python3 "$ROOT/lib/gen/hotkeys.py" hotkeys "$TMPL" "$PATHS" "$EXIST_HK_OURS" "$IDS_REAL"
+# 이미 매핑된 폴더는 건드리지 않는다.
+genenv templater-keep-ko ko "" "" -- \
+  python3 "$ROOT/lib/gen/hotkeys.py" templater "$TMPL" "$PATHS" "$EXIST_TPL"
 gen hotkeys-hotkeys-unset-new unset -- "$ROOT/lib/gen/hotkeys.py" hotkeys "$TMPL" "$PATHS" "" "$IDS"
 
 # ── 픽스처 볼트 ──────────────────────────────────────────────────────────────
@@ -255,10 +386,6 @@ FIXED_DATE=2026-08-06
 
 SCANOUT="$T_TMP/scan.json"
 
-# 볼트 경로가 출력에 새면 기계마다 골든이 달라진다. 지우고 비교한다.
-#
-# ⚠️ 정규화는 최소로만 한다. 많이 지울수록 "다른데 같다고 하는" 골든이 된다.
-norm() { sed "s|$VAULT|<VAULT>|g; s|$ROOT|<ROOT>|g"; }
 
 # genv <이름> <언어> -- <명령…>   — 볼트를 읽는 생성기용 (경로 정규화 포함)
 genv() {
@@ -438,6 +565,28 @@ else
   cmpx smartenv-en-new   en -- gen-smartenv "$TREE" "$CFG" "notes/템플릿" ""
   cmpx smartenv-ko-merge ko -- gen-smartenv "$TREE" "$CFG" "notes/템플릿" "$EXIST_SE"
 
+  # cmpxenv <골든이름> <언어> <TEMPLATES_DIR> <TEMPLATER_DIR> -- <헬퍼 인자…>
+  cmpxenv() {
+    local name="$1" lang="$2" tdir="$3" tpdir="$4"; shift 5
+    local g; g=$(golden_path "$name")
+    [ -f "$g" ] || { _t_bad "헬퍼 = $name" "골든 없음" "$g"; FAILED=1; return 0; }
+    local out="$T_TMP/helper-$name.out"
+    if [ "$lang" = unset ]; then
+      env -u DEVTRAIL_LANG LC_ALL=C.UTF-8 TZ=UTC \
+          DT_TEMPLATES_DIR="$tdir" DT_TEMPLATER_DIR="$tpdir" "$HELPER" "$@" \
+        2>/dev/null | norm > "$out"
+    else
+      env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC \
+          DT_TEMPLATES_DIR="$tdir" DT_TEMPLATER_DIR="$tpdir" "$HELPER" "$@" \
+        2>/dev/null | norm > "$out"
+    fi
+    PORTED=$((PORTED + 1))
+    if cmp -s "$out" "$g"; then _t_ok "헬퍼 = $name"; else
+      _t_bad "헬퍼 ≠ $name" "python 골든과 다릅니다" "$(diff "$g" "$out" | head -6)"
+      FAILED=1
+    fi
+  }
+
   # anm — 이관 완료
   for prof in new existing isolated; do
     cmpx "anm-ko-$prof" ko -- gen-anm "$TREE" "$CFG" "$ROOT/preset/profiles/$prof.json" ""
@@ -449,6 +598,22 @@ else
   cmpx anm-ko-ours  ko -- gen-anm "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" "$EXIST_ANM_OURS"
   cmpx anm-ko-edge      ko -- gen-anm "$TREE_EDGE" "$CFG" "$ROOT/preset/profiles/new.json" ""
   cmpx anm-ko-edge-proj ko -- gen-anm "$TREE_EDGE" "$CFG_PROJ" "$ROOT/preset/profiles/new.json" ""
+
+  # hotkeys — 이관 완료
+  for w in hotkeys templater daily; do
+    cmpx "hotkeys-$w-ko-new" ko -- gen-hotkeys "$w" "$TMPL" "$PATHS" "" "$IDS"
+    cmpx "hotkeys-$w-en-new" en -- gen-hotkeys "$w" "$TMPL" "$PATHS" "" "$IDS"
+  done
+  cmpx hotkeys-hotkeys-ko-merge ko    -- gen-hotkeys hotkeys "$TMPL" "$PATHS" "$EXIST_HK" "$IDS"
+  cmpx hotkeys-hotkeys-unset-new unset -- gen-hotkeys hotkeys "$TMPL" "$PATHS" "" "$IDS"
+  cmpxenv hotkeys-shell-ko   ko ""      ""       -- gen-hotkeys hotkeys "$TMPL" "$PATHS" "" "$IDS_REAL"
+  cmpxenv hotkeys-have-ko    ko "$TDIR" ""       -- gen-hotkeys hotkeys "$TMPL" "$PATHS" "" "$IDS_REAL"
+  cmpxenv hotkeys-have-en    en "$TDIR" ""       -- gen-hotkeys hotkeys "$TMPL" "$PATHS" "" "$IDS_REAL"
+  cmpxenv hotkeys-busy-ko    ko ""      ""       -- gen-hotkeys hotkeys "$TMPL" "$PATHS" "$EXIST_HK_BUSY" "$IDS_REAL"
+  cmpxenv templater-v2-ko    ko "$TDIR" "$TPDIR" -- gen-hotkeys templater "$TMPL" "$PATHS" ""
+  cmpxenv templater-have-ko  ko "$TDIR" ""       -- gen-hotkeys templater "$TMPL" "$PATHS" ""
+  cmpxenv hotkeys-ours-ko    ko ""      ""       -- gen-hotkeys hotkeys "$TMPL" "$PATHS" "$EXIST_HK_OURS" "$IDS_REAL"
+  cmpxenv templater-keep-ko  ko ""      ""       -- gen-hotkeys templater "$TMPL" "$PATHS" "$EXIST_TPL"
 
   # ⚠️ 아직 이관하지 않은 것을 **세어서 말한다.** 침묵하면 "다 됐다" 로 읽힌다.
   TOTAL=$(find "$GOLDEN" -type f | wc -l | tr -d ' ')
