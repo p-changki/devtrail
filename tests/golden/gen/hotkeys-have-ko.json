@@ -1,12 +1,4 @@
 {
-  "editor:toggle-bold": [
-    {
-      "modifiers": [
-        "Mod"
-      ],
-      "key": "B"
-    }
-  ],
   "templater-obsidian:create-notes/템플릿/개발일지양식.md": [
     {
       "modifiers": [
@@ -14,24 +6,6 @@
         "Shift"
       ],
       "key": "D"
-    }
-  ],
-  "templater-obsidian:create-notes/템플릿/개발메모 템플릿.md": [
-    {
-      "modifiers": [
-        "Mod",
-        "Shift"
-      ],
-      "key": "M"
-    }
-  ],
-  "templater-obsidian:create-notes/템플릿/자료카드 템플릿.md": [
-    {
-      "modifiers": [
-        "Mod",
-        "Shift"
-      ],
-      "key": "N"
     }
   ],
   "templater-obsidian:create-notes/템플릿/회고 템플릿.md": [
@@ -43,31 +17,13 @@
       "key": "R"
     }
   ],
-  "templater-obsidian:create-notes/템플릿/아이디어 빠른저장 템플릿.md": [
+  "obsidian-shellcommands:shell-command-aaa111": [
     {
       "modifiers": [
         "Mod",
         "Shift"
       ],
-      "key": "I"
-    }
-  ],
-  "templater-obsidian:create-notes/템플릿/프로젝트 생성 템플릿.md": [
-    {
-      "modifiers": [
-        "Mod",
-        "Shift"
-      ],
-      "key": "P"
-    }
-  ],
-  "templater-obsidian:create-notes/템플릿/워크로그 템플릿.md": [
-    {
-      "modifiers": [
-        "Mod",
-        "Shift"
-      ],
-      "key": "W"
+      "key": "G"
     }
   ],
   "templater-obsidian:create-new-note-from-template": [
@@ -102,7 +58,7 @@
         "Mod",
         "Shift"
       ],
-      "key": "Y"
+      "key": "N"
     }
   ]
 }

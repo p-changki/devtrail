@@ -2,7 +2,7 @@
   "folder_templates": [
     {
       "folder": "notes/개발/개발일지",
-      "template": "notes/템플릿/개발일지양식.md"
+      "template": "사용자/양식.md"
     },
     {
       "folder": "notes/개발/개발메모",
@@ -21,7 +21,8 @@
       "template": "notes/템플릿/회고 템플릿.md"
     }
   ],
-  "templates_folder": "notes/템플릿",
+  "templates_folder": "사용자템플릿",
+  "남의키": "건드리면 안 된다",
   "syntax_highlighting": true,
   "trigger_on_file_creation": true,
   "enable_folder_templates": true,

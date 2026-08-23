@@ -2,9 +2,36 @@
   "editor:toggle-bold": [
     {
       "modifiers": [
+        "Mod",
+        "Shift"
+      ],
+      "key": "D"
+    }
+  ],
+  "editor:toggle-italic": [
+    {
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ],
+      "key": "M"
+    }
+  ],
+  "workspace:split-vertical": [
+    {
+      "modifiers": [
         "Mod"
       ],
-      "key": "B"
+      "key": "N"
+    }
+  ],
+  "남의명령": [
+    {
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ],
+      "key": "Y"
     }
   ],
   "templater-obsidian:create-notes/템플릿/개발일지양식.md": [
@@ -13,7 +40,7 @@
         "Mod",
         "Shift"
       ],
-      "key": "D"
+      "key": "K"
     }
   ],
   "templater-obsidian:create-notes/템플릿/개발메모 템플릿.md": [
@@ -22,7 +49,7 @@
         "Mod",
         "Shift"
       ],
-      "key": "M"
+      "key": "U"
     }
   ],
   "templater-obsidian:create-notes/템플릿/자료카드 템플릿.md": [
@@ -70,12 +97,21 @@
       "key": "W"
     }
   ],
+  "obsidian-shellcommands:shell-command-aaa111": [
+    {
+      "modifiers": [
+        "Mod",
+        "Shift"
+      ],
+      "key": "G"
+    }
+  ],
   "templater-obsidian:create-new-note-from-template": [
     {
       "modifiers": [
         "Mod"
       ],
-      "key": "N"
+      "key": "Y"
     }
   ],
   "homepage:open-homepage": [
@@ -102,7 +138,7 @@
         "Mod",
         "Shift"
       ],
-      "key": "Y"
+      "key": "O"
     }
   ]
 }

@@ -1,4 +1,4 @@
 {
-  "folder": "",
-  "template": "템플릿/개발일지양식.md"
+  "folder": "notes/개발/개발일지",
+  "template": "notes/템플릿/개발일지양식.md"
 }
