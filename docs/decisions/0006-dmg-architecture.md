@@ -100,6 +100,57 @@ python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" templater --vault "$v"
 
 ⚠️ 폴백을 조용히 하지 않는다. 어느 경로를 썼는지 `devtrail doctor` 가 말한다.
 
+### M1 완료 — 9파일 중 8파일의 출력을 고정했다 (2026-08-23)
+
+| 생성기 | 케이스 | 계약 모양 |
+|---|---:|---|
+| `smartenv` | 3 | argv → stdout |
+| `anm` | 6 | argv → stdout (프로필 3종 · 병합 · LANG 없음) |
+| `hotkeys` | 8 | argv → stdout (3모드 × ko/en · 병합 · LANG 없음) |
+| `scan` | 2 | argv + **볼트** → stdout |
+| `hub` | 2 | **환경변수** → stdout |
+| `hubs` | 2 | argv + 볼트 → **디렉터리에 파일** |
+| `snapshot` | 2 | argv(JSON 문자열) + 볼트 → stdout |
+| `i18n` | — | 라이브러리. 위 소비자를 통해 시험된다 |
+| ~~`server.py`~~ | — | **범위 밖** (D5) |
+
+25 골든, `tests/test-gen-contract.sh` 34 단언.
+
+#### 숨은 입력을 전부 못 박았다
+
+`DEVTRAIL_LANG` · `LC_ALL` · `TZ` · `DT_DATE` · `DT_HUB_*` · **파일 mtime** ·
+**시계**. 하나라도 새면 골든은 "이 기계에서, 오늘만" 맞는 파일이 된다.
+
+#### 시계 이음새를 둬야 했다
+
+`scan.py` 의 `role_candidates` 는 "최근에 손댔는가"로 점수를 곱하는데,
+그 판정이 **현재 시각**에 걸린다. 실측:
+
+```
+DT_NOW=고정   → {"devlog": 0.45}
+DT_NOW=먼미래 → {}                 ← 임계값 아래로 떨어져 역할이 사라진다
+```
+
+고정하지 않으면 이 골든은 **한 달 뒤 저절로 깨진다.** 그래서 `scan.py` 에
+`DT_NOW`, `snapshot.py` 에 `cfg.now_ms` 를 뒀다. 둘 다 **미설정 시 예전
+그대로**이고, 테스트가 그것도 단언한다 — 기본 동작을 바꿨다면 그건
+이음새가 아니라 변경이다.
+
+#### 변이 검증 9건
+
+| 변이 | 결과 |
+|---|---|
+| `indent 2→4` · `ensure_ascii F→T` · 기본 언어 `ko→en` · 병합 대신 덮어쓰기 | ✗ ×4 |
+| `scan`: recent 곱셈 제거 · `DT_NOW` 무시 | ✗ ×2 |
+| `snapshot`: `now_ms` 무시 | ✗ |
+| `hubs`: 날짜 주입 무시 | ✗ |
+| `hub`: 제목 기본값 변경 | **생존 — 동등 변이** |
+
+마지막 것은 테스트가 약해서가 아니라 **도달 불가**여서다. `hub.py` 를
+부르는 곳은 `augmentcmd.sh` 하나뿐이고, 그 하나가 `DT_HUB_TITLE` 을 항상
+넘긴다. 도달하지 않는 코드에 테스트를 붙이지 않는다 — 대신 근거를 테스트
+파일에 적어 다음 사람이 다시 따지지 않게 했다.
+
 ### 이관 순서 — 계약을 먼저
 
 ```

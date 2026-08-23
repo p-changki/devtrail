@@ -1,0 +1,63 @@
+---
+tags:
+  - type/moc
+type: moc
+scope: folder
+devtrail_key: devlog
+created: 2026-08-06
+updated: 2026-08-06
+---
+
+# 개발일지
+
+> 이 폴더만 봅니다. DevTrail 이 만들었고 `devtrail augment --refresh-hubs` 로 갱신됩니다.
+
+## 최근
+
+```dataview
+TABLE WITHOUT ID
+  file.link AS "노트",
+  dateformat(file.mtime, "yyyy-MM-dd") AS "수정"
+FROM "notes/개발/개발일지"
+WHERE file.name != "_index"
+SORT file.mtime DESC
+LIMIT 15
+```
+
+## 재방문할 때가 됐다
+
+> ℹ️ 이 볼트는 `review_at` 을 거의 쓰지 않아 (커버리지 0.0%) **마지막 수정일로 근사**합니다.
+> 정확하게 하려면: `devtrail align --field review_at`
+
+```dataview
+LIST
+FROM "notes/개발/개발일지"
+WHERE file.name != "_index"
+  AND (file.mtime <= date(today) - dur(90 days))
+SORT file.mtime ASC
+LIMIT 15
+```
+
+## 미완성
+
+> ℹ️ 이 볼트는 `status` 를 거의 쓰지 않아 (커버리지 0.0%) **분량이 적은 노트로 근사**합니다.
+
+```dataview
+TABLE WITHOUT ID file.link AS "노트", file.size AS "크기"
+FROM "notes/개발/개발일지"
+WHERE file.name != "_index" AND (file.size < 500)
+SORT file.size ASC
+LIMIT 10
+```
+
+## 연결이 없다
+
+```dataview
+LIST
+FROM "notes/개발/개발일지"
+WHERE file.name != "_index"
+  AND length(file.outlinks) = 0 AND length(file.inlinks) = 0
+SORT file.ctime DESC
+LIMIT 10
+```
+

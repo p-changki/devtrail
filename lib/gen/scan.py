@@ -286,6 +286,17 @@ def analyse_obsidian(vault, wanted_keys, wanted_folders):
     }
 
 
+def _now():
+    """현재 시각(초). DT_NOW 로 고정할 수 있다 — 계약 테스트용."""
+    v = os.environ.get("DT_NOW")
+    if v:
+        try:
+            return int(v)
+        except ValueError:
+            pass
+    return int(__import__("time").time())
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"error": "볼트 경로가 필요합니다"}, ensure_ascii=False))
@@ -373,7 +384,11 @@ def main():
             "type_pct": round(type_tags * 100 / all_tags, 1) if all_tags else 0.0,
             "top": tag_counter.most_common(20),
         },
-        "folders": analyse_folders(vault, files_by_dir, now=int(__import__("time").time())),
+        # ⚠️ 시계를 주입할 수 있게 둔다. DT_NOW 가 없으면 예전과 똑같이
+        #    현재 시각을 쓴다 — 동작을 바꾸지 않는 **테스트 이음새**다.
+        #    이게 없으면 이 출력은 골든으로 고정할 수 없고, Swift 이관이
+        #    무엇을 재현해야 하는지 아무도 확인하지 못한다 (ADR 0006 M1).
+        "folders": analyse_folders(vault, files_by_dir, now=_now()),
         "obsidian": analyse_obsidian(vault, wanted_keys, wanted_folders),
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))

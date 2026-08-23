@@ -1,0 +1,180 @@
+--- Daily check-in.md
+---
+tags:
+  - type/moc
+type: moc
+scope: vault
+created: 2026-08-06
+updated: 2026-08-06
+---
+
+# ☀️ Daily routine
+
+> How to open and close the day. Five minutes.
+
+## 🕗 Morning (2 min)
+
+1. `⌘⇧D` — create today's devlog and write your top 3
+2. Skim "gone stale" below
+
+## 💻 While working (anytime)
+
+| What | Hotkey |
+|---|---|
+| Note something you learned | `⌘⇧M` |
+| Log something you got stuck on | New note in the Troubleshooting folder |
+| Capture an idea | `⌘⇧I` |
+| Save a reference | `⌘⇧N` |
+
+## 🌇 Before logging off (3 min)
+
+1. Fill in one line under "what I learned today"
+2. `⌘⇧G` — pull GitHub activity into the devlog
+3. Move anything unfinished to tomorrow
+
+## 📅 Friday (10 min)
+
+Create the weekly review and run the health check below.
+
+---
+
+## 🔴 Gone stale
+
+```dataview
+TABLE (date(today) - file.ctime).day AS "Days"
+FROM ""
+WHERE file.name != "_index" AND file.ctime <= date(today) - dur(14 days)
+SORT file.ctime ASC
+LIMIT 10
+```
+
+## 🟡 This week's devlogs (spot the gaps)
+
+```dataview
+LIST
+FROM ""
+WHERE file.name != "_index" AND file.ctime >= date(today) - dur(7 days)
+SORT file.name DESC
+```
+
+## 🟢 Created today
+
+```dataview
+LIST
+FROM "notes"
+WHERE file.ctime >= date(today) AND !contains(file.folder, "Templates")
+SORT file.ctime DESC
+```
+--- Dashboard.md
+---
+tags:
+  - type/moc
+type: moc
+scope: vault
+created: 2026-08-06
+updated: 2026-08-06
+---
+
+# 📊 Dashboard
+
+> The entry point to your vault. Bookmark it in the left sidebar.
+
+<div class="dt-nav">
+</div>
+
+## 📅 Today
+
+```dataview
+TASK
+FROM ""
+WHERE file.name = dateformat(date(today), "yyyy-MM-dd") + " devlog"
+```
+
+### Recent devlogs
+
+```dataview
+TABLE WITHOUT ID file.link AS "Log", dateformat(file.mtime, "MM-dd HH:mm") AS "Modified"
+FROM ""
+WHERE file.name != "_index"
+SORT file.name DESC
+LIMIT 5
+```
+
+### Created in the last 7 days
+
+```dataview
+LIST
+FROM "notes"
+WHERE file.ctime >= date(today) - dur(7 days)
+  AND !contains(file.folder, "Templates")
+SORT file.ctime DESC
+LIMIT 10
+```
+
+## 🏗️ Active projects
+
+```dataview
+TABLE status AS "Status", stage AS "Stage", updated AS "Modified"
+FROM ""
+WHERE type = "project-home"
+SORT updated DESC
+```
+
+## 🧭 Notes by area
+
+### 🌐 Infra · DevOps
+
+```dataview
+LIST
+FROM ""
+WHERE category = "infra" OR category = "devops"
+SORT file.mtime DESC
+LIMIT 6
+```
+
+### 💻 Backend · Frontend
+
+```dataview
+LIST
+FROM ""
+WHERE category = "backend" OR category = "frontend"
+SORT file.mtime DESC
+LIMIT 6
+```
+
+### 🧪 Testing · General
+
+```dataview
+LIST
+FROM ""
+WHERE category = "testing" OR category = "general"
+SORT file.mtime DESC
+LIMIT 6
+```
+
+---
+
+## 🧹 Vault maintenance
+
+> ℹ️ `status` coverage is 8.3%, so note length is used instead.
+
+### Notes with no links
+
+```dataview
+LIST
+FROM "notes"
+WHERE length(file.outlinks) = 0 AND length(file.inlinks) = 0
+  AND file.name != "_index" AND !contains(file.folder, "Templates")
+SORT file.ctime DESC
+LIMIT 15
+```
+
+### Inbox backlog (oldest first)
+
+```dataview
+TABLE (date(today) - file.ctime).day AS "Days"
+FROM ""
+WHERE file.name != "_index"
+SORT file.ctime ASC
+LIMIT 15
+```

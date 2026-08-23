@@ -1,0 +1,180 @@
+--- 대시보드.md
+---
+tags:
+  - type/moc
+type: moc
+scope: vault
+created: 2026-08-06
+updated: 2026-08-06
+---
+
+# 📊 대시보드
+
+> 볼트의 진입점입니다. 왼쪽 사이드바에서 북마크해두면 편합니다.
+
+<div class="dt-nav">
+</div>
+
+## 📅 오늘
+
+```dataview
+TASK
+FROM ""
+WHERE file.name = dateformat(date(today), "yyyy-MM-dd") + " devlog"
+```
+
+### 최근 개발일지
+
+```dataview
+TABLE WITHOUT ID file.link AS "일지", dateformat(file.mtime, "MM-dd HH:mm") AS "수정"
+FROM ""
+WHERE file.name != "_index"
+SORT file.name DESC
+LIMIT 5
+```
+
+### 최근 7일에 만든 노트
+
+```dataview
+LIST
+FROM "notes"
+WHERE file.ctime >= date(today) - dur(7 days)
+  AND !contains(file.folder, "Templates")
+SORT file.ctime DESC
+LIMIT 10
+```
+
+## 🏗️ 진행 중인 프로젝트
+
+```dataview
+TABLE status AS "상태", stage AS "단계", updated AS "수정"
+FROM ""
+WHERE type = "project-home"
+SORT updated DESC
+```
+
+## 🧭 영역별 개발메모
+
+### 🌐 Infra · DevOps
+
+```dataview
+LIST
+FROM ""
+WHERE category = "infra" OR category = "devops"
+SORT file.mtime DESC
+LIMIT 6
+```
+
+### 💻 Backend · Frontend
+
+```dataview
+LIST
+FROM ""
+WHERE category = "backend" OR category = "frontend"
+SORT file.mtime DESC
+LIMIT 6
+```
+
+### 🧪 Testing · General
+
+```dataview
+LIST
+FROM ""
+WHERE category = "testing" OR category = "general"
+SORT file.mtime DESC
+LIMIT 6
+```
+
+---
+
+## 🧹 볼트 유지보수
+
+> ℹ️ `status` 커버리지가 8.3% 라 분량으로 근사합니다.
+
+### 연결이 없는 노트
+
+```dataview
+LIST
+FROM "notes"
+WHERE length(file.outlinks) = 0 AND length(file.inlinks) = 0
+  AND file.name != "_index" AND !contains(file.folder, "Templates")
+SORT file.ctime DESC
+LIMIT 15
+```
+
+### Inbox 적체 (오래된 순)
+
+```dataview
+TABLE (date(today) - file.ctime).day AS "체류일"
+FROM ""
+WHERE file.name != "_index"
+SORT file.ctime ASC
+LIMIT 15
+```
+--- 일일 체크인.md
+---
+tags:
+  - type/moc
+type: moc
+scope: vault
+created: 2026-08-06
+updated: 2026-08-06
+---
+
+# ☀️ 일일 루틴
+
+> 하루를 여닫는 순서입니다. 5분이면 됩니다.
+
+## 🕗 아침 (2분)
+
+1. `⌘⇧D` — 개발일지를 만들고 오늘 할 것 Top 3 을 적는다
+2. 아래 '오래 묵은 것' 을 한 번 훑는다
+
+## 💻 작업 중 (수시)
+
+| 무엇 | 단축키 |
+|---|---|
+| 배운 것을 메모 | `⌘⇧M` |
+| 막힌 것을 기록 | 트러블슈팅 폴더에서 새 노트 |
+| 아이디어 캡처 | `⌘⇧I` |
+| 자료 저장 | `⌘⇧N` |
+
+## 🌇 퇴근 전 (3분)
+
+1. 개발일지의 '오늘 배운 것' 을 한 줄 채운다
+2. `⌘⇧G` — GitHub 활동을 일지에 넣는다
+3. 미완료를 내일로 옮긴다
+
+## 📅 금요일 (10분)
+
+주간리뷰를 만들고 아래 헬스체크를 본다.
+
+---
+
+## 🔴 오래 묵은 것
+
+```dataview
+TABLE (date(today) - file.ctime).day AS "체류일"
+FROM ""
+WHERE file.name != "_index" AND file.ctime <= date(today) - dur(14 days)
+SORT file.ctime ASC
+LIMIT 10
+```
+
+## 🟡 이번 주 개발일지 (공백일 확인)
+
+```dataview
+LIST
+FROM ""
+WHERE file.name != "_index" AND file.ctime >= date(today) - dur(7 days)
+SORT file.name DESC
+```
+
+## 🟢 오늘 만든 노트
+
+```dataview
+LIST
+FROM "notes"
+WHERE file.ctime >= date(today) AND !contains(file.folder, "Templates")
+SORT file.ctime DESC
+```

@@ -151,7 +151,9 @@ def main():
     root = cfg['root']
     limit = int(cfg.get('limit', 5))
     today = cfg.get('today') or time.strftime('%Y-%m-%d')
-    now_ms = int(time.time() * 1000)
+    # ⚠️ today 가 이미 cfg 로 주입되는데 now_ms 만 시계를 직접 읽으면,
+    #    출력을 고정할 수 없다. 같은 방식으로 받는다 — 없으면 예전 그대로다.
+    now_ms = int(cfg.get('now_ms') or time.time() * 1000)
 
     if not os.path.isdir(root):
         # ⚠️ 없는 것을 0 으로 말하지 않는다. 세어 본 적이 없는 것과 세어 보니
