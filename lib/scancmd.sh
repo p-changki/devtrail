@@ -15,7 +15,7 @@
 DT_SCAN_PY="${DEVTRAIL_ROOT}/lib/gen/scan.py"
 
 scan_cmd() {
-  require_bins python3 jq
+  require_bins jq; require_gen
 
   local as_json=0 vault=""
   while [ $# -gt 0 ]; do

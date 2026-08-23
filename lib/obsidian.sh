@@ -35,7 +35,7 @@ _ob_paths_json() {
 
 obsidian_apply() {
   require_config
-  require_bins jq python3
+  require_bins jq; require_gen
 
   local vault; vault="$(vault_path)"
   [ -d "$vault" ] || die "$(L "볼트 없음" "Vault not found"): $vault"

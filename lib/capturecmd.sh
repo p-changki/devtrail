@@ -46,28 +46,72 @@ cap_existing() {
 #    치환한다 — 그래야 Obsidian 에서 만든 노트와 같은 모양이 된다.
 _cap_render() {
   local tpl="$1" title="$2" url="$3" channel="$4" today="$5" now="$6"
+  # ⚠️ python3 을 쓰지 않는다 (D7-B). 캡처는 python3 이 없는 기계에서도
+  #    돌아야 한다 — 링크를 잃는 것보다 나쁜 것은 없다.
+  #
+  # ⚠️ 치환값을 **문자 그대로** 넣는다. python 의 re.sub 는 치환문자열의
+  #    `\1` 을, awk 의 gsub 는 `&` 를 특수 취급한다 — 제목에 그 문자가 있으면
+  #    둘 다 조용히 망가진다. 그래서 정규식 치환 대신 잘라 붙인다.
+  #
+  # ⚠️ `<% %>` 가 여러 줄에 걸치는 경우는 다루지 않는다. 캡처가 읽는
+  #    템플릿에는 없고(실측), 남으면 아래 검사가 **소리내어** 실패한다 —
+  #    조용히 틀린 노트를 만드는 것보다 낫다.
   DT_T="$title" DT_U="$url" DT_C="$channel" DT_D="$today" DT_N="$now" \
-  python3 - "$tpl" <<'PY'
-import io, os, re, sys
-raw = io.open(sys.argv[1], encoding='utf-8').read()
-env = os.environ
-# Templater 의 날짜 호출만 실제 값으로 바꾼다. 나머지 문법이 남으면
-# 아래에서 잡아낸다 — 조용히 통과시키지 않는다.
-def date_of(m):
-    fmt = m.group(1)
-    return env['DT_N'] if 'HH' in fmt else env['DT_D']
-out = re.sub(r'<%\s*tp\.date\.now\("([^"]+)"\)\s*%>', date_of, raw)
-out = re.sub(r'<%\s*tp\.file\.title\s*%>', env['DT_T'], out)
-# 캡처가 아는 것만 채운다. 모르는 것은 비워 둔다 —
-# 빈 칸은 '아직 없다' 는 사실이고, 지어낸 값은 거짓이다.
-for key, val in (('url', env['DT_U']), ('channel', env['DT_C'])):
-    if val:
-        out = re.sub(r'(?m)^' + key + r':\s*$', key + ': ' + val, out, count=1)
-if '<%' in out:
-    sys.stderr.write('템플릿 문법이 남았습니다\n')
-    raise SystemExit(1)
-sys.stdout.write(out)
-PY
+  awk '
+    function splice(s, val,   out) {
+      # RSTART/RLENGTH 자리를 val 로 바꿔 이어 붙인다 (문자 그대로).
+      out = substr(s, 1, RSTART - 1) val substr(s, RSTART + RLENGTH)
+      return out
+    }
+    {
+      line = $0
+
+      # <% tp.date.now("...") %>  →  형식에 HH 가 있으면 시각, 없으면 날짜
+      guard = 0
+      while (match(line, /<%[ \t]*tp\.date\.now\("[^"]*"\)[ \t]*%>/)) {
+        before = length(line)
+        m = substr(line, RSTART, RLENGTH)
+        q = index(m, "\"")
+        rest = substr(m, q + 1)
+        fmt = substr(rest, 1, index(rest, "\"") - 1)
+        line = splice(line, (index(fmt, "HH") > 0) ? ENVIRON["DT_N"] : ENVIRON["DT_D"])
+        # ⚠️ 진행하지 않으면 멈춘다. 아래 <% 검사가 소리내어 실패시킨다.
+        if (length(line) >= before || ++guard > 1000) break
+      }
+
+      # <% tp.file.title %>
+      guard = 0
+      while (match(line, /<%[ \t]*tp\.file\.title[ \t]*%>/)) {
+        before = length(line)
+        line = splice(line, ENVIRON["DT_T"])
+        if (length(line) >= before || ++guard > 1000) break
+      }
+
+      buf[n++] = line
+    }
+    END {
+      # 캡처가 아는 것만 채운다. 모르는 것은 비워 둔다 —
+      # 빈 칸은 "아직 없다" 는 사실이고, 지어낸 값은 거짓이다.
+      # ⚠️ 각 키의 **첫 줄만** 채운다 (python 의 count=1 과 같다).
+      split("url channel", keys, " ")
+      vals["url"] = ENVIRON["DT_U"]
+      vals["channel"] = ENVIRON["DT_C"]
+      for (k = 1; k <= 2; k++) {
+        key = keys[k]
+        if (vals[key] == "") continue
+        for (i = 0; i < n; i++) {
+          if (buf[i] ~ ("^" key ":[ \t]*$")) { buf[i] = key ": " vals[key]; break }
+        }
+      }
+      for (i = 0; i < n; i++) {
+        if (index(buf[i], "<%") > 0) {
+          print "템플릿 문법이 남았습니다" > "/dev/stderr"
+          exit 1
+        }
+      }
+      for (i = 0; i < n; i++) printf "%s\n", buf[i]
+    }
+  ' "$tpl"
 }
 
 # yt-dlp 출력에서 한 필드를 뽑는다.
@@ -112,7 +156,7 @@ _cap_youtube() {
     esac
     shift
   done
-  require_config; require_bins jq python3
+  require_config; require_bins jq
 
   [ -n "$url" ] || die "$(L "URL 이 필요합니다" "A URL is required"): --url \"https://…\""
   local id
