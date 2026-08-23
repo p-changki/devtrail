@@ -161,6 +161,169 @@ done
 gen hotkeys-hotkeys-ko-merge ko -- "$ROOT/lib/gen/hotkeys.py" hotkeys "$TMPL" "$PATHS" "$EXIST_HK" "$IDS"
 gen hotkeys-hotkeys-unset-new unset -- "$ROOT/lib/gen/hotkeys.py" hotkeys "$TMPL" "$PATHS" "" "$IDS"
 
+# ── 픽스처 볼트 ──────────────────────────────────────────────────────────────
+#
+# ⚠️ scan · hubs · snapshot 은 **볼트를 읽는다.** 파일 mtime 이 입력이므로
+#    touch 로 못 박는다. 안 그러면 골든이 만들 때마다 달라진다.
+#
+# ⚠️ 그리고 시계를 고정한다(DT_NOW · now_ms). scan 의 role_candidates 는
+#    "최근에 손댔는가" 로 점수를 곱하는데, 그 판정이 **현재 시각**에 걸린다.
+#    실측(2026-08-23): 같은 볼트가 DT_NOW 에 따라
+#      {"devlog":0.45}  ↔  {}
+#    로 갈린다. 고정하지 않으면 이 골든은 한 달 뒤 저절로 깨진다.
+VAULT="$T_TMP/vault"
+mkdir -p "$VAULT/notes/개발/개발일지" "$VAULT/notes/개발/주간리뷰" \
+         "$VAULT/notes/개발/프로젝트/proj-a" "$VAULT/notes/템플릿" "$VAULT/notes/자료"
+
+for d in 01 02 03 04 05; do
+  printf -- '---\ntype: devlog\ncreated: 2026-08-%s\n---\n# 일지\n- [ ] 할 일 하나\n' "$d" \
+    > "$VAULT/notes/개발/개발일지/2026-08-$d.md"
+done
+for w in 31 32 33; do
+  printf -- '---\ntype: weekly\n---\n# 주간\n' > "$VAULT/notes/개발/주간리뷰/2026-W$w.md"
+done
+printf -- '---\ntype: project-home\nstatus: active\nstage: planning\nnext: 다음 행동\n---\n# proj-a\n' \
+  > "$VAULT/notes/개발/프로젝트/proj-a/README.md"
+printf -- '---\ntype: note\n---\n# 자료\n' > "$VAULT/notes/자료/카드.md"
+printf -- '# 분류 없는 노트\n' > "$VAULT/notes/자료/무타입.md"
+printf -- '---\ntype: template\n---\n<%% tp.file.title %%>\n' > "$VAULT/notes/템플릿/개발일지양식.md"
+
+# ⚠️ mtime 을 전부 같은 값으로 못 박는다.
+find "$VAULT" -type f -exec touch -t 202608010900 {} +
+
+FIXED_NOW=1786000000        # 2026-08-06 근처 — 픽스처 mtime 직후
+FIXED_NOW_MS=1786000000000
+FIXED_DATE=2026-08-06
+
+SCANOUT="$T_TMP/scan.json"
+
+# 볼트 경로가 출력에 새면 기계마다 골든이 달라진다. 지우고 비교한다.
+#
+# ⚠️ 정규화는 최소로만 한다. 많이 지울수록 "다른데 같다고 하는" 골든이 된다.
+norm() { sed "s|$VAULT|<VAULT>|g; s|$ROOT|<ROOT>|g"; }
+
+# genv <이름> <언어> -- <명령…>   — 볼트를 읽는 생성기용 (경로 정규화 포함)
+genv() {
+  local name="$1" lang="$2"; shift 3
+  CASES=$((CASES + 1))
+  local out="$T_TMP/$name.out" rc=0
+  if [ "$lang" = unset ]; then
+    env -u DEVTRAIL_LANG LC_ALL=C.UTF-8 TZ=UTC DT_NOW="$FIXED_NOW" DT_DATE="$FIXED_DATE" \
+      "$@" 2>/dev/null | norm > "$out" || rc=$?
+  else
+    env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC DT_NOW="$FIXED_NOW" DT_DATE="$FIXED_DATE" \
+      "$@" 2>/dev/null | norm > "$out" || rc=$?
+  fi
+
+  local g="$GOLDEN/$name.txt"
+  if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then cp "$out" "$g"; return 0; fi
+  if [ ! -f "$g" ]; then _t_bad "$name" "골든 없음: $g" "UPDATE_GOLDEN=1"; FAILED=1; return 0; fi
+  if cmp -s "$out" "$g"; then _t_ok "$name"; else
+    _t_bad "$name" "골든과 다릅니다" "$(diff "$g" "$out" | head -6)"; FAILED=1
+  fi
+}
+
+t_start "scan — 볼트 진단"
+genv scan-ko ko -- python3 "$ROOT/lib/gen/scan.py" "$VAULT"
+genv scan-en en -- python3 "$ROOT/lib/gen/scan.py" "$VAULT"
+# 다음 단계들이 이 결과를 입력으로 쓴다.
+DT_NOW="$FIXED_NOW" DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 \
+  python3 "$ROOT/lib/gen/scan.py" "$VAULT" > "$SCANOUT" 2>/dev/null
+
+t_start "hub — L3 폴더 허브"
+# ⚠️ DT_HUB_TITLE 의 **기본값**은 시험하지 않는다 — 동등 변이로 확인했다.
+#    기본값을 바꿔도 이 테스트는 통과하는데, 그건 테스트가 약해서가 아니라
+#    그 경로가 **도달 불가**이기 때문이다:
+#
+#      hub.py 를 부르는 곳    lib/augmentcmd.sh 하나뿐
+#      그 호출이 넘기는 것    DT_HUB_TITLE="$(basename "$rel")"  — 항상 설정
+#
+#    도달하지 않는 코드에 테스트를 붙이면 유지 비용만 는다. 다만 호출자가
+#    늘거나 이 변수를 안 넘기게 되면 이야기가 달라진다 — 그때 여기를 본다.
+#
+#    (DT_HUB_REL · DT_HUB_COV_* 의 기본값은 반대로 **시험된다** —
+#     여기서 넘기지 않으므로 골든이 그 경로를 지난다.)
+for lang in ko en; do
+  CASES=$((CASES + 1))
+  NAME="hub-$lang"
+  env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC \
+    DT_HUB_FROM="notes/개발/개발일지" DT_HUB_TITLE="개발일지" \
+    DT_HUB_KEY=devlog DT_HUB_DATE="$FIXED_DATE" \
+    python3 "$ROOT/lib/gen/hub.py" 2>/dev/null | norm > "$T_TMP/$NAME.out"
+  if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then
+    cp "$T_TMP/$NAME.out" "$GOLDEN/$NAME.txt"
+  elif cmp -s "$T_TMP/$NAME.out" "$GOLDEN/$NAME.txt" 2>/dev/null; then
+    _t_ok "$NAME"
+  else
+    _t_bad "$NAME" "골든과 다릅니다" "$(diff "$GOLDEN/$NAME.txt" "$T_TMP/$NAME.out" 2>/dev/null | head -6)"
+    FAILED=1
+  fi
+done
+
+t_start "hubs — L1 대시보드 · L2 영역 허브"
+# ⚠️ hubs 는 stdout 이 아니라 **디렉터리에 파일을 쓴다.** 만들어진 파일 전체를
+#    하나로 묶어 비교한다 — 파일 목록만 보면 내용이 바뀌어도 통과한다.
+bundle() {   # bundle <디렉터리>
+  (cd "$1" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do
+    printf -- '--- %s\n' "${f#./}"
+    cat "$f"
+  done)
+}
+for lang in ko en; do
+  CASES=$((CASES + 1))
+  NAME="hubs-$lang"
+  OUTDIR="$T_TMP/hubs-$lang"
+  mkdir -p "$OUTDIR"
+  env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC DT_DATE="$FIXED_DATE" \
+    python3 "$ROOT/lib/gen/hubs.py" "$PATHS" "$CFG" "$SCANOUT" "$OUTDIR" >/dev/null 2>&1
+  bundle "$OUTDIR" | norm > "$T_TMP/$NAME.out"
+  if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then
+    cp "$T_TMP/$NAME.out" "$GOLDEN/$NAME.txt"
+  elif cmp -s "$T_TMP/$NAME.out" "$GOLDEN/$NAME.txt" 2>/dev/null; then
+    _t_ok "$NAME"
+  else
+    _t_bad "$NAME" "골든과 다릅니다" "$(diff "$GOLDEN/$NAME.txt" "$T_TMP/$NAME.out" 2>/dev/null | head -6)"
+    FAILED=1
+  fi
+done
+
+t_start "snapshot — 메뉴바용 볼트 상태"
+# ⚠️ cfg 를 **JSON 문자열 인자**로 받는다. today 와 now_ms 를 못 박는다.
+SNAPCFG=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
+  '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:5}')
+for lang in ko en; do
+  CASES=$((CASES + 1))
+  NAME="snapshot-$lang"
+  env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC \
+    python3 "$ROOT/lib/snapshot.py" "$SNAPCFG" 2>/dev/null | norm > "$T_TMP/$NAME.out"
+  if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then
+    cp "$T_TMP/$NAME.out" "$GOLDEN/$NAME.txt"
+  elif cmp -s "$T_TMP/$NAME.out" "$GOLDEN/$NAME.txt" 2>/dev/null; then
+    _t_ok "$NAME"
+  else
+    _t_bad "$NAME" "골든과 다릅니다" "$(diff "$GOLDEN/$NAME.txt" "$T_TMP/$NAME.out" 2>/dev/null | head -6)"
+    FAILED=1
+  fi
+done
+
+t_start "시계를 고정하지 않으면 답이 달라진다"
+# ⚠️ 위 골든들이 DT_NOW 를 박는 이유를 여기서 증명한다. 이 단언이 통과하지
+#    않으면 이음새가 필요 없다는 뜻이고, 그러면 이음새를 지워야 한다.
+R1=$(DT_NOW="$FIXED_NOW" python3 "$ROOT/lib/gen/scan.py" "$VAULT" 2>/dev/null \
+     | jq -c '[.folders[]|select(.notes>=3)|.role_candidates]')
+R2=$(DT_NOW=2000000000 python3 "$ROOT/lib/gen/scan.py" "$VAULT" 2>/dev/null \
+     | jq -c '[.folders[]|select(.notes>=3)|.role_candidates]')
+t_eq "DT_NOW 가 role_candidates 를 바꾼다" "different" \
+  "$([ "$R1" = "$R2" ] && echo same || echo different)"
+
+t_start "이음새는 미설정 시 예전 그대로다"
+# ⚠️ 테스트 이음새가 기본 동작을 바꿨다면 그건 이음새가 아니라 변경이다.
+t_eq "DT_NOW 없이도 돈다" "0" \
+  "$(python3 "$ROOT/lib/gen/scan.py" "$VAULT" >/dev/null 2>&1; echo $?)"
+t_eq "now_ms 없이도 돈다" "0" \
+  "$(python3 "$ROOT/lib/snapshot.py" \
+       "$(jq -nc --arg r "$VAULT/notes" '{root:$r, limit:5}')" >/dev/null 2>&1; echo $?)"
+
 t_start "골든이 결정론적이다"
 # ⚠️ 두 번 돌려 같은 답이 나오는가. 타임스탬프·난수·해시 순서가 새면
 #    골든은 매번 빨간불이 되고, 곧 아무도 믿지 않게 된다.
