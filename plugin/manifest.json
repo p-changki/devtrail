@@ -1,7 +1,7 @@
 {
   "id": "devtrail-command-center",
   "name": "DevTrail Command Center",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "minAppVersion": "1.4.0",
   "description": "DevTrail 볼트를 한 화면에서 본다. 경로는 DevTrail CLI 가 만든 경로 맵에서만 읽는다.",
   "author": "p-changki",

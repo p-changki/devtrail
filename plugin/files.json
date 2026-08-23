@@ -7,6 +7,8 @@
     "styles.css",
     "files.json",
     "read-model.js",
-    "commands.js"
+    "commands.js",
+    "i18n.js",
+    "view.js"
   ]
 }
