@@ -1,0 +1,1 @@
+{"error": "볼트 경로 없음: /tmp/devtrail-없는볼트"}

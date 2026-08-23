@@ -1,35 +1,35 @@
 {
   "vault": "<VAULT>",
   "scale": {
-    "notes": 25,
-    "folders": 9,
-    "frontmatter_notes": 24,
-    "frontmatter_pct": 96.0
+    "notes": 70,
+    "folders": 15,
+    "frontmatter_notes": 69,
+    "frontmatter_pct": 98.6
   },
   "fields": {
     "type": {
-      "with_key": 22,
-      "with_value": 22,
-      "key_pct": 88.0,
-      "value_pct": 88.0
+      "with_key": 67,
+      "with_value": 66,
+      "key_pct": 95.7,
+      "value_pct": 94.3
     },
     "status": {
-      "with_key": 7,
+      "with_key": 8,
       "with_value": 7,
-      "key_pct": 28.0,
-      "value_pct": 28.0
+      "key_pct": 11.4,
+      "value_pct": 10.0
     },
     "tags": {
-      "with_key": 1,
-      "with_value": 1,
-      "key_pct": 4.0,
-      "value_pct": 4.0
+      "with_key": 3,
+      "with_value": 3,
+      "key_pct": 4.3,
+      "value_pct": 4.3
     },
     "created": {
-      "with_key": 6,
-      "with_value": 6,
-      "key_pct": 24.0,
-      "value_pct": 24.0
+      "with_key": 7,
+      "with_value": 7,
+      "key_pct": 10.0,
+      "value_pct": 10.0
     },
     "updated": {
       "with_key": 0,
@@ -38,27 +38,27 @@
       "value_pct": 0.0
     },
     "project": {
-      "with_key": 1,
+      "with_key": 2,
       "with_value": 1,
-      "key_pct": 4.0,
-      "value_pct": 4.0
+      "key_pct": 2.9,
+      "value_pct": 1.4
     },
     "review_at": {
       "with_key": 2,
       "with_value": 2,
-      "key_pct": 8.0,
-      "value_pct": 8.0
+      "key_pct": 2.9,
+      "value_pct": 2.9
     },
     "category": {
-      "with_key": 0,
+      "with_key": 1,
       "with_value": 0,
-      "key_pct": 0.0,
+      "key_pct": 1.4,
       "value_pct": 0.0
     },
     "scope": {
-      "with_key": 0,
+      "with_key": 1,
       "with_value": 0,
-      "key_pct": 0.0,
+      "key_pct": 1.4,
       "value_pct": 0.0
     }
   },
@@ -81,10 +81,22 @@
     ]
   ],
   "tags": {
-    "total_uses": 2,
-    "type_namespaced": 0,
-    "type_pct": 0.0,
+    "total_uses": 6,
+    "type_namespaced": 2,
+    "type_pct": 33.3,
     "top": [
+      [
+        "type/devlog",
+        2
+      ],
+      [
+        "proj/a",
+        1
+      ],
+      [
+        "plain",
+        1
+      ],
       [
         "a",
         1
@@ -103,9 +115,7 @@
       "depth": 3,
       "dated_ratio": 1.0,
       "last_modified": 1785812400,
-      "role_candidates": {
-        "devlog": 0.45
-      }
+      "role_candidates": {}
     },
     {
       "path": "notes/개발/주간리뷰",
@@ -146,6 +156,15 @@
       "role_candidates": {}
     },
     {
+      "path": "notes/반올림",
+      "notes": 8,
+      "subfolders": 0,
+      "depth": 2,
+      "dated_ratio": 0.12,
+      "last_modified": 1785542400,
+      "role_candidates": {}
+    },
+    {
       "path": "notes/받은함",
       "notes": 2,
       "subfolders": 0,
@@ -155,8 +174,57 @@
       "role_candidates": {}
     },
     {
+      "path": "notes/아카이브/옛일지",
+      "notes": 20,
+      "subfolders": 0,
+      "depth": 3,
+      "dated_ratio": 1.0,
+      "last_modified": 1785542400,
+      "role_candidates": {}
+    },
+    {
+      "path": "notes/옛주간",
+      "notes": 3,
+      "subfolders": 0,
+      "depth": 2,
+      "dated_ratio": 0.0,
+      "last_modified": 1704067200,
+      "role_candidates": {}
+    },
+    {
+      "path": "notes/오래된일지",
+      "notes": 3,
+      "subfolders": 0,
+      "depth": 2,
+      "dated_ratio": 1.0,
+      "last_modified": 1704067200,
+      "role_candidates": {}
+    },
+    {
+      "path": "notes/일지B",
+      "notes": 5,
+      "subfolders": 0,
+      "depth": 2,
+      "dated_ratio": 1.0,
+      "last_modified": 1785542400,
+      "role_candidates": {
+        "devlog": 0.45
+      }
+    },
+    {
+      "path": "notes/일지C",
+      "notes": 3,
+      "subfolders": 0,
+      "depth": 2,
+      "dated_ratio": 1.0,
+      "last_modified": 1785542400,
+      "role_candidates": {
+        "devlog": 0.45
+      }
+    },
+    {
       "path": "notes/자료",
-      "notes": 7,
+      "notes": 10,
       "subfolders": 0,
       "depth": 2,
       "dated_ratio": 0.0,
@@ -183,7 +251,39 @@
     }
   ],
   "obsidian": {
-    "present": false,
-    "_note": "볼트를 Obsidian 에서 한 번도 열지 않았다"
+    "present": true,
+    "plugins": {
+      "community_enabled": 3,
+      "required_missing": [
+        "obsidian-shellcommands",
+        "auto-note-mover"
+      ],
+      "recommended_missing": [
+        "calendar",
+        "omnisearch",
+        "obsidian-linter",
+        "homepage"
+      ],
+      "core_missing": [
+        "templates",
+        "properties"
+      ],
+      "zk_prefixer_on": true
+    },
+    "conflicts": {
+      "hotkeys": [],
+      "folders": [],
+      "auto_note_mover_rules": 2,
+      "auto_note_mover_trigger": "Automatic",
+      "templater_folder_templates": 1,
+      "linter_present": true,
+      "always_update_links": true,
+      "attachment_folder": "첨부"
+    },
+    "rag": {
+      "smart_connections": true,
+      "index_bytes": 55,
+      "excluded_configured": true
+    }
   }
 }

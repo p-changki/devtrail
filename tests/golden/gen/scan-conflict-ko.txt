@@ -271,8 +271,16 @@
       "zk_prefixer_on": true
     },
     "conflicts": {
-      "hotkeys": [],
-      "folders": [],
+      "hotkeys": [
+        {
+          "combo": "Mod+Shift+D",
+          "taken_by": "editor:toggle-bold"
+        }
+      ],
+      "folders": [
+        "notes/개발",
+        "notes/개발/개발일지"
+      ],
       "auto_note_mover_rules": 2,
       "auto_note_mover_trigger": "Automatic",
       "templater_folder_templates": 1,
