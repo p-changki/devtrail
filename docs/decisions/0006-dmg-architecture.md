@@ -834,6 +834,70 @@ release.json          ← 빌드 산출물. 커밋하지 않는다.
 `verify-local.sh --release` 가 매니페스트를 **실제로 생성**한다. 릴리스
 직전에 "생성이 깨져 있었다" 를 알게 되면 늦다.
 
+## 6-2. M4 (1) — universal 빌드 · 헬퍼 번들 (2026-08-24)
+
+### universal 이 왜 필수인가
+
+최소 macOS 가 **14** 인데(D1), **macOS 14 는 Intel 맥도 지원한다.**
+Apple Silicon 에서 빌드하면 기본이 `arm64` 하나라, 그대로 DMG 를 만들면
+Intel 맥에서 **아예 열리지 않는다.**
+
+⚠️ **만든 사람 기계에서는 영원히 재현되지 않는다.** 그래서 게이트가 유일한
+방어다.
+
+### 실측
+
+```
+swift build -c release --arch arm64 --arch x86_64   → 됨
+lipo -archs DevTrailApp      → x86_64 arm64
+lipo -archs DevTrailHelper   → x86_64 arm64
+```
+
+번들 산출물:
+
+```
+DevTrail.app/Contents/
+  MacOS/DevTrail                 universal
+  Helpers/devtrail-helper        universal
+  Info.plist                     LSMinimumSystemVersion 14.0
+  _CodeSignature/
+```
+
+### 게이트가 막는 것 — 변이 9/9
+
+| 어긋남 | 결과 |
+|---|---|
+| 앱이 `arm64` 하나뿐 | ✗ |
+| 헬퍼가 `arm64` 하나뿐 | ✗ |
+| 헬퍼가 번들에 **없음** | ✗ |
+| 헬퍼에 **실행 권한이 없음** | ✗ |
+| `build.sh` 가 단일 아키텍처로 | ✗ |
+| `build.sh` 가 **결과를 확인 안 함** | ✗ |
+| `dt_helper` 가 **다른 경로**를 봄 | ✗ |
+| `Package.swift` 만 macOS 15 로 | ✗ |
+| `VERSION` 만 바뀌고 번들은 그대로 | ✗ |
+
+### 소스가 아니라 **산출물**을 본다
+
+"플래그를 줬다" 는 것과 "universal 이 나왔다" 는 다르다 — 툴체인이 조용히
+호스트만 만들 수 있다. 그래서 `build.sh` 자신이 `lipo` 로 확인하고,
+테스트는 **빌드된 `.app` 을 연다.**
+
+같은 이유로 헬퍼는 "파일이 있다" 가 아니라 **실제로 실행해 본다.** 복사만
+하고 실행 권한이 빠지거나 서명이 깨지는 경우를 잡는다.
+
+### 서명은 안쪽부터
+
+번들만 서명하면 `Contents/Helpers` 안의 실행 파일이 서명되지 않은 채 남고,
+**공증(M7)에서 거부된다.** ad-hoc 이라도 지금부터 안쪽을 먼저 서명한다.
+
+### 아직 안 한 것
+
+- `jq` 번들 (라이선스 원본 확인 후)
+- CLI 자산(`bin`·`lib`·`plugin`·`preset`·`templates`)을 `Resources/` 에
+- 온보딩 UI
+- DMG 생성
+
 ## 7. 서명·공증·릴리즈
 
 ### 로컬 릴리즈 경로 (Actions 예산 정책 유지)
