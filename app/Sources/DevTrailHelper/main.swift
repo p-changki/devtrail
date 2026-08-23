@@ -28,6 +28,7 @@ func usage() -> Never {
       gen-hub      (환경변수 DT_HUB_* 로 받는다)
       gen-snapshot '<cfg-json>'
       gen-scan     <vault> [<tree>] [<hotkeys>]
+      gen-hubs     <paths> <config> <scan> <outdir>
       version
 
     ⚠️ 아직 이관 중입니다. 없는 명령은 셸이 python3 로 폴백합니다.
@@ -52,6 +53,8 @@ case "gen-snapshot":
     exit(VaultSnapshot.run(rest))
 case "gen-scan":
     exit(VaultScan.run(rest))
+case "gen-hubs":
+    exit(L1Hubs.run(rest))
 case "version":
     // ⚠️ 버전을 여기 박지 않는다. VERSION 파일이 정본이다 (ADR 0006 §6).
     //    빌드가 주입하기 전까지는 모른다고 말한다 — 지어내지 않는다.

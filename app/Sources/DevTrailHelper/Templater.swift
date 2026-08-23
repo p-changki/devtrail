@@ -156,6 +156,192 @@ enum I18n {
             "en": "  remapped {old} → {new}",
         ],
 
+        // hubs (L1 대시보드 · 일일 체크인)
+        "l1.checkin": [
+            "ko": "일일 체크인",
+            "en": "Daily check-in",
+        ],
+        "col.days": [
+            "ko": "체류일",
+            "en": "Days",
+        ],
+        "col.log": [
+            "ko": "일지",
+            "en": "Log",
+        ],
+        "col.stage": [
+            "ko": "단계",
+            "en": "Stage",
+        ],
+        "col.status": [
+            "ko": "상태",
+            "en": "Status",
+        ],
+        "l1.approx_size": [
+            "ko": "> ℹ️ `status` 커버리지가 {pct}% 라 분량으로 근사합니다.",
+            "en": "> ℹ️ `status` coverage is {pct}%, so note length is used instead.",
+        ],
+        "l1.dashboard": [
+            "ko": "대시보드",
+            "en": "Dashboard",
+        ],
+        "l1.entry": [
+            "ko": "> 볼트의 진입점입니다. 왼쪽 사이드바에서 북마크해두면 편합니다.",
+            "en": "> The entry point to your vault. Bookmark it in the left sidebar.",
+        ],
+        "l1.evening_1": [
+            "ko": "1. 개발일지의 '오늘 배운 것' 을 한 줄 채운다",
+            "en": "1. Fill in one line under \"what I learned today\"",
+        ],
+        "l1.evening_2": [
+            "ko": "2. 아래 '오래 묵은 것' 을 한 번 훑는다",
+            "en": "2. Skim \"gone stale\" below",
+        ],
+        "l1.evening_3": [
+            "ko": "3. 미완료를 내일로 옮긴다",
+            "en": "3. Move anything unfinished to tomorrow",
+        ],
+        "l1.friday": [
+            "ko": "주간리뷰를 만들고 아래 헬스체크를 본다.",
+            "en": "Create the weekly review and run the health check below.",
+        ],
+        "l1.h_areas": [
+            "ko": "🧭 영역별 개발메모",
+            "en": "🧭 Notes by area",
+        ],
+        "l1.h_created": [
+            "ko": "🟢 오늘 만든 노트",
+            "en": "🟢 Created today",
+        ],
+        "l1.h_daily": [
+            "ko": "☀️ 일일 루틴",
+            "en": "☀️ Daily routine",
+        ],
+        "l1.h_evening": [
+            "ko": "🌇 퇴근 전 (3분)",
+            "en": "🌇 Before logging off (3 min)",
+        ],
+        "l1.h_friday": [
+            "ko": "📅 금요일 (10분)",
+            "en": "📅 Friday (10 min)",
+        ],
+        "l1.h_inbox_age": [
+            "ko": "Inbox 적체 (오래된 순)",
+            "en": "Inbox backlog (oldest first)",
+        ],
+        "l1.h_maint": [
+            "ko": "🧹 볼트 유지보수",
+            "en": "🧹 Vault maintenance",
+        ],
+        "l1.h_morning": [
+            "ko": "🕗 아침 (2분)",
+            "en": "🕗 Morning (2 min)",
+        ],
+        "l1.h_orphans": [
+            "ko": "연결이 없는 노트",
+            "en": "Notes with no links",
+        ],
+        "l1.h_projects": [
+            "ko": "🏗️ 진행 중인 프로젝트",
+            "en": "🏗️ Active projects",
+        ],
+        "l1.h_recent_7": [
+            "ko": "최근 7일에 만든 노트",
+            "en": "Created in the last 7 days",
+        ],
+        "l1.h_recent_log": [
+            "ko": "최근 개발일지",
+            "en": "Recent devlogs",
+        ],
+        "l1.h_stale": [
+            "ko": "🔴 오래 묵은 것",
+            "en": "🔴 Gone stale",
+        ],
+        "l1.h_week": [
+            "ko": "🟡 이번 주 개발일지 (공백일 확인)",
+            "en": "🟡 This week's devlogs (spot the gaps)",
+        ],
+        "l1.h_working": [
+            "ko": "💻 작업 중 (수시)",
+            "en": "💻 While working (anytime)",
+        ],
+        "l1.morning_1": [
+            "ko": "1. `⌘⇧D` — 개발일지를 만들고 오늘 할 것 Top 3 을 적는다",
+            "en": "1. `⌘⇧D` — create today's devlog and write your top 3",
+        ],
+        "l1.morning_2": [
+            "ko": "2. `⌘⇧G` — GitHub 활동을 일지에 넣는다",
+            "en": "2. `⌘⇧G` — pull GitHub activity into the devlog",
+        ],
+        "l1.routine_intro": [
+            "ko": "> 하루를 여닫는 순서입니다. 5분이면 됩니다.",
+            "en": "> How to open and close the day. Five minutes.",
+        ],
+        "l1.row_idea": [
+            "ko": "아이디어 캡처",
+            "en": "Capture an idea",
+        ],
+        "l1.row_note": [
+            "ko": "배운 것을 메모",
+            "en": "Note something you learned",
+        ],
+        "l1.row_save": [
+            "ko": "자료 저장",
+            "en": "Save a reference",
+        ],
+        "l1.row_stuck": [
+            "ko": "막힌 것을 기록",
+            "en": "Log something you got stuck on",
+        ],
+        "l1.row_stuck_v": [
+            "ko": "트러블슈팅 폴더에서 새 노트",
+            "en": "New note in the Troubleshooting folder",
+        ],
+        "l1.tbl_key": [
+            "ko": "단축키",
+            "en": "Hotkey",
+        ],
+        "l1.tbl_what": [
+            "ko": "무엇",
+            "en": "What",
+        ],
+        "l1.today": [
+            "ko": "오늘",
+            "en": "Today",
+        ],
+        "nav.devlog": [
+            "ko": "📝 개발일지",
+            "en": "📝 Devlog",
+        ],
+        "nav.devnote": [
+            "ko": "📂 개발메모",
+            "en": "📂 Notes",
+        ],
+        "nav.idea": [
+            "ko": "💡 아이디어",
+            "en": "💡 Ideas",
+        ],
+        "nav.inbox": [
+            "ko": "📥 Inbox",
+            "en": "📥 Inbox",
+        ],
+        "nav.library": [
+            "ko": "📚 라이브러리",
+            "en": "📚 Libraries",
+        ],
+        "nav.projects": [
+            "ko": "🏗️ 프로젝트",
+            "en": "🏗️ Projects",
+        ],
+        "nav.trouble": [
+            "ko": "🔧 트러블슈팅",
+            "en": "🔧 Troubleshooting",
+        ],
+        "nav.zettel": [
+            "ko": "🗂 카드노트",
+            "en": "🗂 Zettel",
+        ],
+
         // hub (L3 폴더 허브)
         "hub.recent": [
             "ko": "최근",

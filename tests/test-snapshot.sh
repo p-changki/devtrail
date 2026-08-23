@@ -214,8 +214,16 @@ t_start "개발일지 파일명의 출처가 하나다"
 # ⚠️ 아직 네 곳(생성 스크립트·대시보드 서버·허브 생성기·설정 템플릿)이 각자
 #    기본값을 갖고 있다. 그 넷은 이번 범위 밖이라 손대지 않았고, 보고했다.
 #    여기서는 **이번에 손댄 둘**만 지킨다: 메뉴바 앱과 snapshot.
+# ⚠️ **메뉴바 앱**만 본다(DevTrailApp). DevTrailHelper 는 lib/gen/hubs.py 를
+#    옮긴 것이라 그 폴백을 **그대로** 갖는다 — 그게 이관의 목표다(같은 출력).
+#    python 과 어긋나지 않는다는 보장은 tests/test-gen-contract.sh 의 골든이
+#    한다. 여기서 막아야 할 것은 "앱이 파일명 규칙을 **한 벌 더** 갖는 것"
+#    이지, 이관된 생성기가 원본과 같은 폴백을 갖는 것이 아니다.
+#
+#    범위를 넓게 잡았다가 M2 에서 이 테스트가 빨간불이 됐다(2026-08-24).
+#    규칙의 대상을 정확히 적는다.
 t_eq "앱이 자기 기본값을 갖지 않는다" "0" \
-  "$(grep -rc '{{DATE}} devlog.md' "$ROOT/app/Sources"/*/*.swift 2>/dev/null | awk -F: '{s+=$2} END{print s+0}')"
+  "$(grep -rc '{{DATE}} devlog.md' "$ROOT/app/Sources/DevTrailApp"/*.swift 2>/dev/null | awk -F: '{s+=$2} END{print s+0}')"
 t_eq "snapshot 이 자기 기본값을 갖지 않는다" "0" \
   "$(grep -c '{{DATE}} devlog.md' "$ROOT/lib/commandcentercmd.sh" | tr -d ' ')"
 t_contains "단일 출처 함수가 있다" "dt_devlog_name" "$(cat "$ROOT/lib/common.sh")"

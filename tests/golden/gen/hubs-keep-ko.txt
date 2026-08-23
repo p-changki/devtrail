@@ -1,0 +1,72 @@
+=== stdout ===
+일일 체크인.md
+=== files ===
+--- 대시보드.md
+내가 고친 대시보드
+--- 일일 체크인.md
+---
+tags:
+  - type/moc
+type: moc
+scope: vault
+created: 2026-08-06
+updated: 2026-08-06
+---
+
+# ☀️ 일일 루틴
+
+> 하루를 여닫는 순서입니다. 5분이면 됩니다.
+
+## 🕗 아침 (2분)
+
+1. `⌘⇧D` — 개발일지를 만들고 오늘 할 것 Top 3 을 적는다
+2. 아래 '오래 묵은 것' 을 한 번 훑는다
+
+## 💻 작업 중 (수시)
+
+| 무엇 | 단축키 |
+|---|---|
+| 배운 것을 메모 | `⌘⇧M` |
+| 막힌 것을 기록 | 트러블슈팅 폴더에서 새 노트 |
+| 아이디어 캡처 | `⌘⇧I` |
+| 자료 저장 | `⌘⇧N` |
+
+## 🌇 퇴근 전 (3분)
+
+1. 개발일지의 '오늘 배운 것' 을 한 줄 채운다
+2. `⌘⇧G` — GitHub 활동을 일지에 넣는다
+3. 미완료를 내일로 옮긴다
+
+## 📅 금요일 (10분)
+
+주간리뷰를 만들고 아래 헬스체크를 본다.
+
+---
+
+## 🔴 오래 묵은 것
+
+```dataview
+TABLE (date(today) - file.ctime).day AS "체류일"
+FROM ""
+WHERE file.name != "_index" AND file.ctime <= date(today) - dur(14 days)
+SORT file.ctime ASC
+LIMIT 10
+```
+
+## 🟡 이번 주 개발일지 (공백일 확인)
+
+```dataview
+LIST
+FROM "notes/개발/개발일지"
+WHERE file.name != "_index" AND file.ctime >= date(today) - dur(7 days)
+SORT file.name DESC
+```
+
+## 🟢 오늘 만든 노트
+
+```dataview
+LIST
+FROM "notes"
+WHERE file.ctime >= date(today) AND !contains(file.folder, "템플릿")
+SORT file.ctime DESC
+```
