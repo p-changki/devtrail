@@ -1785,4 +1785,39 @@ t_contains "실패해도 뷰를 등록한다" "registerView" "$MAINSRC"
 t_contains "안내 화면이 있다" "devtrail-cc-recovery" "$MAINSRC"
 t_contains "무엇을 하면 되는지" "install --apply" "$MAINSRC"
 
+t_start "화면에 넘기기 전에 대입이 끝나 있다"
+# ⚠️ makeView 에 이름을 넘길 때 그 이름들이 아직 undefined 면, 조용히
+#    undefined 가 건네지고 화면은 **부르는 순간에야** 죽는다:
+#
+#      TypeError: hotkeyLabel is not a function (nav)
+#
+#    렌더 하니스도 이건 못 잡는다 — 이름 목록은 읽지만 대입 **시점**은
+#    모르기 때문이다. 소스 순서로 본다.
+cat > "$T_TMP/order.py" <<'PYEOF'
+import io, re, sys
+src = io.open(sys.argv[1], encoding='utf-8').read()
+m = re.search(r'function bindModules\(m\) \{(.*?)\n\}', src, re.S)
+if not m:
+    print('bindModules 를 찾지 못함'); raise SystemExit
+body = m.group(1).split('\n')
+call = next((i for i, l in enumerate(body) if 'm.makeView({' in l), None)
+if call is None:
+    print('makeView 호출을 찾지 못함'); raise SystemExit
+# makeView 에 넘기는 이름들
+args = []
+for l in body[call:]:
+    args.append(l)
+    if l.strip().startswith('});'):
+        break
+passed = set(re.findall(r'[A-Za-z_][A-Za-z0-9_]*', ' '.join(args)[len('const view = m.makeView({'):]))
+# 대입이 호출보다 뒤에 오는 이름
+late = []
+for i, l in enumerate(body):
+    a = re.match(r'\s*([A-Za-z_][A-Za-z0-9_]*) = m\.', l)
+    if a and i > call and a.group(1) in passed:
+        late.append(a.group(1))
+print(' '.join(sorted(set(late))))
+PYEOF
+t_eq "늦게 대입되는 이름이 없다" "" "$(python3 "$T_TMP/order.py" "$JS")"
+
 t_end

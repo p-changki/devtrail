@@ -92,25 +92,13 @@ let TEXT, textFor;
 let CommandCenterView, QuickCaptureModal;
 
 function bindModules(m) {
+  // ⚠️ 대입을 **먼저** 끝낸다. 화면 factory 에 이름을 넘길 때 그 이름들이
+  //    아직 undefined 면 조용히 undefined 가 건네지고, 화면은 부르는
+  //    순간에야 죽는다 — 2026-08-23 에 hotkeyLabel 이 그랬다:
+  //      TypeError: hotkeyLabel is not a function (nav)
   RM = m.model;
   TEXT = m.i18n.TEXT;
   textFor = m.i18n.textFor;
-
-  // ⚠️ 화면에 필요한 것을 **명시적으로** 넘긴다. 전역으로 새어 들어가면
-  //    무엇이 무엇에 기대는지 아무도 모르게 된다.
-  const view = m.makeView({
-    // ⚠️ obsidian 을 넘긴다. 절대 경로로 불러온 모듈은 그 이름을 못 푼다 —
-    //    플러그인 진입점에서만 풀리는 이름이다.
-    obsidian,
-    DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, BOARD_COLUMNS,
-    isUserNote, localDate, openTasks, openTasksInVault, buildFlow, weeklyBars,
-    parseDue, isStale, relativeDays, daysBetween, normalizeStage, todayDevlog, collect,
-    CAPTURES, CORE_SEARCH, templaterCommandId, captureFile, commandExists,
-    findSearchCommand, searchRunner, hotkeyLabel, isSubmitKey,
-    icon, isMainLeaf, readPathMap, VIEW_TYPE, PLUGIN_ID, PATH_MAP_FILE, textFor,
-  });
-  CommandCenterView = view.CommandCenterView;
-  QuickCaptureModal = view.QuickCaptureModal;
   CAPTURES = m.cmds.CAPTURES;
   SEARCH_PLUGINS = m.cmds.SEARCH_PLUGINS;
   CORE_SEARCH = m.cmds.CORE_SEARCH;
@@ -147,6 +135,22 @@ function bindModules(m) {
   normalizeStage = m.model.normalizeStage;
   todayDevlog = m.model.todayDevlog;
   collect = m.model.collect;
+
+  // ⚠️ 화면에 필요한 것을 **명시적으로** 넘긴다. 전역으로 새어 들어가면
+  //    무엇이 무엇에 기대는지 아무도 모르게 된다.
+  const view = m.makeView({
+    // ⚠️ obsidian 을 넘긴다. 절대 경로로 불러온 모듈은 그 이름을 못 푼다 —
+    //    플러그인 진입점에서만 풀리는 이름이다.
+    obsidian,
+    DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, BOARD_COLUMNS,
+    isUserNote, localDate, openTasks, openTasksInVault, buildFlow, weeklyBars,
+    parseDue, isStale, relativeDays, daysBetween, normalizeStage, todayDevlog, collect,
+    CAPTURES, CORE_SEARCH, templaterCommandId, captureFile, commandExists,
+    findSearchCommand, searchRunner, hotkeyLabel, isSubmitKey,
+    icon, isMainLeaf, readPathMap, VIEW_TYPE, PLUGIN_ID, PATH_MAP_FILE, textFor,
+  });
+  CommandCenterView = view.CommandCenterView;
+  QuickCaptureModal = view.QuickCaptureModal;
 }
 
 
