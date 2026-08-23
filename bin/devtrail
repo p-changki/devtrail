@@ -35,7 +35,6 @@ ${C_BOLD}설치${C_RESET}
   devtrail plugins <sub>     Obsidian 플러그인 (install|status)
   devtrail command-center <sub>  Obsidian 화면 (install|update|enable|disable|status|uninstall)
   devtrail app <sub>         메뉴바 앱 (install|start|stop|status)
-  devtrail dashboard         웹 대시보드 (상태·실행·설정)
   devtrail install-schedule  launchd 자동 실행 등록
   devtrail update            DevTrail 자체를 최신으로 (기본 dry-run)
   devtrail undo [ID]         마지막 변경 되돌리기 (인자 없으면 이력)
@@ -105,7 +104,24 @@ case "$cmd" in
   app)
     . "$DEVTRAIL_ROOT/lib/appcmd.sh"; app_cmd "$@" ;;
   dashboard)
-    . "$DEVTRAIL_ROOT/lib/dashboard.sh"; dashboard_run "$@" ;;
+    # ⚠️ 폐지됨 (2026-08-24, ADR 0006 D5).
+    #
+    #    웹 대시보드는 python HTTP 서버 280줄이었고, 하는 일이 메뉴바 앱과
+    #    **완전히** 겹쳤다 — 액션 4개(activity·summary·weekly·sync)와 토글
+    #    3개(ai.summary_enabled·backup.enabled·linear.enabled)가 같은 것을
+    #    부른다. 겹치는 화면을 두 벌 유지하면 둘 다 낡는다.
+    #
+    #    그리고 이것이 마지막 python3 의존이었다. 비개발자 Mac 에는 python3
+    #    가 없다(CLT 셰임) — 이걸 남기면 M1~M3 의 이관이 반감된다.
+    #
+    #    조용히 "알 수 없는 명령" 으로 두지 않는다. 어디로 갔는지 말한다.
+    printf '%s\n' "$(L "devtrail dashboard 는 폐지됐습니다." \
+                        "devtrail dashboard has been retired.")" >&2
+    printf '%s\n' "$(L "  같은 일을 메뉴바 앱이 합니다: devtrail app install" \
+                        "  The menu bar app does the same: devtrail app install")" >&2
+    printf '%s\n' "$(L "  설정만 바꾸려면: devtrail config set <키> <값>" \
+                        "  To change settings only: devtrail config set <key> <value>")" >&2
+    exit 2 ;;
   install-schedule)
     . "$DEVTRAIL_ROOT/lib/schedule.sh"; schedule_install "$@" ;;
   uninstall)

@@ -73,7 +73,7 @@ preset/  templates/                데이터. 실행되지 않는다
 | `lib/init/write.sh` → `augmentcmd.sh` · `skillcmd.sh` | init 은 '전체 셋업'이라 다른 명령을 단계로 실행한다 |
 | `lib/merge/hotkeys.sh` → `pathcmd.sh` | 경로 해석의 단일 출처를 쓰기 위해 |
 | `lib/augmentcmd.sh` → `pathcmd.sh` | 같은 이유 |
-| `lib/dashboard.sh` → `bin/devtrail` 경로 전달 | **UI 는 로직을 갖지 않는다.** 웹 UI 는 CLI 를 호출할 뿐이다 |
+| 메뉴바 앱 → `bin/devtrail` 경로 전달 | **UI 는 로직을 갖지 않는다.** UI 는 CLI 를 호출할 뿐이다 |
 | `lib/updatecmd.sh` → `bin/devtrail` chmod | 갱신 후 실행권한 복구 |
 
 ---

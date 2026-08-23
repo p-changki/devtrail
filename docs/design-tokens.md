@@ -139,24 +139,13 @@ SSH·tmux·구형 터미널에서 깨진다.
 | 단계 | `▶` | `step` |
 | 보조 | (없음) | `dim` |
 
-### 웹 대시보드 (`templates/dashboard/index.html`)
+### ~~웹 대시보드~~ — 폐지 (2026-08-24)
 
-CSS 변수는 `--dt-` 접두사를 쓴다. Obsidian이나 다른 스타일과 섞이지 않게.
+웹 대시보드는 폐지됐다 ([ADR 0006](decisions/0006-dmg-distribution.md) D5).
+하던 일을 메뉴바 앱이 **같은 명령·같은 설정 키로** 이미 한다.
 
-```css
-:root {
-  --dt-ink: #16201a;
-  --dt-accent: #2f6b4f;
-  /* … */
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --dt-ink: #e5ece7; /* … */ }
-}
-:root[data-theme="dark"] { --dt-ink: #e5ece7; /* … */ }
-```
-
-**세 블록이 다 필요하다.** 시스템 기본(스탬프 없음) · 명시적 다크 · 명시적 라이트
-세 상태가 있고, 하나라도 빠지면 한쪽 테마의 글자가 다른 쪽 배경에 얹힌다.
+`--dt-` 접두사 규칙은 남는다 — Obsidian 플러그인 스타일이 그 규칙을 쓴다
+([Command Center 디자인](command-center-design.md)).
 
 ### 메뉴바 앱 (`app/Sources/DevTrailApp/`)
 
