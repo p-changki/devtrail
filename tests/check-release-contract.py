@@ -75,12 +75,46 @@ def main():
     else:
         schema = int(m.group(1))
 
+    # ⚠️ 번들 jq — 우리가 만든 것이 아니라 가져다 넣는 것이다. 출처와 해시의
+    #    정본은 vendor/jq/jq.lock.json 하나다.
+    try:
+        jq_lock = load_json("vendor/jq/jq.lock.json")
+    except (OSError, ValueError) as e:
+        bad.append("vendor/jq/jq.lock.json 을 읽을 수 없습니다: %s" % e)
+        jq_lock = None
+
+    if jq_lock is not None:
+        slices = jq_lock.get("slices", [])
+        archs = sorted(sl.get("arch", "") for sl in slices)
+        # ⚠️ 슬라이스가 둘 다 없으면 universal 을 만들 수 없다 — Intel 맥에서
+        #    앱은 뜨는데 jq 만 없는 상태가 된다.
+        if archs != ["arm64", "x86_64"]:
+            bad.append("jq 락의 아키텍처가 arm64+x86_64 가 아닙니다: %s" % archs)
+        for sl in slices:
+            if not re.match(r"^[0-9a-f]{64}$", str(sl.get("sha256", ""))):
+                bad.append("jq 락의 %s 슬라이스에 sha256 이 없습니다" % sl.get("arch"))
+        # ⚠️ 라이선스는 요약할 수 없다 — 해시로 원본임을 못 박는다.
+        if not re.match(r"^[0-9a-f]{64}$", str(jq_lock.get("license", {}).get("sha256", ""))):
+            bad.append("jq 락에 라이선스 sha256 이 없습니다")
+
     m = re.search(r"macOS\(\.v(\d+)\)", read("app/Package.swift"))
     if not m:
         bad.append("app/Package.swift 에서 최소 macOS 를 읽을 수 없습니다")
         min_macos = None
     else:
         min_macos = m.group(1)
+
+    # ⚠️ jq 가 요구하는 macOS 가 앱 최소보다 **높으면** 안 된다. 앱은 뜨는데
+    #    jq 만 못 도는 기계가 생기고, 그때 나는 에러는 원인을 가리키지 않는다.
+    if jq_lock is not None and min_macos is not None:
+        try:
+            jq_min = int(str(jq_lock.get("min_macos", "")).split(".")[0])
+            if jq_min > int(min_macos):
+                bad.append("번들 jq 는 macOS %d 이상이 필요한데 앱 최소는 %s 입니다"
+                           % (jq_min, min_macos))
+        except (TypeError, ValueError):
+            bad.append("jq 락의 min_macos 를 읽을 수 없습니다: %r"
+                       % jq_lock.get("min_macos"))
 
     # ── ① files.json 이 선언한 파일이 실제로 있는가 ─────────────────────────
     #
@@ -143,6 +177,29 @@ def main():
                     and rel.get("app", {}).get("min_macos") != min_macos:
                 bad.append("매니페스트 min_macos=%s · Package.swift=%s"
                            % (rel.get("app", {}).get("min_macos"), min_macos))
+            # ⚠️ 매니페스트의 jq 가 락과 **같은가**. 손으로 적어 넣거나 락만
+            #    올리고 매니페스트가 안 따라가는 경우를 잡는다.
+            if jq_lock is not None:
+                mt = rel.get("bundled_tools", {}).get("jq")
+                if not mt:
+                    bad.append("매니페스트에 번들 jq 가 없습니다")
+                else:
+                    if mt.get("version") != jq_lock.get("version"):
+                        bad.append("매니페스트 jq=%s · 락=%s"
+                                   % (mt.get("version"), jq_lock.get("version")))
+                    if mt.get("min_macos") != jq_lock.get("min_macos"):
+                        bad.append("매니페스트 jq.min_macos=%s · 락=%s"
+                                   % (mt.get("min_macos"), jq_lock.get("min_macos")))
+                    if mt.get("license", {}).get("sha256") \
+                            != jq_lock.get("license", {}).get("sha256"):
+                        bad.append("매니페스트의 jq 라이선스 해시가 락과 다릅니다")
+                    want = {sl.get("arch"): sl.get("sha256")
+                            for sl in jq_lock.get("slices", [])}
+                    got = {sl.get("arch"): sl.get("sha256")
+                           for sl in mt.get("slices", [])}
+                    if want != got:
+                        bad.append("매니페스트의 jq 슬라이스 해시가 락과 다릅니다")
+
             arts = rel.get("artifacts", [])
             if len(arts) != len(files):
                 bad.append("매니페스트 배포물 %d개 · files.json %d개"
@@ -181,8 +238,9 @@ def main():
             print("   - %s" % b)
         return 1
 
-    print("✅ 릴리즈 계약 일치 — v%s · 플러그인 %s · 스키마 v%s · 최소 macOS %s · 파일 %d개"
-          % (version, plugin_ver, schema, min_macos, len(files)))
+    print("✅ 릴리즈 계약 일치 — v%s · 플러그인 %s · 스키마 v%s · 최소 macOS %s · 파일 %d개 · 번들 %s"
+          % (version, plugin_ver, schema, min_macos, len(files),
+             (jq_lock or {}).get("version", "?")))
     return 0
 
 

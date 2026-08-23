@@ -228,6 +228,35 @@ dt_helper() {
   return 1
 }
 
+# 번들 안에서 돌 때, 함께 나온 도구를 먼저 쓴다.
+#
+# ⚠️ 왜 PATH 인가 (ADR 0006 M4)
+#
+#    jq 는 40개 파일 **139곳**에서 맨몸으로 불린다. 호출부를 하나씩 고치면
+#    다음에 새로 쓰는 곳에서 또 빠진다 — 이 저장소가 dirs.devlog 기본값으로
+#    네 번 겪은 결함이다. 진입점 한 곳에서 PATH 를 세우고 끝낸다.
+#
+# ⚠️ **앞에** 붙인다. DMG 로 받은 사용자에게는 우리가 해시를 못 박고 실제로
+#    돌려 본 그 버전이 돌아야 한다. 뒤에 붙이면 기계마다 다른 jq 가 잡힌다.
+#
+# ⚠️ 번들이 아닐 때는 아무것도 하지 않는다. 개발 중에는 각자의 jq 를 쓴다.
+dt_bundled_bin_dir() {
+  local p="$DEVTRAIL_ROOT/../Helpers"
+  [ -d "$p" ] && [ -x "$p/jq" ] && { (cd "$p" && pwd); return 0; }
+  return 1
+}
+
+_dt_use_bundled_bins() {
+  local d
+  d=$(dt_bundled_bin_dir) || return 0
+  case ":$PATH:" in
+    *":$d:"*) return 0 ;;   # 이미 있다 — 두 번 붙이지 않는다
+  esac
+  PATH="$d:$PATH"
+  export PATH
+}
+_dt_use_bundled_bins
+
 # 하위 명령 → python 스크립트. 폴백에 쓴다.
 #
 # ⚠️ 이 표가 곧 "무엇이 이관됐는가" 다. 헬퍼에 없는 명령을 여기 적으면

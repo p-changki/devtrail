@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "_why": "번들에 넣는 jq 의 출처와 해시를 못 박는다. 무결성은 사용자 기계가 아니라 빌드 시점에 지킨다 (ADR 0006 D1). 손으로 고치지 않는다 — 올릴 때는 scripts/fetch-jq.sh --update 로 갱신하고 상류 sha256sum.txt 와 대조한다.",
+  "version": "jq-1.8.2",
+  "release": "https://github.com/jqlang/jq/releases/tag/jq-1.8.2",
+  "min_macos": "14.0",
+  "_min_macos_why": "실측: otool -l 의 LC_BUILD_VERSION minos. app/Package.swift 의 최소 macOS 가 이보다 낮으면 그 기계에서 jq 가 안 돈다.",
+  "license": {
+    "file": "COPYING",
+    "sha256": "ad2b4a266b2268939c1446979759706077421cf906a203aa188c6f396e8cfd74",
+    "url": "https://raw.githubusercontent.com/jqlang/jq/jq-1.8.2/COPYING",
+    "_note": "MIT 하나가 아니다 — jq(MIT) · Lucent decNumber · ICU · KTH · NetBSD strptime 다섯 블록이 한 파일에 있다. 요약하지 않고 원본 그대로 번들한다."
+  },
+  "slices": [
+    {
+      "arch": "arm64",
+      "asset": "jq-macos-arm64",
+      "sha256": "2d75340ba57a4b4b4c8708a21c2dc8e958a48aaa8bba13b27f77f6e4c0eca07e"
+    },
+    {
+      "arch": "x86_64",
+      "asset": "jq-macos-amd64",
+      "sha256": "e94b266e3c26690550006abe63152b782280f4e14374accdf04cbde844f00bc0"
+    }
+  ],
+  "_verify": "합친 universal 은 lipo -thin 으로 다시 쪼개 위 슬라이스 해시와 대조한다 — 새 신뢰 기준점을 만들지 않는다. ⚠️ 서명하면 슬라이스가 바뀌므로 대조는 서명 전 vendor 원본에서만 성립한다."
+}

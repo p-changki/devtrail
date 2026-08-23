@@ -74,6 +74,25 @@ EOF
 
 ARTS=$(artifacts_json) || die "플러그인 파일 중 없는 것이 있습니다 (files.json 과 실제가 다릅니다)"
 
+# ── 함께 나가는 외부 도구 ────────────────────────────────────────────────────
+#
+# ⚠️ jq 는 우리가 만든 것이 아니라 **가져다 넣는** 것이다. 무엇을 어느
+#    해시로 넣었는지 릴리즈마다 남는다 — 나중에 "그때 뭐가 들어갔지" 를
+#    기억에 의존해 답하지 않기 위해서다.
+#
+# ⚠️ 정본은 vendor/jq/jq.lock.json 이다. 여기서 값을 다시 적지 않고 읽는다.
+JQ_LOCK="vendor/jq/jq.lock.json"
+[ -f "$JQ_LOCK" ] || die "번들 jq 락 파일이 없습니다: $JQ_LOCK"
+TOOLS=$(jq '{
+    jq: {
+      version:   .version,
+      source:    .release,
+      min_macos: .min_macos,
+      license:   { file: .license.file, sha256: .license.sha256 },
+      slices:    [ .slices[] | { arch, sha256 } ]
+    }
+  }' "$JQ_LOCK") || die "번들 jq 락 파일을 읽지 못했습니다"
+
 jq -n \
   --arg version "$VERSION" \
   --arg plugin_id "$PLUGIN_ID" \
@@ -81,6 +100,7 @@ jq -n \
   --argjson config_schema "$SCHEMA" \
   --arg min_macos "$MIN_MACOS" \
   --argjson artifacts "$ARTS" \
+  --argjson bundled_tools "$TOOLS" \
   '{
      schema: 1,
      _why: "DevTrail 한 릴리즈에 함께 나가는 것들의 단일 정본. 손으로 고치지 않는다 — scripts/make-release-manifest.sh 가 만든다.",
@@ -88,10 +108,12 @@ jq -n \
      app: { bundle_version: $version, min_macos: $min_macos },
      plugin: { id: $plugin_id, version: $plugin_version },
      config_schema: $config_schema,
-     artifacts: $artifacts
+     artifacts: $artifacts,
+     bundled_tools: $bundled_tools
    }' > "$OUT" || die "매니페스트를 쓰지 못했습니다: $OUT"
 
 printf '릴리즈 매니페스트: %s\n' "$OUT"
-printf '  version %s · plugin %s · schema v%s · min macOS %s · 파일 %s개\n' \
+printf '  version %s · plugin %s · schema v%s · min macOS %s · 파일 %s개 · 번들도구 %s\n' \
   "$VERSION" "$PLUGIN_VER" "$SCHEMA" "$MIN_MACOS" \
-  "$(printf '%s' "$ARTS" | jq 'length')"
+  "$(printf '%s' "$ARTS" | jq 'length')" \
+  "$(printf '%s' "$TOOLS" | jq -r '.jq.version')"

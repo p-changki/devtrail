@@ -33,6 +33,134 @@ t_eq "헬퍼를 번들에 넣는다" "no" \
   "$([ "$(printf '%s' "$LIVE" | grep -c 'Contents/Helpers/devtrail-helper' | tr -d ' ')" = 0 ] \
      && echo yes || echo no)"
 
+t_start "빌드 스크립트가 jq 를 번들에 넣는다"
+# ⚠️ **명령 자리**를 본다. 문자열이 어딘가 있다는 것으로는 부족하다 —
+#    cp 를 지워도 바로 밑 chmod 줄에 같은 경로가 남아 grep 은 찾아낸다.
+#    (2026-08-24 변이에서 실제로 이렇게 뚫렸다.)
+t_eq "vendor 의 jq 를 Helpers 로 복사한다" "1" \
+  "$(printf '%s\n' "$LIVE" \
+     | grep -cE '^[[:space:]]*cp[[:space:]]+.*vendor/jq/build/jq.*Contents/Helpers/jq' \
+     | tr -d ' ')"
+t_eq "라이선스 원본을 복사한다" "1" \
+  "$(printf '%s\n' "$LIVE" \
+     | grep -cE '^[[:space:]]*cp[[:space:]]+.*vendor/jq/build/COPYING' | tr -d ' ')"
+
+t_start "⚠️ 어긋난 jq 로는 빌드가 서지 않는다"
+# ⚠️ 이건 문자열이 아니라 **행동**으로 확인한다. 관문이 진짜 막는지는
+#    막아 보는 수밖에 없다.
+#
+#    실린 jq 를 나중에 상류 해시로 되짚을 수는 없다 — 서명이 바이트를 바꾸고,
+#    서명을 지워도 원본으로 돌아오지 않는다(실측). 그래서 이 관문이
+#    무결성의 **마지막 기회**다.
+#
+#    관문은 swift 빌드보다 앞에 있어야 이 시험이 몇 초 만에 끝난다.
+if [ -f "$ROOT/vendor/jq/build/jq" ]; then
+  BSAV=$(mktemp -d)
+  cp "$ROOT/vendor/jq/build/jq" "$BSAV/jq"
+  BSTAMP=""
+  [ -f "$APP/Contents/Helpers/jq" ] && BSTAMP=$(shasum -a 256 "$APP/Contents/Helpers/jq" | cut -d' ' -f1)
+
+  # 상류와 다른 바이너리로 바꿔치기한다 (같은 이름, 도는 것, 다른 내용)
+  cp "$APP/Contents/Helpers/jq" "$ROOT/vendor/jq/build/jq" 2>/dev/null
+
+  t_eq "락과 다른 jq 면 build.sh 가 실패한다" "no" \
+    "$( (cd "$ROOT" && ./app/build.sh >/dev/null 2>&1) && echo yes || echo no)"
+
+  # ⚠️ 그리고 **기존 번들을 건드리지 않아야** 한다. 관문에서 막혔는데
+  #    번들이 반쯤 지워져 있으면, 다음 사람이 그걸 배포한다.
+  if [ -n "$BSTAMP" ]; then
+    t_eq "막혔을 때 기존 번들이 그대로다" "$BSTAMP" \
+      "$(shasum -a 256 "$APP/Contents/Helpers/jq" 2>/dev/null | cut -d' ' -f1)"
+  fi
+
+  cp "$BSAV/jq" "$ROOT/vendor/jq/build/jq"
+  rm -rf "$BSAV"
+else
+  dim "   vendor/jq/build/jq 없음 — 건너뜀 (./scripts/fetch-jq.sh)"
+fi
+
+t_start "최소 macOS 의 정본이 하나다"
+# ⚠️ Info.plist 에 숫자를 직접 적으면 Package.swift 와 두 벌이 된다.
+#    한쪽만 올리는 날 "설치는 됐는데 안 열린다" 가 된다.
+t_eq "build.sh 가 숫자를 직접 적지 않는다" "0" \
+  "$(printf '%s' "$LIVE" | grep -c 'LSMinimumSystemVersion</key><string>[0-9]' | tr -d ' ')"
+t_eq "Package.swift 에서 읽는다" "yes" \
+  "$([ "$(printf '%s' "$LIVE" | grep -c 'MIN_MACOS=\$(grep' | tr -d ' ')" != 0 ] \
+     && echo yes || echo no)"
+
+t_start "번들 jq 의 출처가 못 박혀 있다"
+LOCK="$ROOT/vendor/jq/jq.lock.json"
+t_eq "락 파일이 있다" "yes" "$([ -f "$LOCK" ] && echo yes || echo no)"
+if [ -f "$LOCK" ]; then
+  # ⚠️ 슬라이스가 둘 다 있어야 universal 을 만들 수 있다.
+  t_eq "락에 두 아키텍처가 있다" "arm64 x86_64" \
+    "$(jq -r '[.slices[].arch] | sort | join(" ")' "$LOCK" 2>/dev/null)"
+  t_eq "각 슬라이스에 sha256 이 있다" "0" \
+    "$(jq '[.slices[] | select((.sha256 // "") | test("^[0-9a-f]{64}$") | not)] | length' "$LOCK" 2>/dev/null)"
+  t_eq "라이선스 해시가 있다" "yes" \
+    "$(jq -r 'if (.license.sha256 // "") | test("^[0-9a-f]{64}$") then "yes" else "no" end' "$LOCK" 2>/dev/null)"
+  # ⚠️ jq 가 요구하는 macOS 가 앱 최소보다 높으면, 앱은 뜨는데 jq 만 못 돈다.
+  JQMIN=$(jq -r '.min_macos' "$LOCK" 2>/dev/null | cut -d. -f1)
+  APPMIN=$(grep -oE 'macOS\(\.v([0-9]+)\)' "$ROOT/app/Package.swift" | grep -oE '[0-9]+' | head -1)
+  t_eq "jq 의 최소 macOS 가 앱 최소 이하다 (jq $JQMIN · 앱 $APPMIN)" "yes" \
+    "$([ -n "$JQMIN" ] && [ -n "$APPMIN" ] && [ "$JQMIN" -le "$APPMIN" ] && echo yes || echo no)"
+fi
+
+t_start "vendor 산출물이 상류 해시와 맞는다"
+# ⚠️ 우리가 만든 해시를 우리가 확인하는 순환을 만들지 않는다. 합친
+#    universal 을 다시 쪼개 **상류가 발표한** 슬라이스 해시와 대조한다.
+#    (서명하면 슬라이스가 바뀌므로, 이 대조는 서명 전 vendor 원본에서만 성립한다.)
+if [ -f "$ROOT/vendor/jq/build/jq" ]; then
+  t_eq "fetch-jq.sh --check" "0" \
+    "$("$ROOT/scripts/fetch-jq.sh" --check >/dev/null 2>&1; echo $?)"
+else
+  dim "   vendor/jq/build/jq 없음 — 건너뜀 (./scripts/fetch-jq.sh)"
+fi
+
+t_start "⚠️ 서명이 실패하면 빌드가 선다"
+# ⚠️ 문서와 아래 단언은 "안쪽부터 서명한다" 를 **배포 계약**으로 말한다.
+#    그렇다면 실패 정책도 같아야 한다 — 예전에는 `|| true` 로 넘겨서,
+#    서명이 통째로 실패해도 빌드가 초록불로 끝났다. 그 차이는 M7 공증에서야
+#    드러나고, 그때는 원인이 멀어져 있다.
+#
+#    문자열로는 확인할 수 없다(`|| true` 를 지워도 다른 줄이 grep 을 속인다).
+#    **실제로 실패시켜 본다** — 우리 번들에만 실패하는 codesign 을 심는다.
+if [ -d "$APP" ]; then
+  CSD=$(mktemp -d)
+  cat > "$CSD/codesign" <<'FAKE'
+#!/bin/sh
+# 우리 번들을 건드릴 때만 실패한다. swift 빌드가 쓰는 서명은 그대로 둔다.
+case "$*" in
+  *DevTrail.app*) echo "fake codesign: refusing" >&2; exit 1 ;;
+esac
+exec /usr/bin/codesign "$@"
+FAKE
+  chmod +x "$CSD/codesign"
+  t_eq "서명이 실패하면 build.sh 가 실패한다" "no" \
+    "$( (cd "$ROOT" && PATH="$CSD:$PATH" ./app/build.sh >/dev/null 2>&1) && echo yes || echo no)"
+
+  # ⚠️ **서명은 됐는데 유효하지 않은** 경우도 있다 — 바깥 번들을 서명한 뒤
+  #    안쪽이 바뀌면 조용히 깨진다. 붙였다는 것과 유효하다는 것은 다르므로,
+  #    검증 루프만 따로 실패시켜 그 루프가 실제로 지키는지 본다.
+  cat > "$CSD/codesign" <<'FAKE2'
+#!/bin/sh
+# --verify 일 때만, 그리고 우리 번들일 때만 실패한다.
+case "$*" in
+  *--verify*DevTrail.app*) echo "fake codesign: verify refused" >&2; exit 1 ;;
+esac
+exec /usr/bin/codesign "$@"
+FAKE2
+  chmod +x "$CSD/codesign"
+  t_eq "서명 검증이 실패해도 build.sh 가 실패한다" "no" \
+    "$( (cd "$ROOT" && PATH="$CSD:$PATH" ./app/build.sh >/dev/null 2>&1) && echo yes || echo no)"
+
+  rm -rf "$CSD"
+  # ⚠️ 앞선 시험이 번들을 반쯤 만들어 두었을 수 있다. 되돌려 놓는다 —
+  #    뒤따르는 단언들이 실물을 보기 때문이다.
+  (cd "$ROOT" && ./app/build.sh >/dev/null 2>&1) \
+    || dim "   ⚠️ 번들 재빌드 실패 — 뒤 단언이 헛돌 수 있습니다"
+fi
+
 t_start "번들이 dt_helper 가 찾는 경로와 맞는다"
 # ⚠️ lib/common.sh 의 2순위가 .app/Contents/Helpers/devtrail-helper 다.
 #    한쪽만 바꾸면 조용히 폴백으로 떨어진다.
@@ -48,7 +176,7 @@ if [ ! -d "$APP" ]; then
 fi
 
 t_start "⚠️ 산출물이 실제로 universal 이다"
-for rel in "Contents/MacOS/DevTrail" "Contents/Helpers/devtrail-helper"; do
+for rel in "Contents/MacOS/DevTrail" "Contents/Helpers/devtrail-helper" "Contents/Helpers/jq"; do
   f="$APP/$rel"
   if [ ! -f "$f" ]; then
     _t_bad "$rel" "번들에 없습니다" "$f"
@@ -71,6 +199,82 @@ t_eq "생성기가 답한다" "0" \
   "$("$APP/Contents/Helpers/devtrail-helper" gen-hotkeys daily \
        "$ROOT/preset/obsidian/hotkeys.tmpl.json" /dev/null "" >/dev/null 2>&1; echo $?)"
 
+t_start "번들 안 jq 가 실제로 실행된다"
+# ⚠️ 해시가 맞아도 못 돌 수 있다 — 서명이 깨지거나 실행 권한이 빠지는 경우다.
+JQB="$APP/Contents/Helpers/jq"
+t_eq "락이 적은 버전으로 답한다" \
+  "$(jq -r '.version' "$ROOT/vendor/jq/jq.lock.json" 2>/dev/null)" \
+  "$("$JQB" --version 2>/dev/null)"
+t_eq "실제로 JSON 을 처리한다" "6" \
+  "$(printf '{"a":[1,2,3]}' | "$JQB" -c '.a|add' 2>/dev/null)"
+
+t_start "라이선스가 원본 그대로 실려 있다"
+# ⚠️ MIT 하나가 아니다 — jq · Lucent decNumber · ICU · KTH · NetBSD strptime
+#    다섯 블록이 한 파일에 있다. 요약해서 넣으면 그 자체로 라이선스 위반이다.
+LICF="$APP/Contents/Resources/licenses/jq-COPYING.txt"
+t_eq "번들에 있다" "yes" "$([ -f "$LICF" ] && echo yes || echo no)"
+t_eq "락에 적힌 해시와 같다" \
+  "$(jq -r '.license.sha256' "$ROOT/vendor/jq/jq.lock.json" 2>/dev/null)" \
+  "$(shasum -a 256 "$LICF" 2>/dev/null | cut -d' ' -f1)"
+
+t_start "⚠️ 번들 배치에서 CLI 가 번들 jq 를 집는다"
+# ⚠️ 이게 이 작업의 핵심이다. jq 는 40개 파일 139곳에서 **맨몸으로** 불린다.
+#    번들 안에 파일만 있고 PATH 가 안 서면, jq 없는 기계에서 앱은 켜지는데
+#    기능이 전부 죽는다 — 그리고 만든 사람 기계에서는 재현되지 않는다.
+#
+#    그래서 **jq 가 없는 PATH** 를 만들어 놓고, 번들 배치에서 common.sh 를
+#    읽었을 때 jq 가 잡히는지 본다.
+JQTMP=$(mktemp -d)
+mkdir -p "$JQTMP/bin" "$JQTMP/app/Contents/Resources" "$JQTMP/app/Contents/Helpers"
+for t in bash sh sed grep cut head tail tr cat dirname basename printf mktemp \
+         rm date awk sort uniq wc find ls cp mv chmod mkdir id od stat; do
+  tp=$(command -v "$t" 2>/dev/null) && ln -sf "$tp" "$JQTMP/bin/$t"
+done
+cp -R "$ROOT/lib" "$JQTMP/app/Contents/Resources/" 2>/dev/null
+cp "$JQB" "$JQTMP/app/Contents/Helpers/jq" 2>/dev/null
+
+# 전제: 이 PATH 에는 jq 가 없다. (없어야 이 시험이 의미가 있다)
+t_eq "전제 — 맨 PATH 에 jq 가 없다" "" \
+  "$(env -i PATH="$JQTMP/bin" "$JQTMP/bin/bash" -c 'command -v jq' 2>/dev/null)"
+
+t_eq "번들 배치에서 jq 가 잡힌다" \
+  "$JQTMP/app/Contents/Helpers/jq" \
+  "$(env -i PATH="$JQTMP/bin" HOME="$JQTMP" \
+       DEVTRAIL_ROOT="$JQTMP/app/Contents/Resources" \
+       "$JQTMP/bin/bash" -c '. "$DEVTRAIL_ROOT/lib/common.sh" >/dev/null 2>&1; command -v jq' 2>/dev/null)"
+
+t_eq "그 jq 가 실제로 답한다" "6" \
+  "$(env -i PATH="$JQTMP/bin" HOME="$JQTMP" DT_IN='{"a":[1,2,3]}' \
+       DEVTRAIL_ROOT="$JQTMP/app/Contents/Resources" \
+       "$JQTMP/bin/bash" -c '. "$DEVTRAIL_ROOT/lib/common.sh" >/dev/null 2>&1
+                             printf %s "$DT_IN" | jq -c ".a|add"' 2>/dev/null)"
+
+# ⚠️ 시스템에 **다른 jq 가 있어도** 번들 것이 이겨야 한다.
+#
+#    뒤에 붙이면 기계마다 다른 jq 가 잡힌다 — 우리가 해시를 못 박고 실제로
+#    돌려 본 그 버전이 아니게 된다. jq 는 판마다 출력이 조금씩 달라서,
+#    그때 생기는 어긋남은 "왜 저 사람 기계에서만" 이 된다.
+#
+#    앞의 시험들은 PATH 에 jq 가 없어서 앞/뒤 어느 쪽이든 통과한다. 여기서
+#    미끼를 심어 순서를 실제로 확인한다.
+printf '#!/bin/sh\necho jq-0.0.0-decoy\n' > "$JQTMP/bin/jq"
+chmod +x "$JQTMP/bin/jq"
+t_eq "전제 — 미끼 jq 가 먼저 잡힌다" "jq-0.0.0-decoy" \
+  "$(env -i PATH="$JQTMP/bin" "$JQTMP/bin/bash" -c 'jq --version' 2>/dev/null)"
+t_eq "번들 jq 가 시스템 jq 를 이긴다" \
+  "$(jq -r '.version' "$ROOT/vendor/jq/jq.lock.json" 2>/dev/null)" \
+  "$(env -i PATH="$JQTMP/bin" HOME="$JQTMP" \
+       DEVTRAIL_ROOT="$JQTMP/app/Contents/Resources" \
+       "$JQTMP/bin/bash" -c '. "$DEVTRAIL_ROOT/lib/common.sh" >/dev/null 2>&1
+                             jq --version' 2>/dev/null)"
+rm -f "$JQTMP/bin/jq"
+
+# ⚠️ 번들이 아닐 때는 PATH 를 건드리지 않는다. 개발 중에는 각자의 jq 를 쓴다.
+t_eq "번들이 아니면 PATH 를 안 건드린다" "" \
+  "$(env -i PATH="$JQTMP/bin" HOME="$JQTMP" DEVTRAIL_ROOT="$ROOT" \
+       "$JQTMP/bin/bash" -c '. "$DEVTRAIL_ROOT/lib/common.sh" >/dev/null 2>&1; command -v jq' 2>/dev/null)"
+rm -rf "$JQTMP"
+
 t_start "Info.plist 가 D1 과 맞는다"
 MIN=$(plutil -extract LSMinimumSystemVersion raw "$APP/Contents/Info.plist" 2>/dev/null)
 PKG=$(grep -oE 'macOS\(\.v([0-9]+)\)' "$ROOT/app/Package.swift" | grep -oE '[0-9]+' | head -1)
@@ -86,5 +290,7 @@ t_start "서명이 번들 안쪽까지 닿는다"
 t_eq "번들 서명 확인" "0" "$(codesign --verify "$APP" >/dev/null 2>&1; echo $?)"
 t_eq "헬퍼 서명 확인" "0" \
   "$(codesign --verify "$APP/Contents/Helpers/devtrail-helper" >/dev/null 2>&1; echo $?)"
+t_eq "번들 jq 서명 확인" "0" \
+  "$(codesign --verify "$APP/Contents/Helpers/jq" >/dev/null 2>&1; echo $?)"
 
 t_end
