@@ -311,11 +311,62 @@ Obsidian 외 다른 노트 앱
 [CONTRIBUTING.md](CONTRIBUTING.md) · [아키텍처](docs/ARCHITECTURE.md) ·
 [디자인 토큰](docs/design-tokens.md) · [변경 이력](CHANGELOG.md)
 
-```bash
-./tests/run.sh        # 커밋 전에 이걸 돌립니다
+### 개발 흐름
+
+```
+수정
+ → ./scripts/verify-local.sh        로컬 1차 게이트 (약 2분 30초)
+ → QA 볼트에서 눈으로 확인            Obsidian ⌘Q → 재시작 → ⌘⇧Y
+ → 커밋 / PR
+ → GitHub CI                        독립적인 최종 재검증
+ → 머지
+ → 태그 릴리스 시 --release 수준
 ```
 
+**로컬과 CI 는 역할이 다릅니다. CI 를 없애지 않습니다.**
+
+| | 로컬 (`verify-local.sh`) | GitHub CI |
+|---|---|---|
+| 역할 | 빠른 **1차** 게이트 | 독립적인 **최종** 안전망 |
+| 보는 것 | 내 작업 트리 | 깨끗한 체크아웃 |
+| 환경 | 이 맥 하나 | ubuntu + macOS 러너 |
+| 로케일 | 내 설정 | `C.UTF-8` 고정 |
+
+로컬이 통과했다고 CI 를 건너뛰지 않습니다. 반대로, CI 가 있다고 로컬을
+건너뛰면 실패를 몇 분 뒤에야 알게 되고 — 2026-08 처럼 Actions 한도가
+막히면 **아무 게이트도 남지 않습니다.**
+
+### 명령
+
+```bash
+./scripts/verify-local.sh              # 기본 — run.sh fast + 작업 트리 공백
+./scripts/verify-local.sh --release    # + swift 빌드
+./tests/run.sh [all|fast|lint|guard]   # 검사의 정본
+```
+
+`verify-local.sh` 는 **검사 목록을 갖지 않습니다.** `tests/run.sh` 하나가
+정본이고, CI 도 로컬도 그것을 부릅니다. 셋의 대응은 문서가 아니라
+`tests/check-ci-coverage.py` 가 **실행 계약으로** 지킵니다 — 손으로 적은
+대응표는 곧 거짓말이 되기 때문입니다.
+
+### pre-push hook (선택)
+
+```bash
+./scripts/install-git-hooks.sh              # 현황을 보여주고 물어봅니다
+./scripts/install-git-hooks.sh --uninstall
+```
+
+`lint` + `guard` + **push 될 커밋 범위**의 공백 검사만 돕니다 (약 8초).
+전체 스위트를 여기서 돌리지 않습니다 — 2분짜리 push 는 사람이 반드시
+우회하고, 우회가 습관이 되면 "게이트가 있다" 는 착각만 남습니다.
+
+- 기존 hook 이나 `core.hooksPath` 를 **덮어쓰지 않습니다.** 충돌하면 멈춥니다.
+- `git push --no-verify` 로 우회할 수 있습니다. 이것은 **보안 경계가 아니라
+  실수 방지 장치**입니다.
+
 ⚠️ macOS 기본 bash 는 **3.2** 입니다. `"$n개"` 는 죽습니다 — `"${n}개"` 로 씁니다.
+`verify-local.sh` 가 `/bin/bash` 를 명시하는 이유이기도 합니다 — PATH 의
+최신 bash(5.x)가 잡히면 이 함정을 통과시킵니다.
 
 ---
 

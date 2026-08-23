@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# DevTrail pre-push — 빠른 계층만 돈다.
+#
+# ⚠️ 여기서 전체 스위트(약 2분 35초)를 돌리지 않는다. 2분짜리 push 는
+#    사람이 반드시 --no-verify 로 우회하고, 우회가 습관이 되면 hook 은
+#    있으나 마나가 아니라 **마이너스**다 — "게이트가 있다" 는 착각만 남는다.
+#    약 8초면 우회할 이유가 없다.
+#
+#      pre-push (여기)              lint + guard + 범위 공백    약 8초
+#      ./scripts/verify-local.sh    전체                        약 2분 35초
+#      ./scripts/verify-local.sh --release   + swift 빌드
+#
+# ⚠️ --no-verify 로 우회할 수 있다. 이것은 **보안 경계가 아니라 실수
+#    방지 장치**다. 우회를 막을 방법도 없고, 막으려 해서도 안 된다.
+#    최종 검증은 GitHub CI 가 독립적으로 한다.
+set -u
+
+ROOT="$(git rev-parse --show-toplevel)" || exit 1
+cd "$ROOT" || exit 1
+
+ZERO="0000000000000000000000000000000000000000"
+FAIL=0
+
+echo "▶ pre-push (빠른 계층 — 전체는 ./scripts/verify-local.sh)"
+
+# ── ① push 될 커밋 범위의 공백 오류 ──────────────────────────────────────
+#
+# ⚠️ `git diff --check` 만으로는 부족하다. 그건 **작업 트리**를 본다.
+#    이미 커밋한 뒤 push 하는 변경은 작업 트리에 없으므로 잡히지 않는다.
+#    git 이 stdin 으로 넘겨주는 <local ref> <local sha> <remote ref>
+#    <remote sha> 를 읽어 실제로 나가는 범위를 본다.
+while read -r _localref localsha _remoteref remotesha; do
+  [ -n "${localsha:-}" ] || continue
+  # 브랜치 삭제 — 검사할 커밋이 없다.
+  [ "$localsha" = "$ZERO" ] && continue
+
+  if [ "$remotesha" = "$ZERO" ]; then
+    # 원격에 없는 새 브랜치. 기본 브랜치와 갈라진 지점부터 본다.
+    # ⚠️ 못 찾으면 조용히 넘기지 않는다 — 검사한 척하는 게 제일 나쁘다.
+    base=$(git merge-base "$localsha" origin/main 2>/dev/null) || base=""
+    if [ -z "$base" ]; then
+      echo "  ⚠️ origin/main 과의 분기점을 찾지 못해 범위 검사를 건너뜁니다"
+      echo "     ($localsha — 이 push 는 공백 검사를 받지 않았습니다)"
+      continue
+    fi
+    range="$base..$localsha"
+  else
+    range="$remotesha..$localsha"
+  fi
+
+  if git diff --check "$range" >/dev/null 2>&1; then
+    n=$(git rev-list --count "$range" 2>/dev/null || echo '?')
+    echo "  ✓ 공백 오류 없음 (커밋 ${n}개)"
+  else
+    echo "  ✗ 공백 오류:"
+    git diff --check "$range" | sed 's/^/     /'
+    FAIL=1
+  fi
+done
+
+# ── ② 결정론 게이트 (빠른 것만) ──────────────────────────────────────────
+# ⚠️ 목록을 여기 적지 않는다. run.sh 가 정본이다.
+/bin/bash ./tests/run.sh lint  || FAIL=1
+/bin/bash ./tests/run.sh guard || FAIL=1
+
+if [ "$FAIL" = 0 ]; then
+  echo "✅ pre-push 통과"
+  echo "   ⚠️ 이건 빠른 계층입니다. 동작 테스트는 ./scripts/verify-local.sh 로."
+  exit 0
+fi
+echo "❌ pre-push 실패 — push 를 막습니다"
+echo "   급하면 git push --no-verify 로 우회할 수 있습니다 (실수 방지 장치이지"
+echo "   보안 경계가 아닙니다). CI 가 독립적으로 다시 봅니다."
+exit 1
