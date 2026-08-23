@@ -23,7 +23,6 @@ final class Status: ObservableObject {
     @Published var toggles: [String: Bool] = [:]
     /// 토글 값을 읽지 못한 상태. '전부 꺼짐'과 구분해야 한다.
     @Published var togglesUnavailable = false
-    @Published var dashboardURL = ""
     @Published var busy: String? = nil          // 실행 중인 작업 이름
     @Published var lastOutput = ""
     @Published var cliMissing = false
@@ -413,47 +412,11 @@ final class Status: ObservableObject {
         run("백필", ["backfill", d])
     }
 
-    // MARK: - 웹 대시보드
+    // ⚠️ 웹 대시보드는 **폐지됐다** (D5, 2026-08-24). 여기 있던 상주
+    //    프로세스 관리 코드도 함께 지웠다 — 화면에서만 지우고 모델에
+    //    남겨두면, 다음 사람이 "아직 있는 기능" 으로 읽는다.
     //
-    // 대시보드 서버는 스스로 끝나지 않는다. `run` 으로 부르면 완료를 기다리다
-    // busy 상태에 갇혀 패널의 모든 버튼이 잠긴다. 반드시 상주 프로세스로 다룬다.
-
-    private var dashboardProcess: Process?
-
-    var dashboardRunning: Bool { dashboardProcess?.isRunning == true }
-
-    func openDashboard() {
-        // 이미 떠 있으면 새로 띄우지 않는다 — 포트가 하나뿐이라 두 번째는 실패한다.
-        if dashboardRunning {
-            if let url = URL(string: dashboardURL) {
-                NSWorkspace.shared.open(url)
-            } else {
-                lastOutput = "대시보드가 이미 실행 중입니다."
-            }
-            return
-        }
-
-        dashboardURL = ""
-        lastOutput = "대시보드를 시작합니다…"
-        // 서버가 스스로 브라우저를 연다. 여기서는 주소(토큰 포함)만 받아 둔다.
-        dashboardProcess = CLI.start(["dashboard"]) { [weak self] line in
-            guard let self else { return }
-            if self.dashboardURL.isEmpty,
-               let r = line.range(of: "https?://[^ ]+", options: .regularExpression) {
-                self.dashboardURL = String(line[r])
-            }
-            self.lastOutput = line
-        }
-        if dashboardProcess == nil { lastOutput = "대시보드를 시작하지 못했습니다." }
-    }
-
-    /// 앱이 띄운 서버는 앱이 정리한다 — 남겨두면 포트를 잡은 채 주소만 사라진다.
-    func stopDashboard() {
-        guard let p = dashboardProcess else { return }
-        if p.isRunning { p.terminate() }
-        dashboardProcess = nil
-        dashboardURL = ""
-    }
+    //    같은 일은 이 앱이 직접 한다: 같은 4가지 동작 · 같은 3개 토글.
 
     /// 노트를 Obsidian으로 연다.
     /// obsidian:// 스킴이 실패할 수 있으므로 파일 열기로 폴백한다.

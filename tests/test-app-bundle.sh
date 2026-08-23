@@ -363,6 +363,37 @@ t_eq "Status 가 link status --json 을 읽는다" "1" \
 t_eq "연결은 CLI 에 맡긴다" "1" \
   "$(printf '%s\n' "$ST" | grep -c '"link", "create"' | tr -d ' ')"
 
+t_start "⚠️ 셋업 전에도 앱을 끌 수 있다"
+# ⚠️ 2026-08-24 실물 QA 에서 잡힌 결함이다.
+#
+#    화면 분기가 `needsSetup` 을 `showSettings` 보다 **먼저** 보고 있었다.
+#    그래서 셋업 전에는 톱니를 눌러도 헤더만 "설정" 으로 바뀌고 몸통은 셋업
+#    화면 그대로였다 — **종료 버튼에 도달할 방법이 없었다.**
+#
+#    메뉴바 앱은 ⌘Q 도 안 먹는다. 강제 종료 말고는 끌 수가 없었고,
+#    화면은 "설정" 이라고 **거짓말까지** 하고 있었다.
+#
+#    ⚠️ 이건 소스 단언이다. 메뉴바 GUI 를 이 스위트에서 띄울 수 없다.
+t_eq "종료 버튼이 있다" "1" \
+  "$(printf '%s\n' "$MV" | grep -c 'NSApplication.shared.terminate' | tr -d ' ')"
+t_eq "설정이 셋업 화면보다 먼저 걸린다" "yes" \
+  "$(printf '%s\n' "$MV" | awk '
+      /if showSettings \{/ && !a { a = NR }
+      /else if status\.needsSetup \{/ && !b { b = NR }
+      END { print (a && b && a < b) ? "yes" : "no" }')"
+
+t_start "⚠️ 폐지된 기능이 화면에 남아 있지 않다"
+# ⚠️ 웹 대시보드는 D5 에서 폐지됐다(2026-08-24). 그런데 앱에는 버튼이 남아
+#    있었고, 누르면 CLI 가 "폐지됐습니다" 를 낼 뿐 **아무 일도 안 났다.**
+#    폐지할 때 화면 쪽 잔재를 지우지 않은 것이다.
+for _f in MenuView Status; do
+  t_eq "$_f 에 대시보드 잔재가 없다" "0" \
+    "$(grep -c 'dashboard' "$ROOT/app/Sources/DevTrailApp/$_f.swift" | tr -d ' ')"
+done
+# ⚠️ CLI 가 실제로 폐지를 말하는지도 본다 — 조용히 사라지면 안 된다.
+t_eq "CLI 가 폐지를 말한다" "1" \
+  "$(printf '%s' "$("$ROOT/bin/devtrail" dashboard 2>&1)" | grep -c '폐지' | tr -d ' ')"
+
 t_start "온보딩 — 번들에서 거짓 안내를 하지 않는다"
 # ⚠️ 앱 안에 CLI 가 실려 나가므로(M4-3), 번들인데 CLI 가 없다면 그건
 #    **번들이 손상된** 것이다. 그때 "curl | bash 로 설치하세요" 는 거짓말이다.

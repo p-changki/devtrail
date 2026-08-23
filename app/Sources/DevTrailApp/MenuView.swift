@@ -20,14 +20,19 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
 
-            if status.cliMissing {
+            // ⚠️ **설정이 먼저다.** 예전에는 needsSetup 이 먼저 걸려서,
+            //    셋업 전에는 톱니를 눌러도 헤더만 "설정" 으로 바뀌고 몸통은
+            //    셋업 화면 그대로였다 — 화면이 거짓말을 했고, **종료 버튼에
+            //    도달할 방법이 없었다.** 메뉴바 앱은 ⌘Q 도 안 먹으므로
+            //    강제 종료 말고는 끌 수가 없었다 (2026-08-24 실물 QA).
+            if showSettings {
+                settingsBody
+            } else if status.cliMissing {
                 Divider().padding(.vertical, 8)
                 missing
             } else if status.needsSetup {
                 Divider().padding(.vertical, 8)
                 setup
-            } else if showSettings {
-                settingsBody
             } else {
                 homeBody
             }
@@ -231,6 +236,17 @@ struct MenuView: View {
 
     private var settingsBody: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // ⚠️ 셋업 전에는 설정 파일이 없다. 토글을 보여주면 켜고 끌 대상이
+            //    없는 스위치를 주는 셈이고, 누르면 조용히 아무 일도 안 난다.
+            //    **나가는 길(종료)만 남긴다** — 그게 이 화면에서 필요한 전부다.
+            if status.needsSetup {
+                Text("아직 셋업하지 않았습니다")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .padding(.top, 8)
+                Text("설정은 셋업을 마친 뒤에 쓸 수 있습니다.")
+                    .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                    .padding(.top, 2)
+            } else {
             group("자동화") {
                 // 자동 실행은 설정값이 아니라 launchd 등록 여부다.
                 toggleRow("자동 실행", isOn: Binding(
@@ -253,22 +269,16 @@ struct MenuView: View {
 
             group("도구") {
                 textRow("진단 실행", "stethoscope") { status.run("진단", ["doctor"]) }
-                // 서버는 끝나지 않는다. run()으로 부르면 busy에 갇혀 패널이 잠긴다.
-                textRow(status.dashboardRunning ? "웹 대시보드 다시 열기" : "웹 대시보드 열기",
-                        "safari") { status.openDashboard() }
-                if status.dashboardRunning {
-                    textRow("웹 대시보드 종료", "stop.circle") { status.stopDashboard() }
-                }
+            }
             }
 
             Divider().padding(.vertical, 7)
             HStack {
-                Text(status.vaultLabel)
+                Text(status.needsSetup ? "" : status.vaultLabel)
                     .font(.system(size: 9.5)).foregroundStyle(.tertiary)
                     .lineLimit(1).truncationMode(.head)
                 Spacer()
                 Button("종료") {
-                    status.stopDashboard()
                     NSApplication.shared.terminate(nil)
                 }
                     .buttonStyle(.plain).font(.system(size: 11))
