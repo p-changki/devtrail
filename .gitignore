@@ -82,3 +82,7 @@ node_modules/
 .DS_Store
 ._*
 Thumbs.db
+
+# 로컬 QA 게이트 결과물 (Phase 2 의 QA 볼트 하니스가 남기는 것)
+/qa-results/
+*.qa.json

@@ -1,6 +1,8 @@
 # DevTrail
 
 [![CI](https://github.com/p-changki/devtrail/actions/workflows/ci.yml/badge.svg)](https://github.com/p-changki/devtrail/actions/workflows/ci.yml)
+<!-- ⚠️ 이 배지는 **태그 릴리스·수동 실행**의 결과다. 일상 PR 은 여기서
+     검증되지 않는다 — 정식 게이트는 로컬 ./scripts/verify-local.sh 다. -->
 
 ***한국어** · [English](README.en.md)*
 
@@ -311,11 +313,82 @@ Obsidian 외 다른 노트 앱
 [CONTRIBUTING.md](CONTRIBUTING.md) · [아키텍처](docs/ARCHITECTURE.md) ·
 [디자인 토큰](docs/design-tokens.md) · [변경 이력](CHANGELOG.md)
 
-```bash
-./tests/run.sh        # 커밋 전에 이걸 돌립니다
+### 개발 흐름
+
+```
+수정
+ → ./scripts/verify-local.sh        로컬 1차 게이트 (약 2분 30초)
+ → QA 볼트에서 눈으로 확인            Obsidian ⌘Q → 재시작 → ⌘⇧Y
+ → 커밋 / PR                        PR 은 diff·리뷰·결정·이력을 남기는 추적 장치
+ → PR 에 로컬 QA 결과 기록
+ → 사람이 리뷰하고 수동 머지
+ → 태그 릴리스 시 --release 수준
 ```
 
+**PR 의 기본 대상은 `main` 입니다.** `dev` 를 임시 통합 브랜치로 쓰지
+않습니다 — 검증되지 않은 것이 모이는 곳을 하나 더 만들면, 그 브랜치가
+무엇을 담고 있는지 아무도 확신하지 못하게 됩니다. 작업 브랜치는 `main`
+에서 갈라져 `main` 으로 돌아옵니다.
+
+### 게이트는 로컬입니다
+
+**GitHub Actions 는 일상 PR 에서 돌지 않습니다.** 트리거는 태그와 수동
+실행뿐입니다.
+
+| | 로컬 (`verify-local.sh`) | GitHub Actions |
+|---|---|---|
+| 역할 | **정식 품질 게이트** | 수동 실행 · 태그 릴리스 검증 |
+| 언제 | 커밋·PR 전마다 | 태그를 밀 때, 또는 손으로 |
+| 보는 것 | 내 작업 트리 | 깨끗한 체크아웃 |
+| 환경 | 이 맥 (bash 3.2) | ubuntu + macOS 러너 |
+
+**왜 이렇게 됐나.** 2026-08 에 Actions 한도(3000분)를 다 써 CI 가 멈췄고,
+그때 드러난 것은 비용이 아니라 **게이트 구조**였습니다 — CI 가 1차 검증을
+겸하고 있어서, CI 가 멈추자 **남는 게이트가 없었습니다.** 실측으로 실행
+1회가 청구 38분(전부 macOS)이었고, PR 하나를 머지하면 2회가 돌았습니다.
+이 계정에는 다른 프로덕션 저장소들이 함께 있고, 그 예산을 지키는 것이
+DevTrail 의 편의보다 우선입니다.
+
+**대가를 분명히 적습니다.** 깨끗한 체크아웃에서의 검증과 ubuntu 로케일
+(`C.UTF-8`)의 한글 정규식 검증이 **일상에서 사라집니다.** 둘 다 태그
+릴리스에서 회수합니다 — 그래서 태그에서는 lint · guard · macOS bash 3.2 ·
+swift 빌드가 전부 돕니다.
+
+⚠️ 이 저장소의 Actions 는 현재 **비활성**입니다. 태그 트리거도 다시 켜기
+전까지는 돌지 않습니다. 그때까지 릴리스 검증은 로컬 `--release` 가
+전담합니다 — **게이트가 적혀 있다고 실제로 도는 것은 아닙니다.**
+
+### 명령
+
+```bash
+./scripts/verify-local.sh              # 기본 — run.sh fast + 작업 트리 공백
+./scripts/verify-local.sh --release    # + swift 빌드
+./tests/run.sh [all|fast|lint|guard]   # 검사의 정본
+```
+
+`verify-local.sh` 는 **검사 목록을 갖지 않습니다.** `tests/run.sh` 하나가
+정본이고, CI 도 로컬도 그것을 부릅니다. 셋의 대응은 문서가 아니라
+`tests/check-ci-coverage.py` 가 **실행 계약으로** 지킵니다 — 손으로 적은
+대응표는 곧 거짓말이 되기 때문입니다.
+
+### pre-push hook (선택)
+
+```bash
+./scripts/install-git-hooks.sh              # 현황을 보여주고 물어봅니다
+./scripts/install-git-hooks.sh --uninstall
+```
+
+`lint` + `guard` + **push 될 커밋 범위**의 공백 검사만 돕니다 (약 8초).
+전체 스위트를 여기서 돌리지 않습니다 — 2분짜리 push 는 사람이 반드시
+우회하고, 우회가 습관이 되면 "게이트가 있다" 는 착각만 남습니다.
+
+- 기존 hook 이나 `core.hooksPath` 를 **덮어쓰지 않습니다.** 충돌하면 멈춥니다.
+- `git push --no-verify` 로 우회할 수 있습니다. 이것은 **보안 경계가 아니라
+  실수 방지 장치**입니다.
+
 ⚠️ macOS 기본 bash 는 **3.2** 입니다. `"$n개"` 는 죽습니다 — `"${n}개"` 로 씁니다.
+`verify-local.sh` 가 `/bin/bash` 를 명시하는 이유이기도 합니다 — PATH 의
+최신 bash(5.x)가 잡히면 이 함정을 통과시킵니다.
 
 ---
 
