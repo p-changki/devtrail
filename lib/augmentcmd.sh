@@ -324,7 +324,7 @@ _aug_l1_hubs() {
     || { rm -f "$paths" "$out"; return 0; }
 
   DT_DATE="$(date +%Y-%m-%d)" \
-  python3 "$DEVTRAIL_ROOT/lib/gen/hubs.py" "$paths" "$CONFIG_FILE" \
+  dt_gen gen-hubs "$paths" "$CONFIG_FILE" \
     "${DT_SCAN_CACHE:-/dev/null}" "$(vault_root)" > "$out" 2>/dev/null || {
       rm -f "$paths" "$out"; warn "$(L "L1 허브 생성 실패" "Could not create the L1 hubs")"; return 0; }
 
@@ -367,7 +367,7 @@ _aug_hub() {
   DT_HUB_COV_STATUS="$(_aug_cov status)" \
   DT_HUB_COV_REVIEW="$(_aug_cov review_at)" \
   DT_HUB_DATE="$(date +%Y-%m-%d)" \
-    python3 "$DEVTRAIL_ROOT/lib/gen/hub.py" > "$hub" || {
+    dt_gen gen-hub > "$hub" || {
       rm -f "$hub"; warn "$(L "허브 생성 실패" "Could not create hub"): $rel"; return 1; }
   jr_created "$hub"
   return 0
@@ -378,7 +378,7 @@ _aug_cov() {
   local field="$1"
   if [ -z "${DT_SCAN_CACHE:-}" ]; then
     DT_SCAN_CACHE=$(mktemp)
-    python3 "$DEVTRAIL_ROOT/lib/gen/scan.py" "$(vault_path)" >"$DT_SCAN_CACHE" 2>/dev/null || echo '{}' >"$DT_SCAN_CACHE"
+    dt_gen gen-scan "$(vault_path)" >"$DT_SCAN_CACHE" 2>/dev/null || echo '{}' >"$DT_SCAN_CACHE"
     export DT_SCAN_CACHE
   fi
   jq -r --arg f "$field" '(.fields[$f].value_pct // 0)' "$DT_SCAN_CACHE" 2>/dev/null || echo 0

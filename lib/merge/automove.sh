@@ -35,7 +35,7 @@ _ob_automove() {
 
   local out; out=$(mktemp)
   DT_FOREIGN_FOLDERS="$(_ob_foreign_folders)" \
-  python3 "$DEVTRAIL_ROOT/lib/gen/anm.py" \
+  dt_gen gen-anm \
     "$DEVTRAIL_ROOT/preset/tree.json" "$CONFIG_FILE" "$profile" \
     "$([ -f "$data" ] && printf '%s' "$data")" > "$out" || {
       rm -f "$out"; warn "$(L "규칙 생성 실패 — 건드리지 않습니다" "Could not build rules — leaving them alone")"; return 0; }

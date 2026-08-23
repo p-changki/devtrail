@@ -34,7 +34,7 @@ _ob_templater() {
   #    설정 스키마 버전을 읽어 맞는 키를 쓴다 — 짐작하지 않는다.
   if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates/$(dt_lang)" \
      DT_TEMPLATER_DIR="$dot/plugins/templater-obsidian" \
-     python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" templater \
+     dt_gen gen-hotkeys templater \
       "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$data" ] && printf '%s' "$data")" > "$out"; then
     jr_backup "$data" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $data"; }
@@ -58,7 +58,7 @@ _ob_templater() {
     return 0
   fi
   local out2; out2=$(mktemp)
-  if python3 "$DEVTRAIL_ROOT/lib/gen/hotkeys.py" daily \
+  if dt_gen gen-hotkeys daily \
       "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$dn" ] && printf '%s' "$dn")" > "$out2"; then
     jr_backup "$dn" >/dev/null || { rm -f "$out2"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $dn"; }
