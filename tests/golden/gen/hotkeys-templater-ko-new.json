@@ -1,0 +1,16 @@
+{
+  "folder_templates": [],
+  "templates_folder": "템플릿",
+  "syntax_highlighting": true,
+  "trigger_on_file_creation": true,
+  "enable_folder_templates": true,
+  "enabled_templates_hotkeys": [
+    "템플릿/개발일지양식.md",
+    "템플릿/개발메모 템플릿.md",
+    "템플릿/자료카드 템플릿.md",
+    "템플릿/회고 템플릿.md",
+    "템플릿/아이디어 빠른저장 템플릿.md",
+    "템플릿/프로젝트 생성 템플릿.md",
+    "템플릿/워크로그 템플릿.md"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "folder_templates": [],
+  "templates_folder": "Templates",
+  "syntax_highlighting": true,
+  "trigger_on_file_creation": true,
+  "enable_folder_templates": true,
+  "enabled_templates_hotkeys": [
+    "Templates/Devlog.md",
+    "Templates/Dev note.md",
+    "Templates/Reference card.md",
+    "Templates/Retro.md",
+    "Templates/Quick idea.md",
+    "Templates/New project.md",
+    "Templates/Worklog.md"
+  ]
+}
