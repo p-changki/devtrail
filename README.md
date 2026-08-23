@@ -320,7 +320,7 @@ Obsidian 외 다른 노트 앱
  → 커밋 / PR
  → GitHub CI                        독립적인 최종 재검증
  → 머지
- → 태그 릴리스 시 --release 수준
+ → 태그 릴리스 시 --release (swift 빌드 + 격리 QA 볼트)
 ```
 
 **로컬과 CI 는 역할이 다릅니다. CI 를 없애지 않습니다.**
@@ -340,7 +340,8 @@ Obsidian 외 다른 노트 앱
 
 ```bash
 ./scripts/verify-local.sh              # 기본 — run.sh fast + 작업 트리 공백
-./scripts/verify-local.sh --release    # + swift 빌드
+./scripts/verify-local.sh --release    # + swift 빌드 + 격리 QA 볼트
+./scripts/qa-vault.sh [--keep]         # QA 볼트만 따로
 ./tests/run.sh [all|fast|lint|guard]   # 검사의 정본
 ```
 
@@ -363,6 +364,29 @@ Obsidian 외 다른 노트 앱
 - 기존 hook 이나 `core.hooksPath` 를 **덮어쓰지 않습니다.** 충돌하면 멈춥니다.
 - `git push --no-verify` 로 우회할 수 있습니다. 이것은 **보안 경계가 아니라
   실수 방지 장치**입니다.
+
+### QA 볼트 (`--release` 에 포함)
+
+격리된 임시 볼트를 만들어 **실제로** 돌립니다 — 빈 볼트 설치 → 업데이트 →
+`files.json` 파일 추가·제거 → undo 복구. 그리고 **남의 것이 변하지 않았는지**
+확인합니다: `core-plugins.json` 의 다른 키, `community-plugins.json`,
+`hotkeys.json`, 사용자 노트.
+
+- **실제 사용자 볼트를 거부합니다.** Obsidian 이 아는 볼트 목록을 읽어,
+  그 경로이거나 그 **안**이면 아무것도 하지 않습니다.
+- 저장소의 `plugin/` 도 건드리지 않습니다 (`DT_CC_SRC_OVERRIDE` 로 사본 사용).
+- Obsidian 이 실행 중이면 **안내만** 합니다. 강제 종료하지 않습니다.
+
+결과는 사람이 읽는 요약과 `qa-results/qa-vault.qa.json` (gitignored) 으로 남습니다.
+
+⚠️ **이 하니스는 파일만 봅니다.** Obsidian 재시작 후 실제로 로드되고 화면이
+그려지는지는 **확인하지 못합니다** — 그건 Obsidian 안에서만 일어납니다
+([ADR 0004](docs/decisions/0004-plugin-file-split.md)). 2026-08-23 에 테스트
+300개가 녹색인 채로 화면이 세 번 죽었습니다.
+
+그래서 JSON 에 `restart_verified: false` 와 `requires_human` 을 남깁니다.
+사람이 눈으로 확인한 뒤에만 `true` 가 됩니다. **확인하지 않은 것을
+확인했다고 말하지 않는 것**이 이 하니스의 존재 이유입니다.
 
 ⚠️ macOS 기본 bash 는 **3.2** 입니다. `"$n개"` 는 죽습니다 — `"${n}개"` 로 씁니다.
 `verify-local.sh` 가 `/bin/bash` 를 명시하는 이유이기도 합니다 — PATH 의

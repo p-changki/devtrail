@@ -29,7 +29,7 @@ case "${1:-}" in
 사용법: ./scripts/verify-local.sh [--fast|--release]
 
   (기본)      tests/run.sh fast + 작업 트리 공백 검사   약 2분 30초
-  --release   tests/run.sh all (swift 빌드 포함)         더 걸린다
+  --release   tests/run.sh all (swift 빌드) + 격리 QA 볼트  더 걸린다
 
   ⚠️ --release 도 Obsidian 재시작 후의 실제 로드·렌더는 **확인하지
      못한다**. 그건 사람이 해야 한다 (Phase 2 의 QA 볼트 하니스가
@@ -57,6 +57,19 @@ if /bin/bash ./tests/run.sh "$MODE"; then
   :
 else
   FAIL=1
+fi
+
+# ── --release 는 QA 볼트까지 ──────────────────────────────────────────────
+if [ "$MODE" = all ]; then
+  echo
+  echo "━━ QA 볼트 (격리)"
+  # ⚠️ 실제 사용자 볼트는 건드리지 않는다. qa-vault.sh 가 Obsidian 이 아는
+  #    볼트 경로를 거부한다.
+  if ./scripts/qa-vault.sh; then
+    :
+  else
+    FAIL=1
+  fi
 fi
 
 echo
