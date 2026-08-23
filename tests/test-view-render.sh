@@ -53,7 +53,15 @@ const NOTES = {
       try {
         const root = await h.render(route, notes);
         const cls = h.collectClasses(root);
-        out.push(`OK ${route}/${name} ${cls.size}`);
+        // ⚠️ render 가 이제 스스로 오류를 잡아 화면에 적는다. 그래서 "예외가
+        //    안 났다" 로는 부족하다 — 실패 상자가 그려졌으면 실패다.
+        //    이걸 안 보면 방금 만든 안전장치가 테스트를 눈멀게 한다.
+        if (cls.has('devtrail-cc-recovery')) {
+          const why = h.collectText(root).slice(0, 3).join(' / ');
+          out.push(`FAIL ${route}/${name} 렌더 실패 상자: ${why}`);
+        } else {
+          out.push(`OK ${route}/${name} ${cls.size}`);
+        }
       } catch (e) {
         out.push(`FAIL ${route}/${name} ${e.message}`);
       }

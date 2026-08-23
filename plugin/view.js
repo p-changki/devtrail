@@ -75,7 +75,39 @@ module.exports = function makeView(deps) {
       await this.render();
     }
 
+    /* ⚠️ 렌더가 중간에 죽으면 반쪽 화면만 남고 아무 설명이 없다. 사용자는
+     *    "대시보드가 안 나온다" 만 알 뿐, 무엇이 왜 그런지 알 길이 없다 —
+     *    2026-08-23 에 세 번 그랬다.
+     *
+     *    여기서 잡아 화면에 적는다. 콘솔에만 남기면 개발자 도구를 여는
+     *    사람만 볼 수 있고, 그건 대부분의 사용자가 아니다. */
     async render() {
+      try {
+        await this.renderBody();
+      } catch (e) {
+        this.renderFailure(e);
+      }
+    }
+
+    renderFailure(e) {
+      const root = this.contentEl;
+      const box = root.createEl('div', { cls: 'devtrail-cc-recovery' });
+      box.createEl('p', { text: '화면을 그리는 중에 멈췄습니다' });
+      box.createEl('p', {
+        text: `${(e && e.name) || 'Error'}: ${(e && e.message) || String(e)}`,
+        cls: 'devtrail-cc-muted',
+      });
+      const where = ((e && e.stack) || '').split('\n').slice(1, 3)
+        .map((l) => l.trim()).join('\n');
+      if (where) box.createEl('pre', { text: where, cls: 'devtrail-cc-muted' });
+      box.createEl('p', {
+        text: '이 내용을 그대로 알려주시면 고칠 수 있습니다.',
+        cls: 'devtrail-cc-muted',
+      });
+      console.error('[DevTrail] 렌더 실패', e);
+    }
+
+    async renderBody() {
       const root = this.contentEl;
       root.empty();
       root.addClass('devtrail-command-center');
