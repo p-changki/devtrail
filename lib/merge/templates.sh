@@ -23,7 +23,10 @@ _ob_templates() {
   local src="$base/$(dt_lang)"
   [ -d "$base/ko" ] || { warn "$(L "템플릿 없음" "Template missing"): $base"; return 0; }
 
-  mkdir -p "$dest"
+  # ⚠️ 만든 폴더도 저널에 남긴다. 기록하지 않으면 되돌린 뒤 빈 폴더가 남고,
+  #    사용자는 그것을 자기 것이라고 읽는다.
+  #    (jr_mkdir 이 "이미 있던 폴더는 기록하지 않는다" 까지 처리한다.)
+  jr_mkdir "$dest" || { warn "$(L "폴더를 만들지 못했습니다" "Could not create folder"): $dest"; return 1; }
   local n=0 skipped=0 fb=0 f name
 
   # 선택한 언어의 템플릿을 먼저 깐다.
@@ -33,6 +36,10 @@ _ob_templates() {
       name=$(basename "$f")
       [ -f "$dest/$name" ] && { skipped=$((skipped + 1)); continue; }
       cp "$f" "$dest/$name" || { warn "$(L "복사 실패" "Copy failed"): $name"; continue; }
+      # ⚠️ **저널에 남긴다.** 안 남기면 `devtrail undo` 가 이 파일을 못
+      #    지운다 — 사용자 볼트에 정체 모를 파일이 남는다.
+      #    2026-08-24 실물 QA 에서 템플릿 22개가 그렇게 남았다.
+      jr_created "$dest/$name"
       n=$((n + 1))
     done
   fi
@@ -48,6 +55,7 @@ _ob_templates() {
       _tpl_has_translation "$src" "$name" && continue
       [ -f "$dest/$name" ] && { skipped=$((skipped + 1)); continue; }
       cp "$f" "$dest/$name" || continue
+      jr_created "$dest/$name"   # ⚠️ 위와 같은 이유 — 되돌릴 수 있어야 한다
       fb=$((fb + 1))
     done
   fi
