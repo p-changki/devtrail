@@ -426,6 +426,79 @@ printf -- '---\ntype: devlog\n---\n# 오늘\n- [ ] 내용 있는 할 일\n- [ ] 
   > "$VAULT/notes/개발/개발일지/2026-08-06.md"
 printf -- '---\ntype: template\n---\n<%% tp.file.title %%>\n' > "$VAULT/notes/템플릿/개발일지양식.md"
 
+
+# ⚠️ 아래는 scan 의 **안 지나던 갈래**를 태운다. 변이 8건이 살아남아
+#    무엇이 비었는지 하나씩 채웠다(2026-08-24).
+
+# ① SKIP_DIRS 중 점(.)으로 시작하지 않는 것 — node_modules.
+#    점으로 시작하는 것들은 walk 의 다른 규칙에도 걸려 구별되지 않는다.
+mkdir -p "$VAULT/notes/node_modules"
+printf -- '---\ntype: note\n---\n# 세면 안 됨\n' > "$VAULT/notes/node_modules/skip.md"
+
+# ② 값이 '비어 있는' 표기들 — field_has_value 의 목록이 여기서 시험된다.
+printf -- '---\ntype: ""\nstatus: null\ncategory: ~\nscope: -\nproject: []\ncreated: 2026-01-01\n---\n# 빈값\n' \
+  > "$VAULT/notes/자료/빈값.md"
+
+# ③ # 가 붙은 태그 — lstrip("#") 이 여기서 시험된다.
+printf -- '---\ntype: note\ntags: ["#type/devlog", "#proj/a"]\n---\n# 샵태그\n' \
+  > "$VAULT/notes/자료/샵태그.md"
+printf -- '---\ntype: note\ntags:\n  - "#type/devlog"\n  - plain\n---\n# 다중행샵\n' \
+  > "$VAULT/notes/자료/다중행샵.md"
+
+# ④ 노이즈 폴더인데 **역할 점수가 나올 만한** 내용 — 아카이브가 진짜 일지
+#    폴더를 밀어내는 것을 막는 판정이 여기서 시험된다.
+# ⚠️ 노트를 **넉넉히** 둔다. 4개면 scale 이 바닥(0.45)이라 다른 후보와
+#    동점이 되고, 상위 2개 자르기에 먼저 걸려 **노이즈 판정에 도달하지
+#    못한다**(변이 생존). 20개면 scale 0.67 로 1위가 되어, 노이즈 판정을
+#    끄는 순간 진짜 일지 폴더를 밀어낸다 — 그게 이 판정의 존재 이유다.
+mkdir -p "$VAULT/notes/아카이브/옛일지"
+for d in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20; do
+  printf -- '---\ntype: devlog\n---\n# 옛\n' > "$VAULT/notes/아카이브/옛일지/2025-03-$d.md"
+done
+
+# ⑤ 같은 역할을 다투는 폴더를 **셋** 만든다 — 상위 2개 자르기가 보이려면
+#    후보가 셋 이상이어야 한다.
+mkdir -p "$VAULT/notes/일지B" "$VAULT/notes/일지C"
+for d in 01 02 03 04 05; do
+  printf -- '---\ntype: devlog\n---\n# B\n' > "$VAULT/notes/일지B/2026-07-$d.md"
+done
+for d in 01 02 03; do
+  printf -- '---\ntype: devlog\n---\n# C\n' > "$VAULT/notes/일지C/2026-06-$d.md"
+done
+
+# ⑥-1 dated_ratio 가 **정확히 0.125** 인 폴더 (8개 중 1개만 날짜).
+#      python 의 round(0.125, 2) 는 은행가 반올림으로 0.12, Swift 의
+#      (x*100).rounded()/100 은 0.13 이다. 이 값이 없으면 반올림을 잘못
+#      옮겨도 골든이 통과한다(2026-08-24 변이 생존으로 확인).
+mkdir -p "$VAULT/notes/반올림"
+printf -- '---\ntype: note\n---\n# 날짜있음\n' > "$VAULT/notes/반올림/2026-05-01.md"
+for i in 1 2 3 4 5 6 7; do
+  printf -- '---\ntype: note\n---\n# 없음\n' > "$VAULT/notes/반올림/보통$i.md"
+done
+
+# ⑥-2 임계값(0.3)이 **실제로 걸리는** 자리를 만든다.
+#      devlog 는 후보가 많아 저점수 폴더가 상위 2개 자르기에 먼저 걸린다 —
+#      임계값에 도달하지 못해 변이가 살아남았다. weekly 는 후보가 하나뿐이니
+#      저점수 후보를 하나 더 두면 둘 다 상위 2개 안에 들고, 그때 임계값이
+#      두 번째를 걸러낸다.
+mkdir -p "$VAULT/notes/옛주간"
+for w in 10 11 12; do
+  printf -- '---\ntype: weekly\n---\n# 옛주간\n' > "$VAULT/notes/옛주간/2024-W$w.md"
+done
+
+# ⑥ 점수가 0.3 **아래**로 떨어지는 폴더 — 임계값이 여기서 시험된다.
+#    ratio 1.0 × scale 0.45(바닥) × recent 0.55(오래됨) = 0.25
+mkdir -p "$VAULT/notes/오래된일지"
+for d in 01 02 03; do
+  printf -- '---\ntype: devlog\n---\n# 오래\n' > "$VAULT/notes/오래된일지/2024-01-$d.md"
+done
+
+# ⚠️ mtime 고정은 **모든 노트를 만든 뒤**에 한다.
+#
+#    처음엔 여기보다 위에 있었다. 그 뒤에 만든 픽스처 파일들이 현재
+#    시각을 갖게 되어 last_modified·recent 점수가 매번 달라졌고, 골든이
+#    실행마다 깨졌다(2026-08-24). 순서가 곧 결정성이다.
+
 # ⚠️ mtime 을 못 박는다. 안 그러면 골든이 만들 때마다 달라진다.
 find "$VAULT" -type f -exec touch -t 202608010900 {} +
 
@@ -437,6 +510,48 @@ touch -t 202607250900 "$VAULT/notes/받은함/받은것2.md"
 touch -t 202607280900 "$VAULT/notes/자료/가장자리.md"
 touch -t 202608050900 "$VAULT/notes/개발/프로젝트/proj-b/README.md"  # 최근
 touch -t 202608041200 "$VAULT/notes/개발/개발일지/2026-08-06.md"
+# ⚠️ 90일보다 오래된 폴더 — recent 가 0.55 로 떨어져 점수가 0.25 가 된다.
+#    0.3 임계값 바로 아래다.
+find "$VAULT/notes/오래된일지" -type f -exec touch -t 202401010900 {} +
+find "$VAULT/notes/옛주간" -type f -exec touch -t 202401010900 {} +
+
+# ⚠️ .obsidian 을 만든다. 없으면 scan 의 analyse_obsidian 이 곧바로
+#    {"present": false} 로 돌아가 **60여 줄을 통째로 안 지난다** —
+#    플러그인 준비도 · 단축키 점유 · 폴더 충돌 · RAG 상태 전부.
+DOT="$VAULT/.obsidian"
+mkdir -p "$DOT/plugins/auto-note-mover" "$DOT/plugins/templater-obsidian" \
+         "$DOT/plugins/obsidian-linter" "$VAULT/.smart-env"
+printf '%s' '["dataview","templater-obsidian","smart-connections"]' \
+  > "$DOT/community-plugins.json"
+printf '%s' '{"daily-notes":true,"templates":false,"zk-prefixer":true}' \
+  > "$DOT/core-plugins.json"
+# ⚠️ modifiers 를 **정렬되지 않은** 순서로 둔다. 점유 판정이 정렬을
+#    하지 않으면 우리가 쓰려는 조합과 매칭되지 않는다.
+printf '%s' '{"editor:toggle-bold":[{"modifiers":["Shift","Mod"],"key":"D"}]}' \
+  > "$DOT/hotkeys.json"
+printf '%s' '{"alwaysUpdateLinks":true,"attachmentFolderPath":"첨부"}' > "$DOT/app.json"
+printf '%s' '{"folder_tag_pattern":[{"folder":"a","tag":"#x"},{"folder":"b","tag":"#y"}],"trigger_auto_manual":"Automatic"}' \
+  > "$DOT/plugins/auto-note-mover/data.json"
+printf '%s' '{"folder_templates":[{"folder":"a","template":"t.md"}]}' \
+  > "$DOT/plugins/templater-obsidian/data.json"
+printf '%s' '{}' > "$DOT/plugins/obsidian-linter/data.json"
+printf '%s' '{"smart_sources":{"folder_exclusions":"a,b"}}' \
+  > "$VAULT/.smart-env/smart_env.json"
+# ⚠️ 인덱스 크기를 세는 가지 — dir_size 가 실제로 돌아야 한다.
+printf '%s' '0123456789' > "$VAULT/.smart-env/index.bin"
+
+# ⚠️ scan 은 tree · hotkeys 를 받아 **충돌**을 본다. 안 넘기면 그 계산이
+#    빈 목록으로 끝난다. 볼트에 실제로 있는 폴더를 겨누는 트리를 준다.
+SCAN_TREE="$T_TMP/scan-tree.json"
+cat > "$SCAN_TREE" <<'JSON'
+{
+  "folders": [
+    { "key": "dev", "path": "notes/개발",
+      "children": [{ "key": "log", "path": "개발일지" }] },
+    { "key": "none", "path": "notes/없는폴더", "children": [] }
+  ]
+}
+JSON
 
 FIXED_NOW=1786000000        # 2026-08-06 근처 — 픽스처 mtime 직후
 FIXED_NOW_MS=1786000000000
@@ -469,6 +584,10 @@ genv() {
 t_start "scan — 볼트 진단"
 genv scan-ko ko -- python3 "$ROOT/lib/gen/scan.py" "$VAULT"
 genv scan-en en -- python3 "$ROOT/lib/gen/scan.py" "$VAULT"
+# ⚠️ tree · hotkeys 를 넘겨 충돌 계산까지 태운다.
+genv scan-conflict-ko ko -- python3 "$ROOT/lib/gen/scan.py" "$VAULT" "$SCAN_TREE" "$TMPL"
+# 없는 볼트 — error 만 낸다.
+genv scan-missing-ko ko -- python3 "$ROOT/lib/gen/scan.py" "/tmp/devtrail-없는볼트"
 # 다음 단계들이 이 결과를 입력으로 쓴다.
 DT_NOW="$FIXED_NOW" DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 \
   python3 "$ROOT/lib/gen/scan.py" "$VAULT" > "$SCANOUT" 2>/dev/null
@@ -787,6 +906,25 @@ else
   cmpsnap snapshot-limit1  "$SNAPCFG_LIMIT1"
   cmpsnap snapshot-limit20 "$SNAPCFG_LIMIT20"
 
+  # scan — 이관 완료. 볼트 경로를 받고 경로가 출력에 나오므로 정규화한다.
+  cmpscan() {   # cmpscan <골든이름> <언어> -- <인자…>
+    local name="$1" lang="$2"; shift 3
+    local g; g=$(golden_path "$name")
+    [ -f "$g" ] || { _t_bad "헬퍼 = $name" "골든 없음" "$g"; FAILED=1; return 0; }
+    local out="$T_TMP/helper-$name.out"
+    env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC DT_NOW="$FIXED_NOW" \
+      "$HELPER" gen-scan "$@" 2>/dev/null | norm > "$out"
+    PORTED=$((PORTED + 1))
+    if cmp -s "$out" "$g"; then _t_ok "헬퍼 = $name"; else
+      _t_bad "헬퍼 ≠ $name" "python 골든과 다릅니다" "$(diff "$g" "$out" | head -8)"
+      FAILED=1
+    fi
+  }
+  cmpscan scan-ko          ko -- "$VAULT"
+  cmpscan scan-en          en -- "$VAULT"
+  cmpscan scan-conflict-ko ko -- "$VAULT" "$SCAN_TREE" "$TMPL"
+  cmpscan scan-missing-ko  ko -- "/tmp/devtrail-없는볼트"
+
   # ⚠️ 아직 이관하지 않은 것을 **세어서 말한다.** 침묵하면 "다 됐다" 로 읽힌다.
   TOTAL=$(find "$GOLDEN" -type f | wc -l | tr -d ' ')
   SKIPPED=$((TOTAL - PORTED))
@@ -819,6 +957,17 @@ DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 TZ=UTC python3 "$ROOT/lib/gen/anm.py" \
 DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 TZ=UTC python3 "$ROOT/lib/gen/anm.py" \
   "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" "" > "$B" 2>/dev/null
 t_eq "같은 입력 → 같은 출력" "same" "$(cmp -s "$A" "$B" && echo same || echo different)"
+
+# ⚠️ 픽스처 볼트의 모든 파일이 **고정된 mtime** 을 갖는가.
+#
+#    2026-08-24: mtime 고정 블록보다 **뒤에** 만든 파일들이 현재 시각을
+#    가졌고, last_modified·recent 점수가 매번 달라져 골든이 실행마다
+#    깨졌다. 파일을 더할 때 고정 블록 뒤에 쓰기 쉬운 실수라 여기서 막는다.
+#    판정은 **상한**으로 한다: 고정한 시각은 전부 2026-08-05 이전이므로,
+#    그보다 새로운 .md 가 있으면 고정에서 빠진 것이다. 상대 시각("1시간 안")
+#    으로 재면 .obsidian 같은 고정 대상 밖 파일까지 걸려 판정이 흐려진다.
+FRESH=$(find "$VAULT/notes" -name '*.md' -newermt '2026-08-06' | wc -l | tr -d ' ')
+t_eq "고정에서 빠진 노트 파일이 없다" "0" "$FRESH"
 
 t_start "골든이 기계에 매이지 않는다"
 # ⚠️ 절대 경로·홈 디렉터리가 출력에 새면 다른 사람 기계에서 전부 빨간불이다.
