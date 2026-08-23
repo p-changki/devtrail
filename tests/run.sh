@@ -335,6 +335,8 @@ run behav "화면 렌더"      ./tests/test-view-render.sh
 run behav "볼트 스캔"      ./tests/test-view-scan.sh
 run behav "로컬 게이트"     ./tests/test-local-gate.sh
 run behav "QA 볼트 안전"    ./tests/test-qa-vault.sh
+run behav "생성기 계약"     ./tests/test-gen-contract.sh
+run behav "언어 전달"       ./tests/test-lang-propagation.sh
 run behav "app 경계"       ./tests/test-app.sh
 
 [ "$GROUP" = all ] && run swift "swift 빌드" \

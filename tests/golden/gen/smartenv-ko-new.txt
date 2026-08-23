@@ -1,0 +1,8 @@
+{
+  "smart_sources": {
+    "folder_exclusions": "notes/개발/레포docs,notes/자료실/10_원본,notes/자료실/30_아카이브,notes/템플릿,notes/개인/일기,notes/개인/책,notes/개인/스크랩",
+    "excluded_headings": "",
+    "min_chars": 200
+  },
+  "is_obsidian_vault": true
+}
