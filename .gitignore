@@ -83,6 +83,11 @@ node_modules/
 ._*
 Thumbs.db
 
+# 릴리즈 매니페스트 — **빌드 산출물**이다.
+# ⚠️ 커밋하면 손으로 고친 것과 만든 것을 구별할 수 없게 된다.
+#    tests/check-release-contract.py 가 커밋 여부까지 본다.
+/release.json
+
 # 로컬 QA 게이트 결과물 (Phase 2 의 QA 볼트 하니스가 남기는 것)
 /qa-results/
 *.qa.json

@@ -62,8 +62,19 @@ else
   FAIL=1
 fi
 
-# ── --release 는 QA 볼트까지 ──────────────────────────────────────────────
+# ── --release 는 매니페스트·QA 볼트까지 ─────────────────────────────────
 if [ "$MODE" = all ]; then
+  echo
+  echo "━━ 릴리즈 매니페스트"
+  # ⚠️ 만들 수 있다고 **주장하지 않는다. 만들어 본다.** 릴리스 직전에
+  #    "매니페스트 생성이 깨져 있었다" 를 알게 되면 늦다.
+  if ./scripts/make-release-manifest.sh "$ROOT/release.json"; then
+    :
+  else
+    echo "  ✗ 매니페스트를 만들지 못했습니다"
+    FAIL=1
+  fi
+
   echo
   echo "━━ QA 볼트 (격리)"
   # ⚠️ 실제 사용자 볼트는 건드리지 않는다. qa-vault.sh 가 Obsidian 이 아는
