@@ -67,6 +67,31 @@ cat > "$PATHS" <<JSON
 }
 JSON
 
+# ⚠️ 프로젝트가 있는 설정. 기본 CFG 에는 project_groups 가 비어 있어
+#    project/* 규칙이 **한 줄도 안 생겼다** — 그래서 "project 는 맨 뒤" 도
+#    "wildcard 키를 거른다" 도 한 번도 시험되지 않았다(변이 생존으로 확인).
+CFG_PROJ="$T_TMP/config-proj.json"
+jq '.github.project_groups = {"my-app":"myapp","acme-*":"acme","b-repo":"b","깊은레포":"deep"}' \
+  "$CFG" > "$CFG_PROJ"
+
+# ⚠️ **우리 태그**를 이미 라우팅 중인 기존 설정. 예전 픽스처는 남의 태그
+#    (#keep)만 있어서 "이미 라우팅 중이면 그들 것을 남긴다" 가 안 돌았다.
+EXIST_ANM_OURS="$T_TMP/existing-anm-ours.json"
+cat > "$EXIST_ANM_OURS" <<'JSON'
+{
+  "folder_tag_pattern": [
+    { "folder": "사용자가/고친/폴더", "tag": "#type/devlog", "pattern": "" },
+    { "folder": "남의폴더", "tag": "#keep", "pattern": "" }
+  ],
+  "excluded_folder": [{ "folder": "기존제외" }],
+  "use_regex_to_check_for_tags": true,
+  "남의키": "건드리면 안 된다"
+}
+JSON
+
+# ⚠️ 프리셋으로 도달할 수 없는 가지를 태우는 합성 트리.
+TREE_EDGE="$ROOT/tests/fixtures/tree-edge.json"
+
 IDS="$T_TMP/ids.json"
 printf '%s' '{}' > "$IDS"
 
@@ -99,6 +124,17 @@ FAILED=0
 # ⚠️ 환경을 통째로 고정한다. 여기서 새는 값이 하나라도 있으면 골든이
 #    "이 기계에서만 맞는" 파일이 된다.
 CASES=0
+# ⚠️ 골든 파일 이름을 정하는 곳은 **여기 하나**다. gen · genv · cmpx 가
+#    각자 정하면 어긋난다 — 실제로 cmpx 가 .txt 만 보다가 anm 골든(.json)을
+#    통째로 못 찾았고, 그 케이스들이 조용히 세어지지도 않았다(2026-08-23).
+golden_path() {
+  case "$1" in
+    smartenv-*) printf '%s/%s.txt' "$GOLDEN" "$1" ;;
+    anm-*|hotkeys-*) printf '%s/%s.json' "$GOLDEN" "$1" ;;
+    *) printf '%s/%s.txt' "$GOLDEN" "$1" ;;
+  esac
+}
+
 gen() {
   local name="$1" lang="$2"; shift 3
   CASES=$((CASES + 1))
@@ -121,8 +157,7 @@ gen() {
       python3 "$@" > "$out" 2> "$err" || rc=$?
   fi
 
-  local g="$GOLDEN/$name.json"
-  case "$name" in *smartenv*) g="$GOLDEN/$name.txt" ;; esac
+  local g; g=$(golden_path "$name")
 
   if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then
     cp "$out" "$g"
@@ -163,6 +198,16 @@ for prof in new existing isolated; do
 done
 gen anm-ko-merge ko -- "$ROOT/lib/gen/anm.py" "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" "$EXIST_ANM"
 gen anm-en-new en -- "$ROOT/lib/gen/anm.py" "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" ""
+# 프로젝트가 있는 경우 — project/* 순서와 wildcard 거르기가 여기서 시험된다.
+gen anm-ko-proj ko -- "$ROOT/lib/gen/anm.py" "$TREE" "$CFG_PROJ" "$ROOT/preset/profiles/new.json" ""
+# 우리 태그를 이미 라우팅 중인 경우 — 그들의 folder 를 지켜야 한다.
+gen anm-ko-ours ko -- "$ROOT/lib/gen/anm.py" "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" "$EXIST_ANM_OURS"
+# 프리셋이 못 지나는 가지 — 부모 제외 전파 · 중복 태그(안정 정렬).
+gen anm-ko-edge ko -- "$ROOT/lib/gen/anm.py" "$TREE_EDGE" "$CFG" "$ROOT/preset/profiles/new.json" ""
+# ⚠️ 슬래시 없는 태그(구체성 0)와 프로젝트(-1)가 **함께** 있어야 둘의 순서를
+#    구별할 수 있다. 프리셋에는 슬래시 없는 태그가 없어서, project 의 -1 을
+#    0 으로 바꿔도 결과가 같았다(변이 생존).
+gen anm-ko-edge-proj ko -- "$ROOT/lib/gen/anm.py" "$TREE_EDGE" "$CFG_PROJ" "$ROOT/preset/profiles/new.json" ""
 # ⚠️ DEVTRAIL_LANG 이 **없는** 경우 — 실제로 `devtrail augment` 가 도는 방식이다.
 gen anm-unset-new unset -- "$ROOT/lib/gen/anm.py" "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" ""
 
@@ -371,8 +416,8 @@ else
   # cmpx <골든이름> <언어> -- <헬퍼 인자…>
   cmpx() {
     local name="$1" lang="$2"; shift 3
-    local g="$GOLDEN/$name.txt"
-    [ -f "$g" ] || { _t_bad "$name" "골든 없음" "$g"; FAILED=1; return 0; }
+    local g; g=$(golden_path "$name")
+    [ -f "$g" ] || { _t_bad "헬퍼 = $name" "골든 없음" "$g"; FAILED=1; return 0; }
     local out="$T_TMP/helper-$name.out"
     if [ "$lang" = unset ]; then
       env -u DEVTRAIL_LANG LC_ALL=C.UTF-8 TZ=UTC "$HELPER" "$@" > "$out" 2>/dev/null
@@ -392,6 +437,18 @@ else
   cmpx smartenv-ko-new   ko -- gen-smartenv "$TREE" "$CFG" "notes/템플릿" ""
   cmpx smartenv-en-new   en -- gen-smartenv "$TREE" "$CFG" "notes/템플릿" ""
   cmpx smartenv-ko-merge ko -- gen-smartenv "$TREE" "$CFG" "notes/템플릿" "$EXIST_SE"
+
+  # anm — 이관 완료
+  for prof in new existing isolated; do
+    cmpx "anm-ko-$prof" ko -- gen-anm "$TREE" "$CFG" "$ROOT/preset/profiles/$prof.json" ""
+  done
+  cmpx anm-ko-merge  ko    -- gen-anm "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" "$EXIST_ANM"
+  cmpx anm-en-new    en    -- gen-anm "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" ""
+  cmpx anm-unset-new unset -- gen-anm "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" ""
+  cmpx anm-ko-proj  ko -- gen-anm "$TREE" "$CFG_PROJ" "$ROOT/preset/profiles/new.json" ""
+  cmpx anm-ko-ours  ko -- gen-anm "$TREE" "$CFG" "$ROOT/preset/profiles/new.json" "$EXIST_ANM_OURS"
+  cmpx anm-ko-edge      ko -- gen-anm "$TREE_EDGE" "$CFG" "$ROOT/preset/profiles/new.json" ""
+  cmpx anm-ko-edge-proj ko -- gen-anm "$TREE_EDGE" "$CFG_PROJ" "$ROOT/preset/profiles/new.json" ""
 
   # ⚠️ 아직 이관하지 않은 것을 **세어서 말한다.** 침묵하면 "다 됐다" 로 읽힌다.
   TOTAL=$(find "$GOLDEN" -type f | wc -l | tr -d ' ')

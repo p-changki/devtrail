@@ -1,0 +1,163 @@
+{
+  "folder_tag_pattern": [
+    {
+      "folder": "notes/개발/개발메모/Backend",
+      "tag": "#type/dev-note/backend",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/개발메모/DevOps",
+      "tag": "#type/dev-note/devops",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/개발메모/Frontend",
+      "tag": "#type/dev-note/frontend",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/개발메모/General",
+      "tag": "#type/dev-note/general",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/개발메모/Infra",
+      "tag": "#type/dev-note/infra",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/개발메모/Testing",
+      "tag": "#type/dev-note/testing",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/AI",
+      "tag": "#type/ai",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개인/책",
+      "tag": "#type/book",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/개발메모",
+      "tag": "#type/dev-note",
+      "pattern": ""
+    },
+    {
+      "folder": "사용자가/고친/폴더",
+      "tag": "#type/devlog",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/아이디어",
+      "tag": "#type/idea",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/자료실/00_Inbox",
+      "tag": "#type/inbox",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개인/일기",
+      "tag": "#type/journal",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/라이브러리",
+      "tag": "#type/library",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/자료실/20_카드노트/MOC",
+      "tag": "#type/moc",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/월간리뷰",
+      "tag": "#type/monthly-review",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/회고",
+      "tag": "#type/report",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개인/스크랩",
+      "tag": "#type/scrap",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/투두",
+      "tag": "#type/todo",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/도구",
+      "tag": "#type/tool",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/트러블슈팅",
+      "tag": "#type/trouble",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/주간리뷰",
+      "tag": "#type/weekly-review",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/개발/유튜브",
+      "tag": "#type/youtube",
+      "pattern": ""
+    },
+    {
+      "folder": "notes/자료실/20_카드노트",
+      "tag": "#type/zettel",
+      "pattern": ""
+    },
+    {
+      "folder": "남의폴더",
+      "tag": "#keep",
+      "pattern": ""
+    }
+  ],
+  "excluded_folder": [
+    {
+      "folder": "기존제외"
+    },
+    {
+      "folder": "notes/개발/레포docs"
+    },
+    {
+      "folder": "notes/개발/프로젝트"
+    },
+    {
+      "folder": "notes/개발/학습"
+    },
+    {
+      "folder": "notes/자료실/10_원본"
+    },
+    {
+      "folder": "notes/자료실/30_아카이브"
+    },
+    {
+      "folder": "notes/템플릿"
+    },
+    {
+      "folder": ".obsidian"
+    },
+    {
+      "folder": ".trash"
+    }
+  ],
+  "use_regex_to_check_for_tags": true,
+  "남의키": "건드리면 안 된다",
+  "trigger_auto_manual": "Automatic",
+  "use_regex_to_check_for_excluded_folder": false,
+  "statusBar_trigger_indicator": true
+}
