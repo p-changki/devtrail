@@ -20,6 +20,29 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
 
+            // ⚠️ DMG 에서 그대로 돌면 **설치된 줄 안다** — 잘 돌기 때문이다.
+            //    그런데 볼륨을 빼는 순간 앱이 사라진다. 2026-08-24 실물 QA 에서
+            //    실제로 이 상태로 셋업까지 진행됐다.
+            //
+            //    판정은 CLI 가 한다. 여기서는 그리기만.
+            if status.runningFromVolume {
+                Divider().padding(.vertical, 8)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "externaldrive.badge.exclamationmark")
+                            .font(.system(size: 11)).foregroundStyle(.dtWarning)
+                        Text("아직 설치되지 않았습니다")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    Text("디스크 이미지에서 실행 중입니다. DevTrail 을 응용 프로그램 폴더로 끌어다 놓고, 거기서 다시 여세요.")
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("이대로 두면 이미지를 꺼내는 순간 앱이 사라집니다.")
+                        .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             // ⚠️ **설정이 먼저다.** 예전에는 needsSetup 이 먼저 걸려서,
             //    셋업 전에는 톱니를 눌러도 헤더만 "설정" 으로 바뀌고 몸통은
             //    셋업 화면 그대로였다 — 화면이 거짓말을 했고, **종료 버튼에
@@ -431,6 +454,11 @@ struct MenuView: View {
     /// ⚠️ 여기에 **판정이 없다.** CLI 가 낸 상태를 그대로 그린다.
     @ViewBuilder
     private var terminalLink: some View {
+        // ⚠️ 떼어낼 수 있는 볼륨에서는 연결을 권하지 않는다. 만들어도
+        //    볼륨을 빼는 순간 죽고, 죽은 링크는 고치기 어렵다.
+        if status.runningFromVolume {
+            EmptyView()
+        } else {
         switch status.linkState {
         case "absent":
             VStack(alignment: .leading, spacing: 4) {
@@ -456,6 +484,23 @@ struct MenuView: View {
                      "\(status.linkTarget) — 그대로 두었습니다. 앱은 번들 것을 씁니다.",
                      .dtWarning)
 
+        case "broken":
+            // ⚠️ 끊어진 링크는 "남의 것" 이 아니라 고쳐야 할 것이다.
+            VStack(alignment: .leading, spacing: 4) {
+                Button(action: { status.linkTerminal() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 10.5))
+                        Text("터미널 연결 고치기").font(.system(size: 11.5))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(Hover(radius: 5))
+                Text("\(status.linkPath) 가 끊어져 있습니다.")
+                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
+
         case "occupied":
             linkNote("exclamationmark.triangle", "이미 파일이 있습니다",
                      "\(status.linkPath) — 심볼릭 링크가 아니라 손대지 않았습니다.",
@@ -463,6 +508,7 @@ struct MenuView: View {
 
         default:
             EmptyView()   // ⚠️ 모르면 아무 말도 하지 않는다.
+        }
         }
     }
 

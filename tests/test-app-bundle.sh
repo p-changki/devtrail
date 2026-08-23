@@ -363,6 +363,18 @@ t_eq "Status 가 link status --json 을 읽는다" "1" \
 t_eq "연결은 CLI 에 맡긴다" "1" \
   "$(printf '%s\n' "$ST" | grep -c '"link", "create"' | tr -d ' ')"
 
+t_start "⚠️ DMG 에서 도는 것을 화면이 말한다"
+# ⚠️ 2026-08-24 실물 QA. DMG 에서 앱이 **그대로 잘 돌아서** 설치된 줄 알고
+#    셋업까지 진행됐다. 볼륨을 빼면 앱이 사라지는데 아무도 안 알려줬다.
+t_eq "화면이 알린다" "yes" \
+  "$([ "$(printf '%s\n' "$MV" | grep -c 'status.runningFromVolume' | tr -d ' ')" != 0 ] \
+     && echo yes || echo no)"
+# ⚠️ 판정은 CLI 가 한다 — 화면이 자기 경로를 보고 스스로 정하면 두 벌이 된다.
+t_eq "판정을 CLI 에서 읽는다" "1" \
+  "$(printf '%s\n' "$ST" | grep -c 'self_readonly' | tr -d ' ')"
+t_eq "화면이 /Volumes 를 직접 보지 않는다" "0" \
+  "$(printf '%s\n' "$MV" | grep -c '/Volumes' | tr -d ' ')"
+
 t_start "⚠️ 셋업 전에도 앱을 끌 수 있다"
 # ⚠️ 2026-08-24 실물 QA 에서 잡힌 결함이다.
 #

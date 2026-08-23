@@ -59,6 +59,13 @@ final class Status: ObservableObject {
     @Published var linkTarget = ""
     @Published var linkOnPath = true
 
+    /// 떼어낼 수 있는 읽기전용 볼륨(마운트된 DMG)에서 실행 중인가.
+    ///
+    /// ⚠️ 판정은 CLI 가 한다 (`link status --json` 의 `self_readonly`).
+    ///    앱이 자기 경로를 보고 스스로 정하지 않는다 — 같은 판정을 두 벌 두면
+    ///    반드시 어긋난다.
+    @Published var runningFromVolume = false
+
     var scheduleOn: Bool { scheduleLoaded > 0 }
 
     private var config: [String: Any] = [:]
@@ -89,9 +96,11 @@ final class Status: ObservableObject {
             linkPath = l["path"] as? String ?? ""
             linkTarget = l["target"] as? String ?? ""
             linkOnPath = (l["on_path"] as? Bool) ?? true
+            runningFromVolume = (l["self_readonly"] as? Bool) ?? false
         } else {
             // ⚠️ 못 읽었으면 **모른다** 고 둔다. 안다고 꾸미지 않는다.
             linkState = ""
+            runningFromVolume = false
         }
 
         // ⚠️ '셋업했는가' 를 파일 존재로 판정하지 않는다. 설정 파일이 있어도

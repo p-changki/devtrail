@@ -49,7 +49,30 @@ _link_resolve() {
   else printf '%s' "$p"; fi
 }
 
-# absent | linked_here | linked_other | occupied
+# 이 경로가 **떼어낼 수 있는 읽기전용 볼륨**(마운트된 디스크 이미지) 위에 있나.
+#
+# ⚠️ 왜 필요한가 (2026-08-24 실물 QA)
+#
+#    DMG 를 열면 앱이 /Volumes/… 에서 그대로 **잘 돈다.** 설치된 줄 알기 쉽다.
+#    그 상태에서 터미널 연결을 만들면 링크가 DMG 안을 가리키고, **DMG 를 빼는
+#    순간 죽는다.** 더 나쁜 것은 그 다음이다 — 나중에 제대로 설치하고 다시
+#    눌러도, 끊어진 링크를 "남의 것" 으로 보고 거부해 **영영 못 고친다.**
+#
+# ⚠️ `/` 도 read-only 다(봉인된 시스템 볼륨). 그래서 두 조건을 함께 본다:
+#    /Volumes/ 아래일 것 **그리고** 그 볼륨이 read-only 일 것.
+#    /Applications 는 어느 쪽도 아니라 걸리지 않는다.
+_link_on_readonly_volume() {
+  case "$1" in
+    /Volumes/*) ;;
+    *) return 1 ;;
+  esac
+  local rest vol
+  rest="${1#/Volumes/}"
+  vol="/Volumes/$(printf '%s' "$rest" | cut -d/ -f1)"
+  mount | grep -F " on $vol (" | grep -q 'read-only'
+}
+
+# absent | linked_here | linked_other | broken | occupied
 _link_state() {
   if [ ! -e "$DT_LINK_PATH" ] && [ ! -L "$DT_LINK_PATH" ]; then
     printf 'absent'; return
@@ -58,6 +81,11 @@ _link_state() {
     # ⚠️ 심볼릭 링크가 아닌 진짜 파일이다. 누가 어떻게 놓았는지 모른다.
     printf 'occupied'; return
   fi
+  # ⚠️ **끊어진 링크는 "남의 것" 이 아니다.** 아무것도 가리키지 않는 죽은
+  #    링크이고, 그대로 두면 터미널 devtrail 이 계속 안 된다. 이걸
+  #    linked_other 로 보면 create 가 거부해서 사용자가 영영 못 고친다
+  #    (2026-08-24 실물 QA 에서 이 기계가 정확히 그 상태였다).
+  [ -e "$DT_LINK_PATH" ] || { printf 'broken'; return; }
   local got want
   got=$(_link_resolve "$DT_LINK_PATH")
   want=$(_link_resolve "$(_link_self)")
@@ -77,9 +105,14 @@ _link_status() {
   state=$(_link_state)
   on_path=$(_link_on_path)
   target=""
-  [ "$state" = linked_here ] || [ "$state" = linked_other ] \
-    && target=$(_link_resolve "$DT_LINK_PATH")
-  [ "$state" = occupied ] && target="$DT_LINK_PATH"
+  case "$state" in
+    linked_here|linked_other|broken) target=$(_link_resolve "$DT_LINK_PATH") ;;
+    occupied) target="$DT_LINK_PATH" ;;
+  esac
+
+  # ⚠️ 판정은 여기서 한다. 화면은 이 값을 읽어 그리기만 한다.
+  local ro=false
+  _link_on_readonly_volume "$(_link_self)" && ro=true
 
   if [ "${1:-}" = "--json" ]; then
     jq -n \
@@ -88,7 +121,9 @@ _link_status() {
       --arg self "$(_link_self)" \
       --arg target "$target" \
       --argjson on_path "$on_path" \
-      '{ state: $state, path: $path, self: $self, target: $target, on_path: $on_path }'
+      --argjson self_readonly "$ro" \
+      '{ state: $state, path: $path, self: $self, target: $target,
+         on_path: $on_path, self_readonly: $self_readonly }'
     return 0
   fi
 
@@ -102,10 +137,18 @@ _link_status() {
     occupied)
       warn "$(L "이미 파일이 있습니다" "A file is already there"): $DT_LINK_PATH"
       dim "   $(L "심볼릭 링크가 아니라 손대지 않습니다." "Not a symlink — left untouched.")" ;;
+    broken)
+      warn "$(L "연결이 끊어져 있습니다" "The link is broken"): $DT_LINK_PATH → $target"
+      dim "   devtrail link create   ($(L "다시 연결합니다" "relinks"))" ;;
     absent)
       dim "$(L "터미널에 연결돼 있지 않습니다" "Not linked for the terminal"): $DT_LINK_PATH"
       dim "   devtrail link create" ;;
   esac
+  [ "$ro" = true ] && {
+    warn "$(L "떼어낼 수 있는 볼륨에서 실행 중입니다" "Running from a removable volume"): $(_link_self)"
+    dim "   $(L "먼저 응용 프로그램 폴더로 옮기세요 — 지금 연결하면 볼륨을 빼는 순간 끊어집니다." \
+                "Move it to Applications first — a link made now dies when the volume is ejected.")"
+  }
   [ "$on_path" = false ] && {
     warn "$(L "PATH 에 없습니다" "Not on PATH"): $DT_LINK_DIR"
     dim "   echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
@@ -116,12 +159,25 @@ _link_status() {
 _link_create() {
   local state; state=$(_link_state)
 
+  # ⚠️ **떼어낼 수 있는 볼륨에서는 만들지 않는다.** 만들어도 볼륨을 빼는
+  #    순간 죽고, 죽은 링크는 사용자가 스스로 고치기 어렵다. 만들기 전에
+  #    막는 편이 훨씬 싸다.
+  if _link_on_readonly_volume "$(_link_self)"; then
+    die "$(L "떼어낼 수 있는 볼륨에서는 연결하지 않습니다 — 먼저 응용 프로그램 폴더로 옮기세요" \
+            "Not linking from a removable volume — move it to Applications first"): $(_link_self)"
+  fi
+
   # ⚠️ 덮어쓰지 않는다. 여기서 -f 를 쓰면 사용자가 쓰던 devtrail 이 말없이
   #    바뀐다 — 되돌릴 방법도 알려주지 못한다.
   case "$state" in
     linked_here)
       ok "$(L "이미 연결돼 있습니다" "Already linked"): $DT_LINK_PATH"
       return 0 ;;
+    broken)
+      # ⚠️ 끊어진 링크는 아무것도 안 가리킨다. 이건 "남의 것" 이 아니라
+      #    **고쳐야 할 것**이다. 지우고 다시 만든다.
+      rm -f "$DT_LINK_PATH" || die "$(L "끊어진 링크를 지우지 못했습니다" \
+                                       "Could not remove the broken link"): $DT_LINK_PATH" ;;
     linked_other)
       die "$(L "다른 devtrail 이 이미 연결돼 있습니다 — 덮어쓰지 않습니다" \
               "A different devtrail is already linked — not overwriting"): $(_link_resolve "$DT_LINK_PATH")" ;;
