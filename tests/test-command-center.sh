@@ -268,9 +268,10 @@ t_eq "종료코드 0" "0" "$?"
 t_start "읽기 모델의 제외 규칙"
 JS="$ROOT/plugin/main.js"
 RMJS="$ROOT/plugin/read-model.js"
-t_contains "템플릿 폴더를 제외한다"  "templates"   "$(cat "$JS" "$RMJS")"
-t_contains "밑줄 파일을 제외한다"    "startsWith('_')" "$(cat "$JS" "$RMJS")"
-t_contains "허브(_index)를 제외한다" "_index"      "$(cat "$JS" "$RMJS")"
+CMDJS="$ROOT/plugin/commands.js"
+t_contains "템플릿 폴더를 제외한다"  "templates"   "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "밑줄 파일을 제외한다"    "startsWith('_')" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "허브(_index)를 제외한다" "_index"      "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 # 제외 함수가 실제로 동작하는지 — 문자열 검사만으로는 '있지만 안 부르는' 코드를 못 잡는다.
 t_start "제외가 실제로 동작한다"
@@ -309,10 +310,10 @@ fi
 # ── 카드 ─────────────────────────────────────────────────────────────────────
 t_start "카드가 실재 소스를 읽는다"
 # 설계안 §6 의 읽기 모델. 없는 필드를 지어내지 않는다.
-t_contains "프로젝트: project-home"  "project-home"   "$(cat "$JS" "$RMJS")"
-t_contains "프로젝트: status active" "'active'"       "$(cat "$JS" "$RMJS")"
-t_contains "Inbox: status inbox"     "'inbox'"        "$(cat "$JS" "$RMJS")"
-t_contains "리뷰: review_at"         "review_at"      "$(cat "$JS" "$RMJS")"
+t_contains "프로젝트: project-home"  "project-home"   "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "프로젝트: status active" "'active'"       "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "Inbox: status inbox"     "'inbox'"        "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "리뷰: review_at"         "review_at"      "$(cat "$JS" "$RMJS" "$CMDJS")"
 # ⚠️ v1 에 없는 필드를 만들지 않는다. frontmatter 커버리지가 고르지 않아
 #    빈 대시보드가 되고, 사용자 노트 마이그레이션을 강요하게 된다.
 #    ⚠️ 주석에 단어가 나오는 것은 괜찮다. '읽는지' 를 봐야 한다.
@@ -322,7 +323,7 @@ t_eq "due 를 읽지 않는다" "0" \
   "$(grep -cE 'meta\.due\b|\.due\b' "$JS" | tr -d ' ')"
 
 # 빈 볼트에서 0 을 늘어놓지 않는다 — 안내가 되어야 한다.
-t_contains "빈 상태 문구가 있다" "empty" "$(cat "$JS" "$RMJS")"
+t_contains "빈 상태 문구가 있다" "empty" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 # ── 라우트 ───────────────────────────────────────────────────────────────────
 #
@@ -331,7 +332,7 @@ t_contains "빈 상태 문구가 있다" "empty" "$(cat "$JS" "$RMJS")"
 t_start "라우트가 존재한다"
 # ⚠️ 'capture' 는 없앴다 — 빠른 실행 바가 같은 6개를 항상 보여준다.
 for r in home today projects reviews; do
-  t_contains "$r" "'$r'" "$(cat "$JS" "$RMJS")"
+  t_contains "$r" "'$r'" "$(cat "$JS" "$RMJS" "$CMDJS")"
 done
 
 # ── 노트 생성을 다시 만들지 않는다 ──────────────────────────────────────────
@@ -341,7 +342,7 @@ done
 #    2026-08-22 QA 에서 프로젝트 허브 본문이 두 곳에 있어 링크가 전부
 #    깨진 적이 있다 — 같은 유형이다.
 t_start "노트 생성을 중복하지 않는다"
-t_contains "명령을 실행한다" "commands.executeCommandById" "$(cat "$JS" "$RMJS")"
+t_contains "명령을 실행한다" "commands.executeCommandById" "$(cat "$JS" "$RMJS" "$CMDJS")"
 # 노트를 직접 만들면 그게 두 번째 생성 경로다.
 t_eq "vault.create 를 부르지 않는다" "0" \
   "$(grep -cE 'vault\.create\(|vault\.createFolder\(' "$JS" | tr -d ' ')"
@@ -350,7 +351,7 @@ t_eq "파일에 쓰지 않는다" "0" \
 
 # ⚠️ Templater 명령 id 에는 볼트 경로가 들어간다. 하드코딩하면 영어 볼트나
 #    다른 루트를 쓰는 사람에게서 조용히 죽는다 — 경로 맵에서 조립해야 한다.
-t_contains "명령 id 를 조립한다" "templater-obsidian:create-" "$(cat "$JS" "$RMJS")"
+t_contains "명령 id 를 조립한다" "templater-obsidian:create-" "$(cat "$JS" "$RMJS" "$CMDJS")"
 # ⚠️ 파일명 한/영 매핑(CAPTURES)은 필요하다 — 템플릿 이름이 언어마다 다르다.
 #    막아야 할 것은 '경로' 하드코딩이다. notes/템플릿 처럼 볼트 구조를 박으면
 #    루트를 바꾼 사람에게서 조용히 죽는다.
@@ -358,7 +359,7 @@ t_eq "볼트 경로를 박지 않는다" "0" \
   "$(grep -cE "['\"\`][^'\"\`]*notes/" "$JS" | tr -d ' ')"
 
 # 명령이 없을 때 조용히 다른 노트를 만들면 안 된다 — 무엇을 해야 할지 말한다.
-t_contains "없는 명령을 알려준다" "notReady" "$(cat "$JS" "$RMJS")"
+t_contains "없는 명령을 알려준다" "notReady" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 # ── 조립이 실제로 맞는가 ────────────────────────────────────────────────────
 t_start "명령 id 조립"
@@ -376,7 +377,7 @@ console.log(ko === 'templater-obsidian:create-notes/템플릿/개발일지양식
          && bad === null ? 'OK' : `FAIL ko=${ko} en=${en} bad=${bad}`);
 JSEOF
 if command -v node >/dev/null 2>&1; then
-  t_eq "경로 맵에서 조립한다" "OK" "$(node "$T_TMP/cmdid.js" "$JS" 2>&1 | tail -1)"
+  t_eq "경로 맵에서 조립한다" "OK" "$(node "$T_TMP/cmdid.js" "$CMDJS" 2>&1 | tail -1)"
 else
   dim "   node 없음 — 건너뜀"
 fi
@@ -390,7 +391,7 @@ fi
 #    라는 뜻이고, 우리가 원하는 건 "메인 영역의 탭" 이다. Obsidian 자신이
 #    app.asar 에서 getLeaf("tab") · getLeaf("split") 을 쓴다(2026-08-22 확인).
 t_start "메인 탭으로 연다"
-t_contains "메인 탭 API 를 쓴다" "getLeaf('tab')" "$(cat "$JS" "$RMJS")"
+t_contains "메인 탭 API 를 쓴다" "getLeaf('tab')" "$(cat "$JS" "$RMJS" "$CMDJS")"
 t_eq "사이드 패널로 열지 않는다" "0" \
   "$(grep -c 'getRightLeaf' "$JS" | tr -d ' ')"
 
@@ -398,22 +399,22 @@ t_eq "사이드 패널로 열지 않는다" "0" \
 #    코드가 아예 실행되지 않았다. Phase 1·2 를 써본 사람은 전부 그 상태다 —
 #    갱신해도 화면이 옛 자리에 그대로 있다(2026-08-22 실물 확인).
 #    사이드에 있는 뷰는 재사용하지 않고 옮긴다.
-t_contains "사이드에 있으면 옮긴다" "isMainLeaf" "$(cat "$JS" "$RMJS")"
+t_contains "사이드에 있으면 옮긴다" "isMainLeaf" "$(cat "$JS" "$RMJS" "$CMDJS")"
 # ⚠️ 함수가 있는 것과 '쓰는' 것은 다르다. activate 가 실제로 걸러야 한다.
-t_contains "activate 가 메인을 고른다" "isMainLeaf(l, workspace.rootSplit)" "$(cat "$JS" "$RMJS")"
+t_contains "activate 가 메인을 고른다" "isMainLeaf(l, workspace.rootSplit)" "$(cat "$JS" "$RMJS" "$CMDJS")"
 # 아무 leaf 나 재사용하면 사이드에 남은 옛 뷰가 이긴다.
 t_eq "아무 leaf 나 재사용하지 않는다" "0" \
   "$(grep -c 'revealLeaf(open\[0\])' "$JS" | tr -d ' ')"
 # 사이드에 남은 것은 닫아야 같은 화면이 둘이 되지 않는다.
-t_contains "남은 뷰를 닫는다" "l.detach()" "$(cat "$JS" "$RMJS")"
+t_contains "남은 뷰를 닫는다" "l.detach()" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 # ⚠️ 회귀: Obsidian 은 시작할 때 workspace.json 의 레이아웃을 복원한다.
 #    예전 버전이 사이드독에 열어둔 뷰가 거기 저장돼 있어서, 재시작하면
 #    activate() 를 거치지 않고 사이드에 그대로 되살아난다.
 #    실측: workspace.json 의 right 에 뷰가 1개 있었다(2026-08-22).
 #    레이아웃이 준비되면 스스로 옮겨야 한다.
-t_contains "레이아웃 준비 후 정리한다" "onLayoutReady" "$(cat "$JS" "$RMJS")"
-t_contains "복원된 사이드 뷰를 옮긴다" "relocateIfSide" "$(cat "$JS" "$RMJS")"
+t_contains "레이아웃 준비 후 정리한다" "onLayoutReady" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "복원된 사이드 뷰를 옮긴다" "relocateIfSide" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 cat > "$T_TMP/leaf.js" <<'JSEOF'
 const Module = require('module'); const orig = Module._load;
@@ -438,7 +439,7 @@ fi
 #    focus 0 · area 0 · priority 0. 그건 지어낸 화면이다.
 t_start "지표가 DevTrail 개념이다"
 for k in devlog projects inbox trouble; do
-  t_contains "지표 $k" "$k" "$(cat "$JS" "$RMJS")"
+  t_contains "지표 $k" "$k" "$(cat "$JS" "$RMJS" "$CMDJS")"
 done
 t_eq "meeting 을 세지 않는다" "0" "$(grep -cE "'meeting'|\"meeting\"" "$JS" | tr -d ' ')"
 t_eq "event 를 세지 않는다"   "0" "$(grep -cE "'event'|\"event\"" "$JS" | tr -d ' ')"
@@ -520,7 +521,7 @@ t_start "단축키: Command Center"
 #     manifest id + ':' + addCommand 의 id 다.
 CCID="$(jq -r '.id' "$ROOT/plugin/manifest.json"):open"
 t_contains "스펙에 Command Center 가 있다" "$CCID" "$(cat "$HKSPEC")"
-t_contains "플러그인이 그 명령을 만든다" "id: 'open'" "$(cat "$JS" "$RMJS")"
+t_contains "플러그인이 그 명령을 만든다" "id: 'open'" "$(cat "$JS" "$RMJS" "$CMDJS")"
 t_ne "단축키가 배정된다" "null" "$(jq -r --arg c "$CCID" '.[$c]' "$T_TMP/hk-out.json")"
 
 # ⚠️ 외부 플러그인 명령은 스펙에 박지 않는다. 설치 여부도, 명령 id 도
@@ -532,10 +533,10 @@ t_start "검색: 없으면 안내만 한다"
 # (d) Omnisearch 가 없으면 버튼이 안전하게 비활성화되고 안내가 뜬다
 # ⚠️ 옛 계약은 'id 로 시작하는 첫 명령' 이었다. 그건 인덱스 재생성 같은 것을
 #    검색 버튼에 물릴 수 있어 바꿨다 — 이름과 접미사를 함께 본다.
-t_contains "검색 명령을 가려서 찾는다" "findSearchCommand" "$(cat "$JS" "$RMJS")"
+t_contains "검색 명령을 가려서 찾는다" "findSearchCommand" "$(cat "$JS" "$RMJS" "$CMDJS")"
 t_eq "명령 id 를 하드코딩하지 않는다" "0" \
   "$(grep -cE \"omnisearch:[a-z-]+\" "$JS" | tr -d ' ')"
-t_contains "설치 안내 문구가 있다" "searchMissing" "$(cat "$JS" "$RMJS")"
+t_contains "설치 안내 문구가 있다" "searchMissing" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 # (e) 명령 실행이 파일을 만들지 않는다 — 이미 위에서 보지만 검색에도 해당한다
 t_eq "검색 버튼이 파일을 만들지 않는다" "0" \
@@ -566,13 +567,13 @@ t_eq "전역에 폰트를 걸지 않는다" "0" \
 t_start "상태를 색으로만 말하지 않는다"
 # ⚠️ 설계안 §3: 색만으로 신호하지 않는다. 색을 못 보는 사람이 있다.
 #    배지는 글자를 갖고, 비활성 버튼은 title 로 이유를 말한다.
-t_contains "배지에 글자가 있다" "devtrail-cc-badge" "$(cat "$JS" "$RMJS")"
-t_contains "비활성 이유를 title 로" "setAttr('title'" "$(cat "$JS" "$RMJS")"
+t_contains "배지에 글자가 있다" "devtrail-cc-badge" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "비활성 이유를 title 로" "setAttr('title'" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 t_start "접근성"
 t_contains "포커스가 보인다" "focus-visible" "$(cat "$CSS")"
-t_contains "네비에 aria-label" "aria-label" "$(cat "$JS" "$RMJS")"
-t_contains "현재 탭을 알린다" "aria-current" "$(cat "$JS" "$RMJS")"
+t_contains "네비에 aria-label" "aria-label" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "현재 탭을 알린다" "aria-current" "$(cat "$JS" "$RMJS" "$CMDJS")"
 # ⚠️ 움직임에 민감한 사람이 있다. 애니메이션을 넣었다면 끌 수 있어야 한다.
 # ⚠️ 블록이 '있다' 와 '듣는다' 는 다르다. 같은 특정도라면 **나중 규칙이 이긴다** —
 #    감소된 모션 블록이 transition 선언보다 앞에 있으면 아무 효과가 없다.
@@ -716,19 +717,19 @@ else
 fi
 
 t_start "보드가 네 컬럼과 미지정을 갖는다"
-t_contains "컬럼 정의" "BOARD_COLUMNS" "$(cat "$JS" "$RMJS")"
+t_contains "컬럼 정의" "BOARD_COLUMNS" "$(cat "$JS" "$RMJS" "$CMDJS")"
 for k in planning active blocked done; do
-  t_contains "컬럼 $k" "'$k'" "$(cat "$JS" "$RMJS")"
+  t_contains "컬럼 $k" "'$k'" "$(cat "$JS" "$RMJS" "$CMDJS")"
 done
 # ⚠️ 미지정은 다섯 번째 컬럼이 아니라 별도 영역이다 — 상태가 아니라 '빠진 것' 이다.
-t_contains "미지정을 따로 다룬다" "unstaged" "$(cat "$JS" "$RMJS")"
+t_contains "미지정을 따로 다룬다" "unstaged" "$(cat "$JS" "$RMJS" "$CMDJS")"
 t_eq "컬럼은 넷이다" "4" \
   "$(grep -A8 'BOARD_COLUMNS = \[' "$RMJS" | grep -c "^\s*\['")"
 
 t_start "카드가 노트에서 읽은 것만 보여준다"
-t_contains "프로젝트명" "p.name" "$(cat "$JS" "$RMJS")"
-t_contains "next_action" "p.next" "$(cat "$JS" "$RMJS")"
-t_contains "마지막 수정" "p.file.stat.mtime" "$(cat "$JS" "$RMJS")"
+t_contains "프로젝트명" "p.name" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "next_action" "p.next" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "마지막 수정" "p.file.stat.mtime" "$(cat "$JS" "$RMJS" "$CMDJS")"
 # 카드 전체가 눌린다 — 링크만 누르게 하면 표적이 너무 작다.
 # ⚠️ 'Enter' 문구는 최근 기록 행에도 있다. 존재만 보면 카드에서 빼도 통과한다 —
 #    카드 함수 안에 있는지를 본다.
@@ -736,7 +737,7 @@ t_contains "카드를 키보드로 연다" "ev.key === 'Enter'" \
   "$(sed -n '/projectCard(parent, t, p, colKey)/,/^  }/p' "$JS")"
 t_contains "카드 전체가 눌린다" "c.addEventListener('click', open)" \
   "$(sed -n '/projectCard(parent, t, p, colKey)/,/^  }/p' "$JS")"
-t_contains "빈 컬럼 문구" "emptyColumn" "$(cat "$JS" "$RMJS")"
+t_contains "빈 컬럼 문구" "emptyColumn" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 t_start "노트를 쓰지 않는다"
 # ⚠️ 플러그인은 읽기 모델이다. 쓰기는 Templater 통로 하나뿐이다.
@@ -1010,7 +1011,7 @@ t_eq "핸드오프의 눈금만 쓴다" "" "$odd"
 t_start "최근 기록이 한 줄로 늘어지지 않는다"
 # ⚠️ 폭 상한을 풀었으므로 목록 한 줄이 화면 끝까지 늘어난다 — 이름은 왼쪽,
 #    배지는 저 멀리 오른쪽이 되어 둘을 잇는 눈길이 끊긴다. 여러 열로 접는다.
-t_contains "여러 열로 나눈다" "devtrail-cc-recent" "$(cat "$JS" "$RMJS")"
+t_contains "여러 열로 나눈다" "devtrail-cc-recent" "$(cat "$JS" "$RMJS" "$CMDJS")"
 t_contains "CSS 가 열을 만든다" "auto-fit" \
   "$(sed -n '/^\.devtrail-cc-recent {/,/^}/p' "$CSS")"
 
@@ -1185,10 +1186,10 @@ fi
 
 t_start "설정 두 개만 노출한다"
 # ⚠️ 사양: "설정값 2개만 노출하면 충분합니다" — 방치 일수(14), 히트맵 주(12).
-t_contains "방치 일수" "STALE_DAYS" "$(cat "$JS" "$RMJS")"
-t_contains "히트맵 주" "FLOW_WEEKS" "$(cat "$JS" "$RMJS")"
-t_contains "기본 14" "STALE_DAYS = 14" "$(cat "$JS" "$RMJS")"
-t_contains "기본 12" "FLOW_WEEKS = 12" "$(cat "$JS" "$RMJS")"
+t_contains "방치 일수" "STALE_DAYS" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "히트맵 주" "FLOW_WEEKS" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "기본 14" "STALE_DAYS = 14" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "기본 12" "FLOW_WEEKS = 12" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 t_start "프로젝트 4주 스파크라인"
 cat > "$T_TMP/spark.js" <<'JSEOF'
@@ -1250,14 +1251,14 @@ fi
 t_start "시안이 요구한 요소가 다 있다"
 # ⚠️ 처음 구현에서 여덟 개를 빠뜨렸다. 사양의 각 요소가 실제로 그려지는지 본다.
 # ⚠️ 시안의 그 자리는 이제 로컬 필터가 아니라 전체 검색이다 (§1).
-t_contains "상단 검색 입력" "devtrail-cc-searchinput" "$(cat "$JS" "$RMJS")"
-t_contains "날짜 표시" "devtrail-cc-date" "$(cat "$JS" "$RMJS")"
-t_contains "만들기 안내" "devtrail-cc-kbd" "$(cat "$JS" "$RMJS")"
-t_contains "스파크라인" "devtrail-cc-spark" "$(cat "$JS" "$RMJS")"
-t_contains "이어쓰기 버튼" "continueWrite" "$(cat "$JS" "$RMJS")"
-t_contains "작업 전체 버튼" "allTasks" "$(cat "$JS" "$RMJS")"
-t_contains "전체 보기" "seeAll" "$(cat "$JS" "$RMJS")"
-t_contains "기한 라벨" "devtrail-cc-due" "$(cat "$JS" "$RMJS")"
+t_contains "상단 검색 입력" "devtrail-cc-searchinput" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "날짜 표시" "devtrail-cc-date" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "만들기 안내" "devtrail-cc-kbd" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "스파크라인" "devtrail-cc-spark" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "이어쓰기 버튼" "continueWrite" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "작업 전체 버튼" "allTasks" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "전체 보기" "seeAll" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "기한 라벨" "devtrail-cc-due" "$(cat "$JS" "$RMJS" "$CMDJS")"
 # 표는 5열이다 — 스파크라인 자리가 있어야 한다.
 t_contains "표가 5열" "1fr 84px 1fr 100px 96px" "$(cat "$CSS")"
 
@@ -1306,19 +1307,19 @@ t_contains "수집이 그 규칙을 쓴다" "bearsTasks(" \
 #    "제목, 태그로 거르기" 를 보고 볼트 전체를 찾을 거라 기대한다 — 기대와
 #    동작이 어긋나면 그 자리는 없느니만 못하다.
 t_start "상단 입력창이 전체 검색이다"
-t_contains "전체 검색이라고 말한다" "searchPlaceholder" "$(cat "$JS" "$RMJS")"
+t_contains "전체 검색이라고 말한다" "searchPlaceholder" "$(cat "$JS" "$RMJS" "$CMDJS")"
 t_eq "거르기라고 하지 않는다" "0" "$(grep -c '태그로 거르기' "$JS" | tr -d ' ')"
 NAVSRC="$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS")"
 # ⚠️ 날것의 Enter 를 보지 않는다 — 한글 조합 중의 Enter 는 실행이 아니다.
 t_contains "Enter 로 실행한다" "isSubmitKey(ev)" "$NAVSRC"
 # 검색 실행은 searchRunner 한 곳에 있고, nav 는 그것을 부른다.
 t_contains "nav 가 실행기를 만든다" "searchRunner(this.app)" "$NAVSRC"
-RESOLVE="$(sed -n '/^function searchRunner(app) {/,/^}/p' "$JS")"
+RESOLVE="$(sed -n '/^function searchRunner(app) {/,/^}/p' "$CMDJS")"
 t_contains "검색 명령을 가려 찾는다" "findSearchCommand" "$RESOLVE"
 t_contains "기본 검색으로 떨어진다" "CORE_SEARCH" "$RESOLVE"
 t_contains "존재를 확인하고 부른다" "commandExists" "$RESOLVE"
 # ⚠️ 둘 다 없어도 끄지 않는다 — 왜 안 되는지, 무엇을 하면 되는지 말한다.
-t_contains "없으면 안내한다" "searchMissingHelp" "$(cat "$JS" "$RMJS")"
+t_contains "없으면 안내한다" "searchMissingHelp" "$(cat "$JS" "$RMJS" "$CMDJS")"
 t_eq "명령 id 를 박지 않는다" "0" "$(grep -cE '"omnisearch:[a-z-]+"' "$JS" | tr -d ' ')"
 # 검색은 아무것도 만들지 않는다.
 t_eq "검색이 노트를 만들지 않는다" "0" \
@@ -1339,14 +1340,14 @@ t_start "전체 보기가 목록을 연다"
 SEEALL="$(sed -n '/const more = card.createEl/,/});/p' "$JS")"
 t_eq "노트를 열지 않는다" "0" "$(printf '%s' "$SEEALL" | grep -c 'openFile')"
 t_contains "라우트로 간다" "this.route = 'recent'" "$SEEALL"
-t_contains "recent 라우트가 있다" "route === 'recent'" "$(cat "$JS" "$RMJS")"
+t_contains "recent 라우트가 있다" "route === 'recent'" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 t_start "목록 화면의 계약"
 VIEW="$(sed -n '/^  viewRecent(body, t, model) {/,/^  }/p' "$JS")"
 t_ne "화면이 있다" "" "$VIEW"
 # ⚠️ 큰 볼트에서 한 번에 다 그리면 화면이 멈춘다. 50개씩 늘린다.
-t_contains "처음 50개" "RECENT_PAGE" "$(cat "$JS" "$RMJS")"
-t_contains "기본 50" "RECENT_PAGE = 50" "$(cat "$JS" "$RMJS")"
+t_contains "처음 50개" "RECENT_PAGE" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "기본 50" "RECENT_PAGE = 50" "$(cat "$JS" "$RMJS" "$CMDJS")"
 t_contains "더 보기" "loadMore" "$VIEW"
 # ⚠️ 더 보기를 눌러도 볼트를 다시 훑지 않는다 — 이미 모은 것에서 더 꺼낸다.
 t_eq "다시 스캔하지 않는다" "0" \
@@ -1363,8 +1364,8 @@ t_start "전체 목록이 전체를 담는다"
 # ⚠️ 홈의 '최근 기록' 은 10개만 본다. 전체 보기가 그 10개만 보여주면
 #    '전체' 가 거짓말이 된다.
 # 축약 표기(recentAll,)로 넘긴다 — collect 가 실제로 만드는지 본다.
-t_contains "모델이 전부를 싣는다" "const recentAll = files" "$(cat "$JS" "$RMJS")"
-t_contains "반환에 실린다" "recentAll," "$(cat "$JS" "$RMJS")"
+t_contains "모델이 전부를 싣는다" "const recentAll = files" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "반환에 실린다" "recentAll," "$(cat "$JS" "$RMJS" "$CMDJS")"
 t_eq "홈은 여전히 10개" "1" "$(grep -c 'model.recent.slice(0, 10)' "$JS" | tr -d ' ')"
 
 # ── 노트 만들기는 전용 선택창이다 ───────────────────────────────────────────
@@ -1372,7 +1373,7 @@ t_eq "홈은 여전히 10개" "1" "$(grep -c 'model.recent.slice(0, 10)' "$JS" |
 # ⚠️ 지금은 Obsidian 전체 명령 팔레트를 열었다. 빠른 기록을 하려는 사람에게
 #    수백 개 명령을 보여주는 것은 도움이 아니다.
 t_start "빠른 기록 선택창"
-t_contains "모달을 연다" "QuickCaptureModal" "$(cat "$JS" "$RMJS")"
+t_contains "모달을 연다" "QuickCaptureModal" "$(cat "$JS" "$RMJS" "$CMDJS")"
 # ⚠️ 일반 명령 팔레트로 빠지지 않는다.
 t_eq "팔레트를 열지 않는다" "0" \
   "$(grep -cE "command-palette|app\.setting\.open\(\)" "$JS" | tr -d ' ')"
@@ -1388,9 +1389,9 @@ t_contains "Enter 실행" "'Enter'" "$MODAL"
 t_contains "Esc 닫기" "close()" "$MODAL"
 # 없을 때 안내
 t_contains "없으면 이유를 말한다" "actionMissing" "$MODAL"
-t_contains "설정 안내" "templaterMissing" "$(cat "$JS" "$RMJS")"
+t_contains "설정 안내" "templaterMissing" "$(cat "$JS" "$RMJS" "$CMDJS")"
 # 각 항목의 설명
-t_contains "한 줄 설명" "captureHint" "$(cat "$JS" "$RMJS")"
+t_contains "한 줄 설명" "captureHint" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 t_start "빠른 기록은 팔레트 대신이다"
 NAVSRC2="$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS")"
@@ -1404,7 +1405,7 @@ t_start "날짜를 UTC 로 보여주지 않는다"
 # (주석의 설명은 세지 않는다 — 왜 안 쓰는지 적어 둔 자리다.)
 t_eq "toISOString 을 쓰지 않는다" "0" \
   "$(grep 'toISOString' "$JS" | grep -vcE '^\s*(\*|//|/\*)' | tr -d ' ')"
-t_contains "로컬 날짜 함수가 있다" "function localDate(ms)" "$(cat "$JS" "$RMJS")"
+t_contains "로컬 날짜 함수가 있다" "function localDate(ms)" "$(cat "$JS" "$RMJS" "$CMDJS")"
 cat > "$T_TMP/tzdate.js" <<'JSEOF'
 const Module = require('module');
 const orig = Module._load;
@@ -1474,11 +1475,11 @@ if (f.searchRunner({ internalPlugins: { getEnabledPluginById: () => null },
 console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
 JSEOF
 if command -v node >/dev/null 2>&1; then
-  t_eq "친 글자가 그대로 간다" "OK" "$(node "$T_TMP/searchq.js" "$JS" 2>&1 | tail -1)"
+  t_eq "친 글자가 그대로 간다" "OK" "$(node "$T_TMP/searchq.js" "$CMDJS" 2>&1 | tail -1)"
 else
   dim "   node 없음 — 건너뜀"
 fi
-t_contains "화면이 그 실행기를 쓴다" "searchRunner(this.app)" "$(cat "$JS" "$RMJS")"
+t_contains "화면이 그 실행기를 쓴다" "searchRunner(this.app)" "$(cat "$JS" "$RMJS" "$CMDJS")"
 
 t_start "단축키 표시가 사실이어야 한다"
 # ⚠️ 버튼 옆에 ⌘P 를 박아 뒀는데, ⌘P 는 Obsidian 의 **명령 팔레트** 단축키다.
@@ -1489,8 +1490,8 @@ t_start "단축키 표시가 사실이어야 한다"
 t_eq "키를 손으로 박지 않는다" "0" \
   "$(sed -n '/^  nav(root, t) {/,/^  }/p' "$JS" | grep -cE "'(⌘|⇧|⌥|⌃|Ctrl|Cmd)" | tr -d ' ')"
 # 실제로 배정된 것을 읽는다 — Obsidian 이 그 API 를 갖고 있다.
-t_contains "배정된 단축키를 읽는다" "printHotkeyForCommand" "$(cat "$JS" "$RMJS")"
-t_contains "우리 명령을 등록한다" "quick-capture" "$(cat "$JS" "$RMJS")"
+t_contains "배정된 단축키를 읽는다" "printHotkeyForCommand" "$(cat "$JS" "$RMJS" "$CMDJS")"
+t_contains "우리 명령을 등록한다" "quick-capture" "$(cat "$JS" "$RMJS" "$CMDJS")"
 QC="$(sed -n "/quick-capture/,/});/p" "$JS")"
 t_contains "그 명령이 모달을 연다" "openQuickCapture" "$QC"
 
@@ -1514,7 +1515,7 @@ if (f.hotkeyLabel({}, 'x') !== null) bad.push('API 없는데 뭔가 보여준다
 console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
 JSEOF
 if command -v node >/dev/null 2>&1; then
-  t_eq "없으면 안 보여준다" "OK" "$(node "$T_TMP/hk.js" "$JS" 2>&1 | tail -1)"
+  t_eq "없으면 안 보여준다" "OK" "$(node "$T_TMP/hk.js" "$CMDJS" 2>&1 | tail -1)"
 else
   dim "   node 없음 — 건너뜀"
 fi
@@ -1613,7 +1614,7 @@ eq('빈 이벤트', f.isSubmitKey(null), false);
 console.log(bad.length === 0 ? 'OK' : bad.join(' | '));
 JSEOF
 if command -v node >/dev/null 2>&1; then
-  t_eq "조합 중에는 실행하지 않는다" "OK" "$(node "$T_TMP/ime.js" "$JS" 2>&1 | tail -1)"
+  t_eq "조합 중에는 실행하지 않는다" "OK" "$(node "$T_TMP/ime.js" "$CMDJS" 2>&1 | tail -1)"
 else
   dim "   node 없음 — 건너뜀"
 fi
@@ -1638,25 +1639,30 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const f = require(process.argv[2]).__test;
 if (!f || typeof f.loadModules !== 'function') { console.log('NOHOOK'); process.exit(0); }
 
-const mk = (body) => {
+// ⚠️ 모듈이 둘이 됐다. 둘 다 온전해야 로더가 통과한다.
+const mk = (modelBody, cmdBody) => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dtload-'));
   const dir = path.join(base, 'plugins', 'x');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'read-model.js'), body);
+  fs.writeFileSync(path.join(dir, 'read-model.js'), modelBody);
+  fs.writeFileSync(path.join(dir, 'commands.js'), cmdBody);
   return {
     app: { vault: { adapter: { getBasePath: () => base } } },
     manifest: { dir: 'plugins/x' },
   };
 };
+const all = (keys) => 'module.exports = {' + keys.map((k) => `${k}: 1`).join(',') + '};';
 const bad = [];
 // 온전한 모듈 — 통과해야 한다.
-const full = 'module.exports = {' + f.MODEL_KEYS.map((k) => `${k}: 1`).join(',') + '};';
-try { f.loadModules(mk(full)); } catch (e) { bad.push('온전한데 거부: ' + e.message); }
+const fullModel = all(f.MODEL_KEYS);
+const fullCmds = all(f.COMMAND_KEYS);
+try { f.loadModules(mk(fullModel, fullCmds)); } catch (e) { bad.push('온전한데 거부: ' + e.message); }
 
-// ⚠️ 하나만 빠져도 거부해야 한다.
-const short = 'module.exports = {' + f.MODEL_KEYS.slice(1).map((k) => `${k}: 1`).join(',') + '};';
-try { f.loadModules(mk(short)); bad.push('빠졌는데 통과'); }
-catch (e) { if (!/collect|없습니다|DAY_MS/.test(e.message)) bad.push('메시지 불명: ' + e.message); }
+// ⚠️ 어느 모듈이든 하나만 빠져도 거부해야 한다.
+try { f.loadModules(mk(all(f.MODEL_KEYS.slice(1)), fullCmds)); bad.push('모델 빠졌는데 통과'); }
+catch (e) { if (!/없습니다/.test(e.message)) bad.push('모델 메시지: ' + e.message); }
+try { f.loadModules(mk(fullModel, all(f.COMMAND_KEYS.slice(1)))); bad.push('명령 빠졌는데 통과'); }
+catch (e) { if (!/없습니다/.test(e.message)) bad.push('명령 메시지: ' + e.message); }
 
 // 볼트 경로를 모르는 플랫폼(모바일)에서는 분명히 실패한다.
 try {

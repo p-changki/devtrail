@@ -6,6 +6,7 @@
     "main.js",
     "styles.css",
     "files.json",
-    "read-model.js"
+    "read-model.js",
+    "commands.js"
   ]
 }
