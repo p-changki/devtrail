@@ -5,6 +5,7 @@
     "manifest.json",
     "main.js",
     "styles.css",
-    "files.json"
+    "files.json",
+    "read-model.js"
   ]
 }

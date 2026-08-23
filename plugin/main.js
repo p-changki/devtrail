@@ -31,6 +31,74 @@ function icon(el, name) {
 }
 const PATH_MAP_FILE = '_devtrail-paths.md';
 
+/* ── 모듈 로더 ──────────────────────────────────────────────────────────────
+ *
+ * ⚠️ Obsidian 은 형제 파일을 상대 경로로 읽지 못한다. 플러그인 코드가
+ *    Electron 의 renderer 문맥에서 평가되어 __dirname 이 Obsidian 내부를
+ *    가리키기 때문이다 — require('./x.js') 는 MODULE_NOT_FOUND 다.
+ *
+ *    절대 경로는 된다(ADR 0004 · 근거 evidence/0004-loader-spike*.json).
+ *    공백·물결·한글이 든 경로에서도 확인했다.
+ *
+ * ⚠️ 모듈끼리 다시 상대 require 하지 않는다. 여기서만 부르고, 필요한 것은
+ *    인자로 넘긴다 — 그래야 로딩 경로가 한 곳이다.
+ *
+ * ⚠️ 실패하면 조용히 죽지 않는다. 무엇이 왜 안 되는지 화면에 남긴다 —
+ *    빈 대시보드는 사용자에게 아무것도 말해 주지 않는다.
+ */
+let RM = null;
+
+function loadModules(plugin) {
+  const adapter = plugin.app.vault.adapter;
+  if (typeof adapter.getBasePath !== 'function') {
+    throw new Error('이 플랫폼에서는 볼트 경로를 알 수 없습니다 (데스크톱 전용)');
+  }
+  const dir = `${adapter.getBasePath()}/${plugin.manifest.dir}`;
+  const model = require(`${dir}/read-model.js`);
+  // ⚠️ 로드된 척만 하는 경우를 거른다. 있어야 할 것이 실제로 있는지 본다.
+  for (const k of MODEL_KEYS) {
+    if (model[k] === undefined) throw new Error(`읽기 모델에 ${k} 가 없습니다`);
+  }
+  return model;
+}
+
+const MODEL_KEYS = ['DAY_MS', 'STALE_DAYS', 'FLOW_WEEKS', 'RECENT_PAGE', 'DOC_TYPES', 'BOARD_COLUMNS', 'STAGE_ALIASES', 'isUserNote', 'fm', 'localDate', 'dayStart', 'bearsTasks', 'openTasks', 'openTasksInVault', 'buildFlow', 'weeklyBars', 'parseDue', 'daysBetween', 'isStale', 'relativeDays', 'normalizeStage', 'todayDevlog', 'collect'];
+
+/* 로드한 모듈을 이 파일의 이름들에 묶는다.
+ *
+ * ⚠️ 호출부를 RM.collect(...) 로 바꾸지 않는 이유: 호출부가 40곳이 넘고,
+ *    한 곳만 놓쳐도 화면이 조용히 깨진다. 묶는 자리를 하나 두는 편이
+ *    실수할 자리가 적다. */
+let DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, DOC_TYPES, BOARD_COLUMNS, STAGE_ALIASES, isUserNote, fm, localDate, dayStart, bearsTasks, openTasks, openTasksInVault, buildFlow, weeklyBars, parseDue, daysBetween, isStale, relativeDays, normalizeStage, todayDevlog, collect;
+
+function bindModel(m) {
+  RM = m;
+  DAY_MS = m.DAY_MS;
+  STALE_DAYS = m.STALE_DAYS;
+  FLOW_WEEKS = m.FLOW_WEEKS;
+  RECENT_PAGE = m.RECENT_PAGE;
+  DOC_TYPES = m.DOC_TYPES;
+  BOARD_COLUMNS = m.BOARD_COLUMNS;
+  STAGE_ALIASES = m.STAGE_ALIASES;
+  isUserNote = m.isUserNote;
+  fm = m.fm;
+  localDate = m.localDate;
+  dayStart = m.dayStart;
+  bearsTasks = m.bearsTasks;
+  openTasks = m.openTasks;
+  openTasksInVault = m.openTasksInVault;
+  buildFlow = m.buildFlow;
+  weeklyBars = m.weeklyBars;
+  parseDue = m.parseDue;
+  daysBetween = m.daysBetween;
+  isStale = m.isStale;
+  relativeDays = m.relativeDays;
+  normalizeStage = m.normalizeStage;
+  todayDevlog = m.todayDevlog;
+  collect = m.collect;
+}
+
+
 /* ── 경로 맵 ──────────────────────────────────────────────────────────────
  *
  * DevTrail CLI 가 템플릿 폴더에 만드는 노트다. 안에 json 코드블록이 하나
@@ -54,117 +122,10 @@ async function readPathMap(app) {
   }
 }
 
-/* ── 읽기 모델 ────────────────────────────────────────────────────────────
- *
- * ⚠️ 볼트에는 '노트처럼 생겼지만 노트가 아닌 것' 이 많다. 실측(QA 볼트):
- *
- *      type: project-home    6건 — 그중 2건이 템플릿
- *      status: inbox         2건 — 둘 다 템플릿
- *
- *    템플릿을 세면 빈 볼트에서도 "프로젝트 2개" 가 뜬다. 그게 지어낸
- *    데이터다. 제외 규칙은 화면 장식이 아니라 계약이다.
- *
- * ⚠️ v1 은 기존 frontmatter 만 읽는다. priority·due 같은 필드를 새로
- *    만들지 않는다 — 커버리지가 고르지 않아 빈 화면이 되고, 사용자에게
- *    노트 마이그레이션을 강요하게 된다.
- */
-function isUserNote(path, paths) {
-  const name = path.split('/').pop() || '';
-  if (name.startsWith('_')) return false;          // _devtrail-*, _index
-  if (name === '_index.md') return false;
-  const tpl = paths && paths.templates;
-  if (tpl && (path === tpl || path.startsWith(tpl + '/'))) return false;
-  return true;
-}
 
-/* frontmatter 는 Obsidian 의 메타데이터 캐시에서 읽는다. 직접 파싱하면
- * 같은 것을 두 번 파싱하는 셈이고, Obsidian 이 이미 정확히 해준다. */
-function fm(app, file) {
-  const c = app.metadataCache.getFileCache(file);
-  return (c && c.frontmatter) || {};
-}
 
-function collect(app, paths) {
-  const files = app.vault.getMarkdownFiles().filter((f) => isUserNote(f.path, paths));
 
-  const projects = [];
-  const inbox = [];
-  const overdue = [];
-  const trouble = [];
-  const today = localDate(Date.now());
 
-  for (const f of files) {
-    const meta = fm(app, f);
-    const type = meta.type;
-
-    if (type === 'project-home' && meta.status === 'active') {
-      projects.push({
-        file: f,
-        name: meta.project || f.parent?.name || f.basename,
-        stage: meta.stage || null,
-        next: meta.next_action || null,
-        mtime: f.stat.mtime,
-      });
-    }
-
-    if (type === 'trouble' || type === 'troubleshooting') {
-      trouble.push({ file: f, status: meta.status || null, mtime: f.stat.mtime });
-    }
-
-    if (meta.status === 'inbox') {
-      inbox.push({ file: f, created: meta.created || null, mtime: f.stat.mtime });
-    }
-
-    // 다시 볼 때가 된 것. 날짜가 오늘 이전이면 지났다.
-    if (meta.review_at && String(meta.review_at).slice(0, 10) <= today) {
-      overdue.push({ file: f, at: String(meta.review_at).slice(0, 10) });
-    }
-  }
-
-  // 이번 주(월요일 기준)에 만들어진 노트. 사용자가 "얼마나 남겼나" 를 본다.
-  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const thisWeek = files.filter((f) => f.stat.ctime >= weekAgo).length;
-
-  projects.sort((a, b) => b.mtime - a.mtime);
-  inbox.sort((a, b) => a.mtime - b.mtime);       // 오래된 것 먼저
-  overdue.sort((a, b) => (a.at < b.at ? -1 : 1));
-
-  // 최근 기록 — 무엇을 하고 있었는지 되짚는다.
-  const recent = files
-    .slice()
-    .sort((a, b) => b.stat.mtime - a.stat.mtime)
-    .slice(0, 10)
-    .map((f) => ({ file: f, type: fm(app, f).type || null, mtime: f.stat.mtime }));
-
-  // ⚠️ 전체 목록을 따로 훑지 않는다. 이미 정렬한 것을 그대로 넘긴다 —
-  //    '더 보기' 를 누를 때마다 볼트를 다시 읽으면 큰 볼트에서 멈춘다.
-  const recentAll = files
-    .slice()
-    .sort((a, b) => b.stat.mtime - a.stat.mtime)
-    .map((f) => ({ file: f, type: fm(app, f).type || null, mtime: f.stat.mtime }));
-
-  return { projects, inbox, overdue, trouble, recent, recentAll,
-           thisWeek, total: files.length };
-}
-
-/* YYYY-MM-DD, 로컬 기준.
- *
- * ⚠️ toISOString() 은 UTC 다. 한국(UTC+9)에서 오전 9시 이전에 만든 노트가
- *    전날 날짜로 보인다 — 사용자가 "어제 쓴 게 아닌데" 하고 의심하게 된다. */
-function localDate(ms) {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/* 오늘 개발일지. 경로는 맵에서만 온다 — 파일명 규칙도 맵이 갖고 있다. */
-function todayDevlog(app, data) {
-  const dir = data.paths && data.paths.devlog;
-  if (!dir) return null;
-  const pat = (data.naming && data.naming.devlog_file) || '{{DATE}} devlog.md';
-  const name = pat.replace('{{DATE}}', localDate(Date.now()));
-  const path = `${dir}/${name}`;
-  return app.vault.getAbstractFileByPath(path) || null;
-}
 
 /* leaf 가 메인 워크스페이스에 있는가.
  *
@@ -332,177 +293,15 @@ function findSearchCommand(app, pluginIds) {
   return null;
 }
 
-/* 이 노트의 체크박스를 '할 일' 로 볼 것인가.
- *
- * ⚠️ 사양의 `TASK WHERE !completed` 는 DevTrail 노트만 있는 볼트를 가정했다.
- *    실제 볼트에는 가져온 레포 문서가 섞여 있고, 그 안의 체크박스는 설계안·
- *    체크리스트의 항목이지 사용자의 할 일이 아니다.
- *
- *    2026-08-22 실측: 열린 체크박스가 있는 노트 107개 중 **DevTrail 노트는
- *    0개**였다. 106개는 type 이 없는 레포 문서, 1개는 사용법 안내였다.
- *    화면의 "미완료 작업" 다섯 줄이 전부 잡음이었다.
- *
- * ⚠️ 그래서 두 가지를 요구한다:
- *    1. type 이 있어야 한다 — 없으면 DevTrail 이 만든 노트가 아니다
- *    2. 문서를 설명하는 타입은 뺀다 — 안내문의 "해봤다" 목록은 할 일이 아니다
- */
-const DOC_TYPES = ['guide', 'moc', 'doc', 'library-note', 'book-note', 'asset-card'];
 
-function bearsTasks(meta) {
-  const type = meta && meta.type;
-  if (typeof type !== 'string' || !type) return false;
-  return DOC_TYPES.indexOf(type) < 0;
-}
 
-/* 볼트 전체의 열린 체크박스.
- *
- * ⚠️ 모든 파일을 읽지 않는다. metadataCache 의 listItems 가 이미 어느 파일에
- *    열린 작업이 있는지 안다 — 그 파일만 읽는다. 볼트가 커져도 읽는 양이
- *    작업 수에 비례한다.
- * ⚠️ 빈 자리표시('- [ ]' 뒤에 아무것도 없는 것)는 작업이 아니다. */
-async function openTasksInVault(app, paths, limit) {
-  const out = [];
-  const files = app.vault.getMarkdownFiles().filter((f) => isUserNote(f.path, paths));
-  // 최근에 손댄 것부터 — 지금 하려는 일이 거기 있다.
-  files.sort((a, b) => b.stat.mtime - a.stat.mtime);
-  for (const f of files) {
-    if (out.length >= limit) break;
-    const cache = app.metadataCache.getFileCache(f);
-    // ⚠️ 먼저 '이 노트가 할 일을 담는 곳인가' 를 본다. 파일을 읽기 전에
-    //    거르면 볼트가 커져도 읽는 양이 늘지 않는다.
-    if (!bearsTasks((cache && cache.frontmatter) || {})) continue;
-    const items = (cache && cache.listItems) || [];
-    if (!items.some((i) => i.task === ' ')) continue;
-    let raw = '';
-    try { raw = await app.vault.cachedRead(f); } catch (e) { continue; }
-    for (const line of openTasks(raw)) {
-      if (out.length >= limit) break;
-      out.push({ text: line, file: f });
-    }
-  }
-  return out;
-}
 
-/* ── 재설계 데이터 (디자인 핸드오프 2026-08-22) ──────────────────────────────
- *
- * 전부 기존 노트에서 계산한다 — 새 스키마도 마이그레이션도 없다.
- *
- * ⚠️ 사양이 노출하라고 한 설정은 둘뿐이다. 더 늘리면 화면이 아니라 설정을
- *    관리하게 된다. */
-const STALE_DAYS = 14;
-const FLOW_WEEKS = 12;
 
-/* 전체 목록 한 번에 그리는 개수.
- *
- * ⚠️ 500개를 한 번에 그리면 화면이 멈춘다. 50개씩 늘린다. */
-const RECENT_PAGE = 50;
 
-const DAY_MS = 86400000;
 
-/* 로컬 기준 그 날의 0시. 히트맵 칸은 '날' 이 단위다.
- *
- * ⚠️ UTC 로 자르면 한국에서 오전 9시 이전에 만든 노트가 전날 칸에 들어간다. */
-function dayStart(ms) {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
 
-/* 히트맵·연속 기록·요일별 평균을 한 번에 만든다.
- *
- * files: [{ ctime }] — 생성 시각만 있으면 된다.
- *
- * ⚠️ 강도는 개수 그대로가 아니라 5단계다. 하루 30건 쓴 날 하나가 나머지를
- *    전부 0단계로 만들면 격자가 아무것도 말하지 않는다. */
-function buildFlow(files, nowMs, weeks) {
-  const days = (weeks || FLOW_WEEKS) * 7;
-  const today = dayStart(nowMs);
-  const start = today - (days - 1) * DAY_MS;
 
-  const counts = {};
-  for (const f of files) {
-    if (typeof f.ctime !== 'number') continue;
-    const d = dayStart(f.ctime);
-    if (d < start || d > today) continue;
-    counts[d] = (counts[d] || 0) + 1;
-  }
 
-  const cells = [];
-  let total = 0;
-  for (let i = 0; i < days; i++) {
-    const d = start + i * DAY_MS;
-    const n = counts[d] || 0;
-    total += n;
-    cells.push({ day: d, count: n, level: 0, weekday: new Date(d).getDay() });
-  }
-
-  // 5단계. 0 은 언제나 0단계 — 쓴 날과 안 쓴 날은 눈으로 갈려야 한다.
-  const nonZero = cells.filter((c) => c.count > 0).map((c) => c.count).sort((a, b) => a - b);
-  if (nonZero.length > 0) {
-    const q = (p) => nonZero[Math.min(nonZero.length - 1, Math.floor(nonZero.length * p))];
-    const t1 = q(0.25), t2 = q(0.5), t3 = q(0.75);
-    for (const c of cells) {
-      if (c.count === 0) c.level = 0;
-      else if (c.count <= t1) c.level = 1;
-      else if (c.count <= t2) c.level = 2;
-      else if (c.count <= t3) c.level = 3;
-      else c.level = 4;
-    }
-  }
-
-  // 연속 기록 — 오늘부터 거꾸로. 오늘 아직 안 썼으면 어제부터 센다.
-  let streak = 0;
-  for (let d = today; d >= start; d -= DAY_MS) {
-    if ((counts[d] || 0) > 0) streak++;
-    else if (d !== today) break;
-    else if (streak === 0 && d === today) continue;
-  }
-
-  // 요일별 평균 — 12주치를 요일로 모은다.
-  const byWeekday = [];
-  for (let w = 0; w < 7; w++) {
-    const of = cells.filter((c) => c.weekday === w);
-    const sum = of.reduce((a, c) => a + c.count, 0);
-    byWeekday.push({ weekday: w, avg: of.length ? sum / of.length : 0 });
-  }
-
-  const weekAgo = today - 6 * DAY_MS;
-  const thisWeek = cells.filter((c) => c.day >= weekAgo).reduce((a, c) => a + c.count, 0);
-
-  return { cells, total, streak, byWeekday, thisWeek, weeks: weeks || FLOW_WEEKS,
-           weeklyAvg: total / (weeks || FLOW_WEEKS) };
-}
-
-/* 최근 N주, 주별 개수. 마지막 칸이 이번 주다.
- *
- * ⚠️ 주는 '오늘로부터 7일씩' 이다. 달력의 주(월~일)가 아니다 — 표에서 묻는
- *    것은 "최근에 얼마나 손댔나" 이지 "몇 주차였나" 가 아니다. */
-function weeklyBars(times, nowMs, weeks) {
-  const n = weeks || 4;
-  const bars = new Array(n).fill(0);
-  const today = dayStart(nowMs);
-  for (const ms of times) {
-    if (typeof ms !== 'number') continue;
-    const days = Math.floor((today - dayStart(ms)) / DAY_MS);
-    if (days < 0 || days >= n * 7) continue;
-    bars[n - 1 - Math.floor(days / 7)]++;
-  }
-  return bars;
-}
-
-/* 할 일 줄에서 기한을 읽는다. 흔히 쓰는 세 표기만 본다.
- *
- * ⚠️ 없으면 null 이다. 오늘 날짜나 아무 날짜를 채워 넣지 않는다 — 지어낸
- *    기한은 사람을 잘못된 급함으로 몰아붙인다. */
-function parseDue(text) {
-  if (typeof text !== 'string') return null;
-  const m = text.match(/(?:📅|\bdue::?\s*)\s*(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return null;
-  const [, y, mo, d] = m;
-  const mi = Number(mo), di = Number(d);
-  if (mi < 1 || mi > 12 || di < 1 || di > 31) return null;
-  return `${y}-${mo}-${d}`;
-}
 
 /* 손을 놓은 지 오래됐는가.
  *
@@ -514,77 +313,12 @@ function parseDue(text) {
  * ⚠️ 절대 날짜를 쓰지 않는다 — 표에서 중요한 건 '얼마나 손을 놨나' 이지
  *    '언제였나' 가 아니다. */
 
-function relativeDays(mtime, nowMs, t) {
-  if (typeof mtime !== 'number') return '—';
-  const d = Math.floor((dayStart(nowMs) - dayStart(mtime)) / DAY_MS);
-  if (d <= 0) return t.todayLabel;
-  return t.daysAgo(d);
-}
 
-function daysBetween(a, b) {
-  return Math.round((Date.parse(b) - Date.parse(a)) / DAY_MS);
-}
 
-function isStale(mtime, nowMs, days) {
-  if (typeof mtime !== 'number') return false;
-  return (nowMs - mtime) > (days || STALE_DAYS) * DAY_MS;
-}
 
-/* ── 프로젝트 보드 ──────────────────────────────────────────────────────────
- *
- * 카드 하나 = 프로젝트 노트 하나다. 개발일지 체크박스를 카드로 만들지 않는다 —
- * 같은 일을 두 곳에 적으면 어느 쪽도 믿을 수 없게 된다. 오늘 할 일은 개발일지가,
- * 프로젝트 상태는 이 보드가 맡는다.
- *
- * ⚠️ 읽기 전용이다. 카드를 끌어 frontmatter 를 고치는 것은 다음 Phase다 —
- *    노트를 고치는 순간 이 플러그인은 '두 번째 쓰기 출처' 가 된다.
- *
- * [키, 아이콘, 상태색 이름]
- */
-const BOARD_COLUMNS = [
-  ['planning', 'clipboard-list', 'planning'],
-  ['active',   'play-circle',    'active'],
-  ['blocked',  'alert-triangle', 'blocked'],
-  ['done',     'check-circle-2', 'done'],
-];
 
-/* frontmatter 의 stage 를 컬럼으로 옮긴다.
- *
- * ⚠️ 모르는 값을 임의 컬럼에 넣지 않는다. 사용자가 지정하지 않은 상태를
- *    '계획 중' 이라고 보여주면 화면이 사실이 아닌 것을 말한다. null 을 돌려주고
- *    화면은 그것을 '단계 미지정' 으로 따로 모은다 — 채우라고 말하기 위해서다. */
-const STAGE_ALIASES = {
-  planning: 'planning', planned: 'planning', plan: 'planning',
-  'in-progress': 'active', in_progress: 'active', active: 'active', doing: 'active',
-  blocked: 'blocked',
-  done: 'done', completed: 'done', complete: 'done', archived: 'done',
-};
 
-/* 개발일지에서 **미완료이고 내용이 있는** 할 일만 고른다.
- *
- * ⚠️ 템플릿은 빈 체크박스 '- [ ]' 를 자리표시로 넣는다. 그것까지 그리면 글자
- *    없는 빈 줄이 쌓인다 — 빈 자리표시는 할 일이 아니다. 2026-08-22 QA
- *    화면에서 빈 상자 3개로 실제로 드러났다.
- *
- * ⚠️ 읽기만 한다. 체크박스를 고치는 것은 Obsidian 이 이미 잘 한다. */
-function openTasks(raw) {
-  if (typeof raw !== 'string') return [];
-  const out = [];
-  for (const line of raw.split('\n')) {
-    const m = line.match(/^\s*- \[ \]\s*(.*)$/);
-    if (!m) continue;
-    const text = m[1].trim();
-    if (text) out.push(text);
-  }
-  return out;
-}
 
-function normalizeStage(raw) {
-  if (typeof raw !== 'string') return null;
-  const key = raw.trim().toLowerCase();
-  if (!key) return null;
-  return STAGE_ALIASES[key] || null;
-}
 
 /* 검색은 Obsidian 이 이미 갖고 있다(⌘O · ⌘⇧F). 여기서 제공하는 것은
  * '설치된 검색 플러그인으로 가는 통로' 뿐이다 — 검색기를 새로 만들지 않는다. */
@@ -802,6 +536,23 @@ class CommandCenterView extends obsidian.ItemView {
     const root = this.contentEl;
     root.empty();
     root.addClass('devtrail-command-center');
+
+    // ⚠️ 모듈이 안 붙었으면 여기서 멈춘다. 없는 함수를 부르면 화면이 텅 비고
+    //    사용자는 왜인지 모른다.
+    const plugin = this.app.plugins && this.app.plugins.plugins
+      ? this.app.plugins.plugins[PLUGIN_ID] : null;
+    if (!RM) {
+      const box = root.createEl('div', { cls: 'devtrail-cc-recovery' });
+      box.createEl('p', { text: 'DevTrail 플러그인 파일을 불러오지 못했습니다' });
+      if (plugin && plugin.loadError) {
+        box.createEl('p', { text: plugin.loadError, cls: 'devtrail-cc-muted' });
+      }
+      box.createEl('p', {
+        text: '터미널에서 devtrail command-center install --apply 를 실행한 뒤 Obsidian 을 다시 여세요.',
+        cls: 'devtrail-cc-muted',
+      });
+      return;
+    }
 
     const map = await readPathMap(this.app);
     const t = textFor(map.ok ? map.data.lang : 'ko');
@@ -1661,6 +1412,20 @@ class QuickCaptureModal extends obsidian.Modal {
 
 module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
   async onload() {
+    // ⚠️ 모듈을 가장 먼저 묶는다. 실패하면 뷰를 등록하지 않고 이유를 남긴다 —
+    //    빈 대시보드는 사용자에게 아무것도 말해 주지 않는다.
+    try {
+      bindModel(loadModules(this));
+    } catch (e) {
+      this.loadError = (e && e.message) ? e.message : String(e);
+      console.error('[DevTrail] 읽기 모델을 불러오지 못했습니다:', e);
+      new obsidian.Notice(
+        `DevTrail: 플러그인 파일을 불러오지 못했습니다.\n${this.loadError}\n` +
+        '터미널에서 devtrail command-center install --apply 를 실행한 뒤 Obsidian 을 다시 여세요.',
+        0,
+      );
+    }
+
     this.registerView(VIEW_TYPE, (leaf) => new CommandCenterView(leaf));
 
     this.addRibbonIcon('layout-dashboard', 'DevTrail', () => this.activate());
@@ -1746,4 +1511,4 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
  *
  * ⚠️ 화면 없이 확인할 수 있는 것은 화면 없이 확인한다. 제외 규칙이 틀리면
  *    카드가 지어낸 데이터를 보고하는데, 그건 눈으로만 보면 놓친다. */
-module.exports.__test = { TEXT, isSubmitKey, hotkeyLabel, searchRunner, localDate, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };
+module.exports.__test = { TEXT, loadModules, MODEL_KEYS, isSubmitKey, hotkeyLabel, searchRunner, localDate, bearsTasks, weeklyBars, parseDue, buildFlow, isStale, STALE_DAYS, FLOW_WEEKS, collect, fm, openTasks, isUserNote, normalizeStage, BOARD_COLUMNS, templaterCommandId, captureFile, CAPTURES, isMainLeaf, findSearchCommand, SEARCH_PLUGINS };

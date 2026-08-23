@@ -84,17 +84,17 @@ t_eq "목록에 없는 것이 없다" "" "$extra"
 t_start "모듈이 늘면 함께 배포된다"
 SRC="$T_TMP/src-add"; mkdir -p "$SRC"
 for f in $(jq -r '.files[]' "$F"); do cp "$ROOT/plugin/$f" "$SRC/$f"; done
-printf '%s\n' "module.exports = { M: 'new-module' };" > "$SRC/read-model.js"
-jq '.files += ["read-model.js"]' "$F" > "$SRC/files.json"
+printf '%s\n' "module.exports = { M: 'new-module' };" > "$SRC/only-in-test.js"
+jq '.files += ["only-in-test.js"]' "$F" > "$SRC/files.json"
 python3 - "$SRC/manifest.json" <<'PYEOF'
 import json, io, sys
 d = json.load(io.open(sys.argv[1], encoding='utf-8')); d['version'] = '99.0.0'
 json.dump(d, io.open(sys.argv[1], 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
 PYEOF
 DT_CC_SRC_OVERRIDE="$SRC" run command-center update --apply >/dev/null 2>&1
-t_eq "새 모듈이 깔린다" "yes" "$([ -f "$D/read-model.js" ] && echo yes || echo no)"
+t_eq "새 모듈이 깔린다" "yes" "$([ -f "$D/only-in-test.js" ] && echo yes || echo no)"
 t_eq "설치본 목록도 갱신된다" "true" \
-  "$(jq -e '.files | index("read-model.js") != null' "$D/files.json" 2>/dev/null || echo false)"
+  "$(jq -e '.files | index("only-in-test.js") != null' "$D/files.json" 2>/dev/null || echo false)"
 
 t_start "모듈이 사라지면 지운다 — 백업하고"
 # ⚠️ 이게 글롭으로는 불가능한 것이다. 우리가 깔았던 파일만, 백업한 뒤에 지운다.
@@ -107,11 +107,11 @@ d = json.load(io.open(sys.argv[1], encoding='utf-8')); d['version'] = '99.1.0'
 json.dump(d, io.open(sys.argv[1], 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
 PYEOF
 DT_CC_SRC_OVERRIDE="$SRC2" run command-center update --apply >/dev/null 2>&1
-t_eq "사라진 모듈이 지워진다" "no" "$([ -f "$D/read-model.js" ] && echo yes || echo no)"
+t_eq "사라진 모듈이 지워진다" "no" "$([ -f "$D/only-in-test.js" ] && echo yes || echo no)"
 job=$(ls -1 "$H/journal" | tail -1)
 t_contains "저널에 남는다" "command-center-update" "$(jq -r '.command' "$H/journal/$job/meta.json")"
 run undo "$job" --apply >/dev/null 2>&1
-t_eq "undo 가 되살린다" "yes" "$([ -f "$D/read-model.js" ] && echo yes || echo no)"
+t_eq "undo 가 되살린다" "yes" "$([ -f "$D/only-in-test.js" ] && echo yes || echo no)"
 
 t_start "남의 파일은 건드리지 않는다"
 printf 'user data\n' > "$D/data.json"
