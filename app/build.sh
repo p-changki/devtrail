@@ -74,8 +74,39 @@ fi
 ARCHS="--arch arm64 --arch x86_64"
 
 echo "▶ 빌드 중… (universal: arm64 + x86_64)"
+
+# ⚠️ **컴파일 실패를 삼키지 않는다.**
+#
+#    예전에는 이랬다:
+#
+#      swift build … | grep -vE '진행률' || true
+#
+#    파이프의 종료코드는 마지막 명령(grep)의 것이고, `|| true` 가 그마저
+#    덮었다. 그래서 **컴파일이 깨져도 이 줄은 성공**했고, 아래에서
+#    `--show-bin-path` 가 가리키는 **직전에 성공했던 낡은 바이너리**를
+#    집어 `.app` 을 조립한 뒤 `✅` 를 찍었다.
+#
+#    결과: 소스를 고쳐도 앱은 안 바뀌는데 아무도 몰랐다. M4-4b 의 온보딩
+#    UI 가 통째로 빠진 채 DMG 가 나갔고, 실물 QA 에서야 드러났다.
+#
+# ⚠️ 로그는 임시 파일에 받는다. 파이프를 쓰면 종료코드가 또 가려진다.
+BUILD_LOG=$(mktemp)
 # shellcheck disable=SC2086
-swift build -c release $ARCHS --disable-sandbox 2>&1 | grep -vE '^\[[0-9]+/[0-9]+\]|^[0-9]+%' || true
+if ! swift build -c release $ARCHS --disable-sandbox > "$BUILD_LOG" 2>&1; then
+  echo "❌ 빌드 실패"
+  grep -E 'error:' "$BUILD_LOG" | head -20
+  echo "   (전체 로그: $BUILD_LOG)"
+  exit 1
+fi
+# ⚠️ 종료코드가 0 이어도 error: 가 있으면 믿지 않는다. 툴체인이 부분 실패를
+#    0 으로 끝내는 경우를 본 적이 있다.
+if grep -q 'error:' "$BUILD_LOG"; then
+  echo "❌ 빌드 로그에 error 가 있습니다 (종료코드는 0이었습니다)"
+  grep -E 'error:' "$BUILD_LOG" | head -20
+  exit 1
+fi
+grep -vE '^\[[0-9]+/[0-9]+\]|^[0-9]+%' "$BUILD_LOG" | tail -3
+rm -f "$BUILD_LOG"
 
 # shellcheck disable=SC2086
 BINDIR=$(swift build -c release $ARCHS --show-bin-path)
@@ -83,6 +114,7 @@ BIN="$BINDIR/DevTrailApp"
 HELPER_BIN="$BINDIR/DevTrailHelper"
 [ -x "$BIN" ] || { echo "❌ 빌드 산출물 없음: $BIN"; exit 1; }
 [ -x "$HELPER_BIN" ] || { echo "❌ 헬퍼 산출물 없음: $HELPER_BIN"; exit 1; }
+
 
 # ⚠️ universal 인지 **확인한다.** 플래그를 줬다고 되는 게 아니다 —
 #    툴체인이 조용히 호스트만 만들 수 있다.

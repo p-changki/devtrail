@@ -30,7 +30,7 @@ struct MenuView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 5) {
                         Image(systemName: "externaldrive.badge.exclamationmark")
-                            .font(.system(size: 11)).foregroundStyle(.dtWarning)
+                            .font(.system(size: 11)).foregroundStyle(Color.dtWarning)
                         Text("아직 설치되지 않았습니다")
                             .font(.system(size: 12, weight: .medium))
                     }
@@ -526,7 +526,7 @@ struct MenuView: View {
             if !status.linkOnPath {
                 // ⚠️ 연결해도 PATH 에 없으면 소용이 없다. 감추지 않는다.
                 Text("PATH 에 없습니다 — ~/.zshrc 에 추가해야 터미널이 찾습니다.")
-                    .font(.system(size: 9)).foregroundStyle(.dtWarning)
+                    .font(.system(size: 9)).foregroundStyle(Color.dtWarning)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

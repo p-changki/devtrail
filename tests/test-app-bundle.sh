@@ -363,6 +363,46 @@ t_eq "Status 가 link status --json 을 읽는다" "1" \
 t_eq "연결은 CLI 에 맡긴다" "1" \
   "$(printf '%s\n' "$ST" | grep -c '"link", "create"' | tr -d ' ')"
 
+t_start "⚠️ 소스가 실제로 바이너리에 들어갔다"
+# ⚠️ 2026-08-24 에 이걸로 크게 데였다.
+#
+#    build.sh 가 `swift build … | grep … || true` 로 **컴파일 실패를 삼키고**
+#    있었다. 파이프의 종료코드는 grep 의 것이고 `|| true` 가 그마저 덮었다.
+#    그래서 컴파일이 깨져도 성공으로 끝났고, 직전에 성공했던 **낡은
+#    바이너리**로 .app 을 조립한 뒤 ✅ 를 찍었다.
+#
+#    기존 게이트는 전부 통과했다 — 낡은 바이너리도 universal 이고 서명이
+#    유효하고 실행되기 때문이다. **"지금 소스가 들어갔는가" 를 아무도 안
+#    봤다.** M4-4b 온보딩 UI 가 통째로 빠진 채 DMG 가 나갔다.
+#
+# ⚠️ 확인할 문자열을 여기 적지 않는다 — 적으면 곧 낡는다. **소스에서
+#    뽑는다**: MenuView 의 가장 긴 한글 Text 리터럴이 바이너리에 있는가.
+APPBIN="$APP/Contents/MacOS/DevTrail"
+NEEDLES=$(mktemp)
+grep -ohE 'Text\("[^"\\]{12,}"\)' "$ROOT/app/Sources/DevTrailApp"/*.swift \
+  | sed -E 's/^Text\("//; s/"\)$//' | LC_ALL=C sort -u > "$NEEDLES"
+NCOUNT=$(wc -l < "$NEEDLES" | tr -d ' ')
+# ⚠️ 하나도 못 뽑았으면 이 게이트는 아무것도 안 지킨다.
+t_eq "소스에서 확인용 문구를 뽑았다" "yes" \
+  "$([ "$NCOUNT" -ge 5 ] && echo yes || echo "no ($NCOUNT)")"
+if [ -f "$APPBIN" ] && [ "$NCOUNT" -gt 0 ]; then
+  MISSING=""
+  while IFS= read -r nd; do
+    [ -n "$nd" ] || continue
+    LC_ALL=C grep -a -q -F "$nd" "$APPBIN" || MISSING="$MISSING
+  $nd"
+  done < "$NEEDLES"
+  # ⚠️ **하나라도** 없으면 산출물이 지금 소스가 아니다.
+  t_eq "화면 문구 ${NCOUNT}개가 전부 바이너리에 있다" "" "$MISSING"
+fi
+rm -f "$NEEDLES"
+
+t_start "⚠️ 폐지한 것이 바이너리에 남아 있지 않다"
+# ⚠️ 소스에서 지웠는데 바이너리에 남아 있으면, 그것이 곧 "낡은 산출물" 의
+#    증거다. 화면 문자열은 소스와 바이너리를 잇는 가장 싼 다리다.
+t_eq "웹 대시보드 문구가 없다" "no" \
+  "$(LC_ALL=C grep -a -q -F '웹 대시보드' "$APPBIN" 2>/dev/null && echo yes || echo no)"
+
 t_start "⚠️ DMG 에서 도는 것을 화면이 말한다"
 # ⚠️ 2026-08-24 실물 QA. DMG 에서 앱이 **그대로 잘 돌아서** 설치된 줄 알고
 #    셋업까지 진행됐다. 볼륨을 빼면 앱이 사라지는데 아무도 안 알려줬다.
@@ -443,6 +483,24 @@ t_eq "번들 jq 서명 확인" "0" \
 #    바꿔 넣는 변이가 전부 무효가 된다 — 2026-08-24 에 실제로 그랬다.
 #    (산출물 변이 4건이 "생존" 으로 보였는데, 게이트가 약한 게 아니라
 #     시험이 스스로 변이를 지우고 있었다.)
+
+t_start "⚠️ 컴파일이 깨지면 빌드가 실패한다"
+# ⚠️ 문자열로는 확인할 수 없다 — `|| true` 를 지워도 다른 줄이 grep 을 속인다.
+#    **실제로 깨뜨려 본다.**
+SRCF="$ROOT/app/Sources/DevTrailApp/Tokens.swift"
+if [ -f "$SRCF" ]; then
+  CBAK=$(mktemp -d)
+  cp "$SRCF" "$CBAK/Tokens.swift"
+  printf '\nthis is not swift {{{\n' >> "$SRCF"
+  t_eq "컴파일이 깨지면 build.sh 가 실패한다" "no" \
+    "$( (cd "$ROOT" && ./app/build.sh >/dev/null 2>&1) && echo yes || echo no)"
+  cp "$CBAK/Tokens.swift" "$SRCF"
+  rm -rf "$CBAK"
+  # ⚠️ 되돌린 뒤 실제로 다시 빌드된다는 것까지 본다. 되돌림을 단언하지
+  #    않으면 깨진 상태로 다음 작업에 들어간다 (DMG 시험에서 겪었다).
+  t_eq "되돌리면 다시 빌드된다" "yes" \
+    "$( (cd "$ROOT" && ./app/build.sh >/dev/null 2>&1) && echo yes || echo no)"
+fi
 
 t_start "⚠️ 서명이 실패하면 빌드가 선다"
 # ⚠️ 문서와 아래 단언은 "안쪽부터 서명한다" 를 **배포 계약**으로 말한다.
