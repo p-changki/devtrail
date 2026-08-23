@@ -161,8 +161,6 @@ LIMIT 6
 
 ## 🧹 Vault maintenance
 
-> ℹ️ `status` coverage is 8.3%, so note length is used instead.
-
 ### Notes with no links
 
 ```dataview

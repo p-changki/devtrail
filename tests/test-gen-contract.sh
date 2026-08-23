@@ -375,10 +375,68 @@ printf -- '---\ntype: project-home\nstatus: active\nstage: planning\nnext: 다�
   > "$VAULT/notes/개발/프로젝트/proj-a/README.md"
 printf -- '---\ntype: note\n---\n# 자료\n' > "$VAULT/notes/자료/카드.md"
 printf -- '# 분류 없는 노트\n' > "$VAULT/notes/자료/무타입.md"
+
+# ⚠️ snapshot 의 갈래를 태운다. 예전 볼트는 next_actions·inbox·overdue·
+#    trouble 이 **전부 0** 이라 그 가지를 하나도 지나지 않았다(2026-08-24).
+#
+#    두 번째 프로젝트 — next_action 이 **있는** 경우. 그리고 project 이름을
+#    frontmatter 로 준다(파일명·폴더명 폴백과 다른 가지).
+mkdir -p "$VAULT/notes/개발/프로젝트/proj-b"
+printf -- '---\ntype: project-home\nstatus: active\nstage: "in-progress"\nproject: 이름있는프로젝트\nnext_action: 다음에 할 일\n---\n# proj-b\n' \
+  > "$VAULT/notes/개발/프로젝트/proj-b/README.md"
+# 활성이 아닌 프로젝트 — 세면 안 된다.
+mkdir -p "$VAULT/notes/개발/프로젝트/proj-c"
+printf -- '---\ntype: project-home\nstatus: done\nnext_action: 안 세야 한다\n---\n# proj-c\n' \
+  > "$VAULT/notes/개발/프로젝트/proj-c/README.md"
+
+# inbox — created 가 있는 것과 **없는** 것(mtime 폴백 가지).
+mkdir -p "$VAULT/notes/받은함"
+printf -- '---\nstatus: inbox\ncreated: 2026-07-01\n---\n# 받은것1\n' \
+  > "$VAULT/notes/받은함/받은것1.md"
+printf -- '---\nstatus: inbox\n---\n# 받은것2\n' > "$VAULT/notes/받은함/받은것2.md"
+
+# 기한 지난 것 — review_at <= today.
+printf -- '---\ntype: note\nreview_at: 2026-01-15\n---\n# 밀린것\n' \
+  > "$VAULT/notes/자료/밀린것.md"
+# 아직 안 된 것 — 세면 안 된다.
+printf -- '---\ntype: note\nreview_at: 2099-01-01\n---\n# 아직\n' \
+  > "$VAULT/notes/자료/아직.md"
+
+# trouble — 두 이름 모두 센다.
+mkdir -p "$VAULT/notes/트러블"
+printf -- '---\ntype: trouble\n---\n# t1\n' > "$VAULT/notes/트러블/t1.md"
+printf -- '---\ntype: troubleshooting\n---\n# t2\n' > "$VAULT/notes/트러블/t2.md"
+
+# ⚠️ frontmatter 파싱의 가장자리 — 따옴표 · 들여쓴 줄 · 콜론 없는 줄 ·
+#    '-' 로 시작하는 줄(리스트). 전부 건너뛰거나 벗겨야 한다.
+printf -- '---\ntype: "note"\ntags:\n  - a\n  - b\n콜론없는줄\nstatus: '"'"'inbox'"'"'\n---\n# 가장자리\n' \
+  > "$VAULT/notes/자료/가장자리.md"
+
+# ⚠️ **들여쓴 키**는 건너뛰어야 한다. 'status: inbox' 를 중첩해 두고,
+#    이것이 잡히면 inbox 개수가 늘어난다 — 건너뛰기 로직이 여기서 시험된다.
+printf -- '---\ntype: note\nmeta:\n  status: inbox\n  review_at: 2020-01-01\n---\n# 중첩\n' \
+  > "$VAULT/notes/자료/중첩.md"
+
+# 제외돼야 하는 것 — _ 로 시작하는 파일, 템플릿 폴더 안.
+printf -- '---\ntype: note\n---\n# 숨김\n' > "$VAULT/notes/자료/_숨김.md"
+printf -- '---\ntype: note\nstatus: inbox\n---\n# 템플릿안\n' > "$VAULT/notes/템플릿/세면안됨.md"
+
+# 오늘 개발일지 — open_tasks 를 실제로 세는 가지.
+printf -- '---\ntype: devlog\n---\n# 오늘\n- [ ] 내용 있는 할 일\n- [ ] \n- [x] 끝난 것\n' \
+  > "$VAULT/notes/개발/개발일지/2026-08-06.md"
 printf -- '---\ntype: template\n---\n<%% tp.file.title %%>\n' > "$VAULT/notes/템플릿/개발일지양식.md"
 
-# ⚠️ mtime 을 전부 같은 값으로 못 박는다.
+# ⚠️ mtime 을 못 박는다. 안 그러면 골든이 만들 때마다 달라진다.
 find "$VAULT" -type f -exec touch -t 202608010900 {} +
+
+# ⚠️ 다만 **전부 같은 값**이면 정렬이 관측되지 않는다. inbox 정렬을 뒤집는
+#    변이가 그대로 살아남았다(2026-08-24) — 순서가 계약인데 시험되지 않은
+#    것이다. 몇 개에 서로 다른 시각을 준다.
+touch -t 202607200900 "$VAULT/notes/받은함/받은것1.md"   # 가장 오래됨
+touch -t 202607250900 "$VAULT/notes/받은함/받은것2.md"
+touch -t 202607280900 "$VAULT/notes/자료/가장자리.md"
+touch -t 202608050900 "$VAULT/notes/개발/프로젝트/proj-b/README.md"  # 최근
+touch -t 202608041200 "$VAULT/notes/개발/개발일지/2026-08-06.md"
 
 FIXED_NOW=1786000000        # 2026-08-06 근처 — 픽스처 mtime 직후
 FIXED_NOW_MS=1786000000000
@@ -520,6 +578,22 @@ t_start "snapshot — 메뉴바용 볼트 상태"
 # ⚠️ cfg 를 **JSON 문자열 인자**로 받는다. today 와 now_ms 를 못 박는다.
 SNAPCFG=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
   '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:5}')
+# ⚠️ devlog_path 세 가지: 지정 안 함(unknown) · 지정했지만 없음(0) · 있음(실제 개수)
+SNAPCFG_DEVLOG=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
+  --arg d "$VAULT/notes/개발/개발일지/2026-08-06.md" \
+  '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:5, devlog_path:$d}')
+SNAPCFG_MISSING=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
+  --arg d "$VAULT/notes/없는파일.md" \
+  '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:5, devlog_path:$d}')
+# 볼트가 없을 때 — available:false 만 낸다.
+SNAPCFG_NOVAULT=$(jq -nc '{root:"/tmp/devtrail-없는볼트", limit:5}')
+# limit 이 작을 때 — 잘라내기가 실제로 도는가.
+SNAPCFG_LIMIT1=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
+  '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:1}')
+# ⚠️ limit 이 10 보다 커야 recent 의 "10개로 먼저 자른다" 가 보인다.
+#    limit 5 로만 시험하면 그 자르기를 없애도 결과가 같다(변이 생존).
+SNAPCFG_LIMIT20=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
+  '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:20}')
 for lang in ko en; do
   CASES=$((CASES + 1))
   NAME="snapshot-$lang"
@@ -691,6 +765,28 @@ else
   cmphub hub-ko ko "" ""
   cmphub hub-en en "" ""
 
+  # snapshot — 이관 완료. cfg 를 JSON 문자열 인자로 받는다.
+  cmpsnap() {   # cmpsnap <골든이름> <cfg>
+    local name="$1" cfg="$2"
+    local g; g=$(golden_path "$name")
+    [ -f "$g" ] || { _t_bad "헬퍼 = $name" "골든 없음" "$g"; FAILED=1; return 0; }
+    local out="$T_TMP/helper-$name.out"
+    env DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 TZ=UTC "$HELPER" gen-snapshot "$cfg" \
+      2>/dev/null | norm > "$out"
+    PORTED=$((PORTED + 1))
+    if cmp -s "$out" "$g"; then _t_ok "헬퍼 = $name"; else
+      _t_bad "헬퍼 ≠ $name" "python 골든과 다릅니다" "$(diff "$g" "$out" | head -6)"
+      FAILED=1
+    fi
+  }
+  cmpsnap snapshot-ko      "$SNAPCFG"
+  cmpsnap snapshot-en      "$SNAPCFG"
+  cmpsnap snapshot-devlog  "$SNAPCFG_DEVLOG"
+  cmpsnap snapshot-missing "$SNAPCFG_MISSING"
+  cmpsnap snapshot-novault "$SNAPCFG_NOVAULT"
+  cmpsnap snapshot-limit1  "$SNAPCFG_LIMIT1"
+  cmpsnap snapshot-limit20 "$SNAPCFG_LIMIT20"
+
   # ⚠️ 아직 이관하지 않은 것을 **세어서 말한다.** 침묵하면 "다 됐다" 로 읽힌다.
   TOTAL=$(find "$GOLDEN" -type f | wc -l | tr -d ' ')
   SKIPPED=$((TOTAL - PORTED))
@@ -698,6 +794,21 @@ else
   t_eq "이관된 케이스가 0이 아니다" "no" "$([ "$PORTED" = 0 ] && echo yes || echo no)"
   dim "   이관 ${PORTED}건 · 남음 ${SKIPPED}건 (골든 ${TOTAL}건)"
 fi
+
+t_start "snapshot — 안 지나던 갈래"
+for pair in "devlog:$SNAPCFG_DEVLOG" "missing:$SNAPCFG_MISSING" \
+            "novault:$SNAPCFG_NOVAULT" "limit1:$SNAPCFG_LIMIT1" \
+            "limit20:$SNAPCFG_LIMIT20"; do
+  CASES=$((CASES + 1))
+  NAME="snapshot-${pair%%:*}"
+  env DEVTRAIL_LANG=ko LC_ALL=C.UTF-8 TZ=UTC \
+    python3 "$ROOT/lib/snapshot.py" "${pair#*:}" 2>/dev/null | norm > "$T_TMP/$NAME.out"
+  G=$(golden_path "$NAME")
+  if [ "${UPDATE_GOLDEN:-0}" = 1 ]; then cp "$T_TMP/$NAME.out" "$G"
+  elif cmp -s "$T_TMP/$NAME.out" "$G" 2>/dev/null; then _t_ok "$NAME"
+  else _t_bad "$NAME" "골든과 다릅니다" "$(diff "$G" "$T_TMP/$NAME.out" 2>/dev/null | head -6)"; FAILED=1
+  fi
+done
 
 t_start "골든이 결정론적이다"
 # ⚠️ 두 번 돌려 같은 답이 나오는가. 타임스탬프·난수·해시 순서가 새면
