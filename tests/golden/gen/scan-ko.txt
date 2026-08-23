@@ -1,35 +1,35 @@
 {
   "vault": "<VAULT>",
   "scale": {
-    "notes": 12,
-    "folders": 5,
-    "frontmatter_notes": 11,
-    "frontmatter_pct": 91.7
+    "notes": 25,
+    "folders": 9,
+    "frontmatter_notes": 24,
+    "frontmatter_pct": 96.0
   },
   "fields": {
     "type": {
-      "with_key": 11,
-      "with_value": 11,
-      "key_pct": 91.7,
-      "value_pct": 91.7
+      "with_key": 22,
+      "with_value": 22,
+      "key_pct": 88.0,
+      "value_pct": 88.0
     },
     "status": {
-      "with_key": 1,
-      "with_value": 1,
-      "key_pct": 8.3,
-      "value_pct": 8.3
+      "with_key": 7,
+      "with_value": 7,
+      "key_pct": 28.0,
+      "value_pct": 28.0
     },
     "tags": {
-      "with_key": 0,
-      "with_value": 0,
-      "key_pct": 0.0,
-      "value_pct": 0.0
+      "with_key": 1,
+      "with_value": 1,
+      "key_pct": 4.0,
+      "value_pct": 4.0
     },
     "created": {
-      "with_key": 5,
-      "with_value": 5,
-      "key_pct": 41.7,
-      "value_pct": 41.7
+      "with_key": 6,
+      "with_value": 6,
+      "key_pct": 24.0,
+      "value_pct": 24.0
     },
     "updated": {
       "with_key": 0,
@@ -38,16 +38,16 @@
       "value_pct": 0.0
     },
     "project": {
-      "with_key": 0,
-      "with_value": 0,
-      "key_pct": 0.0,
-      "value_pct": 0.0
+      "with_key": 1,
+      "with_value": 1,
+      "key_pct": 4.0,
+      "value_pct": 4.0
     },
     "review_at": {
-      "with_key": 0,
-      "with_value": 0,
-      "key_pct": 0.0,
-      "value_pct": 0.0
+      "with_key": 2,
+      "with_value": 2,
+      "key_pct": 8.0,
+      "value_pct": 8.0
     },
     "category": {
       "with_key": 0,
@@ -65,27 +65,44 @@
   "custom_fields": [
     [
       "stage",
-      1
+      2
+    ],
+    [
+      "next_action",
+      2
     ],
     [
       "next",
       1
+    ],
+    [
+      "meta",
+      1
     ]
   ],
   "tags": {
-    "total_uses": 0,
+    "total_uses": 2,
     "type_namespaced": 0,
     "type_pct": 0.0,
-    "top": []
+    "top": [
+      [
+        "a",
+        1
+      ],
+      [
+        "b",
+        1
+      ]
+    ]
   },
   "folders": [
     {
       "path": "notes/개발/개발일지",
-      "notes": 5,
+      "notes": 6,
       "subfolders": 0,
       "depth": 3,
       "dated_ratio": 1.0,
-      "last_modified": 1785542400,
+      "last_modified": 1785812400,
       "role_candidates": {
         "devlog": 0.45
       }
@@ -111,8 +128,35 @@
       "role_candidates": {}
     },
     {
-      "path": "notes/자료",
+      "path": "notes/개발/프로젝트/proj-b",
+      "notes": 1,
+      "subfolders": 0,
+      "depth": 4,
+      "dated_ratio": 0.0,
+      "last_modified": 1785888000,
+      "role_candidates": {}
+    },
+    {
+      "path": "notes/개발/프로젝트/proj-c",
+      "notes": 1,
+      "subfolders": 0,
+      "depth": 4,
+      "dated_ratio": 0.0,
+      "last_modified": 1785542400,
+      "role_candidates": {}
+    },
+    {
+      "path": "notes/받은함",
       "notes": 2,
+      "subfolders": 0,
+      "depth": 2,
+      "dated_ratio": 0.0,
+      "last_modified": 1784937600,
+      "role_candidates": {}
+    },
+    {
+      "path": "notes/자료",
+      "notes": 7,
       "subfolders": 0,
       "depth": 2,
       "dated_ratio": 0.0,
@@ -121,7 +165,16 @@
     },
     {
       "path": "notes/템플릿",
-      "notes": 1,
+      "notes": 2,
+      "subfolders": 0,
+      "depth": 2,
+      "dated_ratio": 0.0,
+      "last_modified": 1785542400,
+      "role_candidates": {}
+    },
+    {
+      "path": "notes/트러블",
+      "notes": 2,
       "subfolders": 0,
       "depth": 2,
       "dated_ratio": 0.0,

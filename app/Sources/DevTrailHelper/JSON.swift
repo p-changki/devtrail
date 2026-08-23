@@ -75,6 +75,42 @@ extension JSON {
         return out
     }
 
+    /// python 의 `json.dump(x, fp, ensure_ascii=False)` — **indent 없음**.
+    ///
+    /// ⚠️ indent 를 안 주면 python 의 구분자는 `(', ', ': ')` 다. 쉼표 뒤
+    ///    **공백이 하나** 붙는다 — `{"a": 1, "b": 2}`. 공백을 빼면 다른
+    ///    파일이 된다. snapshot.py 가 이 형식으로 낸다.
+    func pythonJSONCompact() -> String {
+        var out = ""
+        writeCompact(into: &out)
+        return out
+    }
+
+    private func writeCompact(into out: inout String) {
+        switch self {
+        case .null: out += "null"
+        case .bool(let b): out += b ? "true" : "false"
+        case .int(let i): out += String(i)
+        case .double(let d): out += JSON.pythonNumber(d)
+        case .string(let s): out += JSON.quote(s)
+        case .array(let items):
+            out += "["
+            for (i, item) in items.enumerated() {
+                if i > 0 { out += ", " }
+                item.writeCompact(into: &out)
+            }
+            out += "]"
+        case .object(let obj):
+            out += "{"
+            for (i, key) in obj.keys.enumerated() {
+                if i > 0 { out += ", " }
+                out += JSON.quote(key) + ": "
+                obj[key]!.writeCompact(into: &out)
+            }
+            out += "}"
+        }
+    }
+
     private func write(into out: inout String, indent: Int, level: Int) {
         switch self {
         case .null:
