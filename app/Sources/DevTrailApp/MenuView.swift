@@ -409,6 +409,70 @@ struct MenuView: View {
             .buttonStyle(Hover(radius: 6))
             Text("터미널이 열리고 질문에 답하면 끝납니다.")
                 .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+            terminalLink
+        }
+    }
+
+    /// 터미널에서도 devtrail 을 쓸 수 있게 (ADR 0006 M4-4b).
+    ///
+    /// ⚠️ DMG 로 받은 사람의 PATH 에는 devtrail 이 없다. 앱은 번들 것을
+    ///    절대경로로 부르니 잘 돌지만, 터미널에서는 없다.
+    ///
+    /// ⚠️ 여기에 **판정이 없다.** CLI 가 낸 상태를 그대로 그린다.
+    @ViewBuilder
+    private var terminalLink: some View {
+        switch status.linkState {
+        case "absent":
+            VStack(alignment: .leading, spacing: 4) {
+                Button(action: { status.linkTerminal() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "terminal").font(.system(size: 10.5))
+                        Text("터미널에서도 쓰기").font(.system(size: 11.5))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(Hover(radius: 5))
+                Text("\(status.linkPath) 에 연결합니다.")
+                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
+
+        case "linked_here":
+            linkNote("checkmark.circle", "터미널에 연결돼 있습니다", status.linkPath, .dtSuccess)
+
+        case "linked_other":
+            // ⚠️ 공존 (D4). 덮어쓰지 않았고, 앱은 번들 것을 쓴다.
+            linkNote("arrow.triangle.branch", "다른 devtrail 이 연결돼 있습니다",
+                     "\(status.linkTarget) — 그대로 두었습니다. 앱은 번들 것을 씁니다.",
+                     .dtWarning)
+
+        case "occupied":
+            linkNote("exclamationmark.triangle", "이미 파일이 있습니다",
+                     "\(status.linkPath) — 심볼릭 링크가 아니라 손대지 않았습니다.",
+                     .dtWarning)
+
+        default:
+            EmptyView()   // ⚠️ 모르면 아무 말도 하지 않는다.
+        }
+    }
+
+    private func linkNote(_ icon: String, _ title: String,
+                          _ detail: String, _ tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.system(size: 10)).foregroundStyle(tint)
+                Text(title).font(.system(size: 11))
+            }
+            Text(detail)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(.tertiary).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            if !status.linkOnPath {
+                // ⚠️ 연결해도 PATH 에 없으면 소용이 없다. 감추지 않는다.
+                Text("PATH 에 없습니다 — ~/.zshrc 에 추가해야 터미널이 찾습니다.")
+                    .font(.system(size: 9)).foregroundStyle(.dtWarning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -417,25 +481,35 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("devtrail 명령을 찾을 수 없습니다")
                 .font(.system(size: 12, weight: .medium))
-            Text("터미널에서 아래를 실행한 뒤 이 창을 새로고침하세요.")
-                .font(.system(size: 10.5)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(Self.installCommand)
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(.secondary).textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-            Button(action: {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(Self.installCommand, forType: .string)
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.on.doc").font(.system(size: 10.5))
-                    Text("명령 복사").font(.system(size: 11.5))
-                    Spacer()
+            // ⚠️ 앱 안에 CLI 가 실려 나가므로(M4-3), 번들로 실행 중인데
+            //    CLI 가 없다면 그건 **번들이 손상된** 것이다. 그때
+            //    "curl | bash 로 설치하세요" 는 거짓말이다 — 설치가 아니라
+            //    다시 받아야 한다.
+            if CLI.bundled == nil {
+                Text("터미널에서 아래를 실행한 뒤 이 창을 새로고침하세요.")
+                    .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(Self.installCommand)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.secondary).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(action: {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(Self.installCommand, forType: .string)
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.on.doc").font(.system(size: 10.5))
+                        Text("명령 복사").font(.system(size: 11.5))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(Hover(radius: 5))
+            } else {
+                Text("앱 안에 함께 실린 CLI 를 찾지 못했습니다 — 번들이 손상된 것 같습니다. DMG 를 다시 받아 설치하세요.")
+                    .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .buttonStyle(Hover(radius: 5))
             Text("찾아본 곳: \(CLI.binary)")
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundStyle(.tertiary).textSelection(.enabled)

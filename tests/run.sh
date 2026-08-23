@@ -340,6 +340,7 @@ run behav "QA 볼트 안전"    ./tests/test-qa-vault.sh
 run behav "생성기 계약"     ./tests/test-gen-contract.sh
 run behav "헬퍼 배선"       ./tests/test-helper-wiring.sh
 run behav "앱 번들"         ./tests/test-app-bundle.sh
+run behav "터미널 연결"    ./tests/test-link.sh
 run behav "DMG"          ./tests/test-dmg.sh
 run behav "언어 전달"       ./tests/test-lang-propagation.sh
 run behav "app 경계"       ./tests/test-app.sh

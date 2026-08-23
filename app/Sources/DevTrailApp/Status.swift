@@ -49,6 +49,17 @@ final class Status: ObservableObject {
     @Published var captureUndoJob: String? = nil
     @Published var backfillDate = ""
 
+    // MARK: - 터미널 연결 (ADR 0006 M4-4b)
+    //
+    // ⚠️ 판정은 **CLI 가 한다.** 앱은 `devtrail link status --json` 을 읽어
+    //    그리기만 한다 — 같은 판정을 두 벌 두면 반드시 어긋난다.
+    //
+    //    absent | linked_here | linked_other | occupied
+    @Published var linkState = ""
+    @Published var linkPath = ""
+    @Published var linkTarget = ""
+    @Published var linkOnPath = true
+
     var scheduleOn: Bool { scheduleLoaded > 0 }
 
     private var config: [String: Any] = [:]
@@ -70,6 +81,19 @@ final class Status: ObservableObject {
             return
         }
         cliMissing = false
+
+        // ⚠️ DMG 로 받은 사람은 PATH 에 devtrail 이 없다. 앱은 번들 것을
+        //    절대경로로 부르니 잘 돌지만, 터미널에서는 없다 — 그 사실을
+        //    감추지 않는다.
+        if let l = CLI.json(["link", "status", "--json"]) {
+            linkState = l["state"] as? String ?? ""
+            linkPath = l["path"] as? String ?? ""
+            linkTarget = l["target"] as? String ?? ""
+            linkOnPath = (l["on_path"] as? Bool) ?? true
+        } else {
+            // ⚠️ 못 읽었으면 **모른다** 고 둔다. 안다고 꾸미지 않는다.
+            linkState = ""
+        }
 
         // ⚠️ '셋업했는가' 를 파일 존재로 판정하지 않는다. 설정 파일이 있어도
         //    스키마가 낡았거나 CLI 가 읽지 못할 수 있고, 그러면 앱은 셋업된
@@ -130,6 +154,16 @@ final class Status: ObservableObject {
         open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         open.arguments = ["-a", "Terminal", script.path]
         do { try open.run() } catch { lastOutput = "Terminal 을 열지 못했습니다." }
+    }
+
+    /// 터미널에서도 쓸 수 있게 연결한다.
+    ///
+    /// ⚠️ **덮어쓰지 않는다.** 이미 다른 devtrail 이 있으면 CLI 가 거부하고,
+    ///    앱은 그 말을 그대로 전한다. 판정도 거부도 여기서 하지 않는다.
+    func linkTerminal() {
+        let r = CLI.run(["link", "create"])
+        lastOutput = r.text
+        refresh()
     }
 
     // MARK: - 경로
