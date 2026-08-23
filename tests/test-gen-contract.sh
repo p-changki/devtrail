@@ -75,8 +75,21 @@ EXIST_HK="$T_TMP/existing-hotkeys.json"
 printf '%s' '{"editor:toggle-bold":[{"modifiers":["Mod"],"key":"B"}]}' > "$EXIST_HK"
 EXIST_ANM="$T_TMP/existing-anm.json"
 printf '%s' '{"folder_tag_pattern":[{"folder":"기존","tag":"#keep"}]}' > "$EXIST_ANM"
-EXIST_SE="$T_TMP/existing-smartenv.txt"
-printf '%s\n' 'existing/excluded/**' > "$EXIST_SE"
+# ⚠️ smartenv 의 기존 설정은 **JSON** 이다 (json.load 로 읽는다).
+#    처음엔 텍스트 파일을 줬는데 파싱이 실패해 {} 로 떨어졌고, 병합 가지를
+#    한 번도 안 탔다 — merge 골든이 new 골든과 **글자 하나까지 같았다.**
+#    통과하는데 아무것도 안 지키는 케이스였다(2026-08-23).
+EXIST_SE="$T_TMP/existing-smartenv.json"
+cat > "$EXIST_SE" <<'JSON'
+{
+  "smart_sources": {
+    "folder_exclusions": "existing/excluded, 앞뒤공백폴더 ",
+    "excluded_headings": "기존 헤딩",
+    "min_chars": 999
+  },
+  "other_key": "건드리면 안 된다"
+}
+JSON
 
 # ── 실행 ─────────────────────────────────────────────────────────────────────
 FAILED=0
@@ -323,6 +336,70 @@ t_eq "DT_NOW 없이도 돈다" "0" \
 t_eq "now_ms 없이도 돈다" "0" \
   "$(python3 "$ROOT/lib/snapshot.py" \
        "$(jq -nc --arg r "$VAULT/notes" '{root:$r, limit:5}')" >/dev/null 2>&1; echo $?)"
+
+# ── Swift 헬퍼 대조 (M2) ─────────────────────────────────────────────────────
+#
+# ⚠️ 이관의 합격 기준은 하나다: **같은 골든을 바이트로 통과한다.**
+#    통과하지 못하면 이관이 아니라 변경이다.
+#
+#    헬퍼가 아직 없는 명령은 건너뛴다 — 이관은 한 번에 끝나지 않는다.
+#    다만 **건너뛴 것을 조용히 넘기지 않는다.** 몇 개를 안 봤는지 말한다.
+HELPER="$ROOT/app/.build/debug/DevTrailHelper"
+
+# ⚠️ 여기서 **직접 빌드한다.** run.sh 의 swift 단계는 all 에서만 돌고
+#    release 를 만든다 — 일상 게이트(fast)에서는 이 대조가 통째로 건너뛰어진다.
+#    "게이트가 있는데 안 돈다" 는 게이트가 없는 것보다 나쁘다: 있다고 믿게 된다.
+#    증분 빌드는 1초 안팎이다.
+if command -v swift >/dev/null 2>&1; then
+  NEWER=$(find "$ROOT/app/Sources/DevTrailHelper" -name '*.swift' -newer "$HELPER" 2>/dev/null | head -1)
+  if [ ! -x "$HELPER" ] || [ -n "$NEWER" ]; then
+    (cd "$ROOT/app" && swift build --product DevTrailHelper) > "$T_TMP/build.log" 2>&1 \
+      || { t_start "헬퍼 빌드"; _t_bad "swift build" "빌드 실패" "$(tail -5 "$T_TMP/build.log")"; FAILED=1; }
+  fi
+fi
+
+t_start "Swift 헬퍼가 python 골든을 바이트로 통과한다"
+if ! command -v swift >/dev/null 2>&1; then
+  dim "   swift 없음 — 건너뜀 (⚠️ 이관이 깨져도 모른다)"
+elif [ ! -x "$HELPER" ]; then
+  _t_bad "헬퍼" "빌드 산출물이 없습니다" "$HELPER"
+  FAILED=1
+else
+  PORTED=0
+  SKIPPED=0
+
+  # cmpx <골든이름> <언어> -- <헬퍼 인자…>
+  cmpx() {
+    local name="$1" lang="$2"; shift 3
+    local g="$GOLDEN/$name.txt"
+    [ -f "$g" ] || { _t_bad "$name" "골든 없음" "$g"; FAILED=1; return 0; }
+    local out="$T_TMP/helper-$name.out"
+    if [ "$lang" = unset ]; then
+      env -u DEVTRAIL_LANG LC_ALL=C.UTF-8 TZ=UTC "$HELPER" "$@" > "$out" 2>/dev/null
+    else
+      env DEVTRAIL_LANG="$lang" LC_ALL=C.UTF-8 TZ=UTC "$HELPER" "$@" > "$out" 2>/dev/null
+    fi
+    PORTED=$((PORTED + 1))
+    if cmp -s "$out" "$g"; then
+      _t_ok "헬퍼 = $name"
+    else
+      _t_bad "헬퍼 ≠ $name" "python 골든과 다릅니다" "$(diff "$g" "$out" | head -6)"
+      FAILED=1
+    fi
+  }
+
+  # smartenv — 이관 완료
+  cmpx smartenv-ko-new   ko -- gen-smartenv "$TREE" "$CFG" "notes/템플릿" ""
+  cmpx smartenv-en-new   en -- gen-smartenv "$TREE" "$CFG" "notes/템플릿" ""
+  cmpx smartenv-ko-merge ko -- gen-smartenv "$TREE" "$CFG" "notes/템플릿" "$EXIST_SE"
+
+  # ⚠️ 아직 이관하지 않은 것을 **세어서 말한다.** 침묵하면 "다 됐다" 로 읽힌다.
+  TOTAL=$(find "$GOLDEN" -type f | wc -l | tr -d ' ')
+  SKIPPED=$((TOTAL - PORTED))
+  t_start "이관 진행 상황을 숨기지 않는다"
+  t_eq "이관된 케이스가 0이 아니다" "no" "$([ "$PORTED" = 0 ] && echo yes || echo no)"
+  dim "   이관 ${PORTED}건 · 남음 ${SKIPPED}건 (골든 ${TOTAL}건)"
+fi
 
 t_start "골든이 결정론적이다"
 # ⚠️ 두 번 돌려 같은 답이 나오는가. 타임스탬프·난수·해시 순서가 새면
