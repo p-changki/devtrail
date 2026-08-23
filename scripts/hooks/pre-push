@@ -12,7 +12,9 @@
 #
 # ⚠️ --no-verify 로 우회할 수 있다. 이것은 **보안 경계가 아니라 실수
 #    방지 장치**다. 우회를 막을 방법도 없고, 막으려 해서도 안 된다.
-#    최종 검증은 GitHub CI 가 독립적으로 한다.
+#
+# ⚠️ 우회해도 **아무도 대신 잡아 주지 않는다.** GitHub Actions 는 일상
+#    PR 에서 돌지 않는다(태그·수동만). 정식 게이트는 verify-local.sh 다.
 set -u
 
 ROOT="$(git rev-parse --show-toplevel)" || exit 1
@@ -70,5 +72,6 @@ if [ "$FAIL" = 0 ]; then
 fi
 echo "❌ pre-push 실패 — push 를 막습니다"
 echo "   급하면 git push --no-verify 로 우회할 수 있습니다 (실수 방지 장치이지"
-echo "   보안 경계가 아닙니다). CI 가 독립적으로 다시 봅니다."
+echo "   보안 경계가 아닙니다). 다만 **아무도 대신 잡아 주지 않습니다** —"
+echo "   GitHub Actions 는 일상 PR 에서 돌지 않습니다."
 exit 1
