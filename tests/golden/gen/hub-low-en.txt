@@ -1,0 +1,63 @@
+---
+tags:
+  - type/moc
+type: moc
+scope: folder
+devtrail_key: devlog
+created: 2026-08-06
+updated: 2026-08-06
+---
+
+# 개발일지
+
+> This folder only. Created by DevTrail; refresh with `devtrail augment --refresh-hubs`.
+
+## Recent
+
+```dataview
+TABLE WITHOUT ID
+  file.link AS "Note",
+  dateformat(file.mtime, "yyyy-MM-dd") AS "Modified"
+FROM "notes/개발/개발일지"
+WHERE file.name != "_index"
+SORT file.mtime DESC
+LIMIT 15
+```
+
+## Due for review
+
+> ℹ️ This vault barely uses `review_at` (coverage 4.2%), so it is approximated by **last modified date**.
+> For exact results: `devtrail align --field review_at`
+
+```dataview
+LIST
+FROM "notes/개발/개발일지"
+WHERE file.name != "_index"
+  AND (file.mtime <= date(today) - dur(90 days))
+SORT file.mtime ASC
+LIMIT 15
+```
+
+## Unfinished
+
+> ℹ️ This vault barely uses `status` (coverage 0.0%), so it is approximated by **short notes**.
+
+```dataview
+TABLE WITHOUT ID file.link AS "Note", file.size AS "Size"
+FROM "notes/개발/개발일지"
+WHERE file.name != "_index" AND (file.size < 500)
+SORT file.size ASC
+LIMIT 10
+```
+
+## No links
+
+```dataview
+LIST
+FROM "notes/개발/개발일지"
+WHERE file.name != "_index"
+  AND length(file.outlinks) = 0 AND length(file.inlinks) = 0
+SORT file.ctime DESC
+LIMIT 10
+```
+

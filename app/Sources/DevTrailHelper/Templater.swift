@@ -155,6 +155,80 @@ enum I18n {
             "ko": "  재배정 {old} → {new}",
             "en": "  remapped {old} → {new}",
         ],
+
+        // hub (L3 폴더 허브)
+        "hub.recent": [
+            "ko": "최근",
+            "en": "Recent",
+        ],
+        "col.note": [
+            "ko": "노트",
+            "en": "Note",
+        ],
+        "col.modified": [
+            "ko": "수정",
+            "en": "Modified",
+        ],
+        "hub.due": [
+            "ko": "재방문할 때가 됐다",
+            "en": "Due for review",
+        ],
+        "hub.mixed_review": [
+            "ko": "> ℹ️ `review_at` 커버리지가 {pct}% 입니다 — ",
+            "en": "> ℹ️ `review_at` coverage is {pct}% — ",
+        ],
+        "hub.mixed_note": [
+            "ko": "값이 있는 노트는 예정일로, 없는 노트는 마지막 수정일로 봅니다.\n\n",
+            "en": "Notes with a value use it; the rest fall back to last modified.\n\n",
+        ],
+        "hub.low_review": [
+            "ko": "> ℹ️ 이 볼트는 `review_at` 을 거의 쓰지 않아 (커버리지 {pct}%) ",
+            "en": "> ℹ️ This vault barely uses `review_at` (coverage {pct}%), so it is ",
+        ],
+        "hub.approx_mtime": [
+            "ko": "**마지막 수정일로 근사**합니다.\n",
+            "en": "approximated by **last modified date**.\n",
+        ],
+        "hub.align_hint": [
+            "ko": "> 정확하게 하려면: `devtrail align --field review_at`\n\n",
+            "en": "> For exact results: `devtrail align --field review_at`\n\n",
+        ],
+        "hub.unfinished": [
+            "ko": "미완성",
+            "en": "Unfinished",
+        ],
+        "hub.mixed_status": [
+            "ko": "> ℹ️ `status` 커버리지가 {pct}% 입니다 — 분량이 적은 노트도 함께 봅니다.\n\n",
+            "en": "> ℹ️ `status` coverage is {pct}% — short notes are included too.\n\n",
+        ],
+        "hub.low_status": [
+            "ko": "> ℹ️ 이 볼트는 `status` 를 거의 쓰지 않아 (커버리지 {pct}%) ",
+            "en": "> ℹ️ This vault barely uses `status` (coverage {pct}%), so it is ",
+        ],
+        "hub.approx_short": [
+            "ko": "**분량이 적은 노트로 근사**합니다.\n\n",
+            "en": "approximated by **short notes**.\n\n",
+        ],
+        "col.size": [
+            "ko": "크기",
+            "en": "Size",
+        ],
+        "hub.orphans": [
+            "ko": "연결이 없다",
+            "en": "No links",
+        ],
+        "col.folder": [
+            "ko": "폴더",
+            "en": "Folder",
+        ],
+        "hub.scope": [
+            "ko": "> 이 폴더만 봅니다. DevTrail 이 만들었고 `devtrail augment --refresh-hubs` 로 갱신됩니다.",
+            "en": "> This folder only. Created by DevTrail; refresh with `devtrail augment --refresh-hubs`.",
+        ],
+        "err.need_from": [
+            "ko": "DT_HUB_FROM 이 필요합니다",
+            "en": "DT_HUB_FROM is required",
+        ],
     ]
 
     static func t(_ key: String, _ vars: [String: String] = [:]) -> String {
