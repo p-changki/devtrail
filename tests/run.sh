@@ -341,6 +341,7 @@ run behav "생성기 계약"     ./tests/test-gen-contract.sh
 run behav "헬퍼 배선"       ./tests/test-helper-wiring.sh
 run behav "앱 번들"         ./tests/test-app-bundle.sh
 run behav "터미널 연결"    ./tests/test-link.sh
+run behav "간단 셋업"     ./tests/test-setup-quick.sh
 run behav "python3 없이"  ./tests/test-no-python.sh
 run behav "캡처 렌더"     ./tests/test-capture-render.sh
 run behav "DMG"          ./tests/test-dmg.sh

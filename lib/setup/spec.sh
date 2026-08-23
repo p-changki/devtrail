@@ -91,6 +91,44 @@ sp_normalize() {
   }' "$f"
 }
 
+# sp_from_quick → 최소 입력(언어·볼트·모드)만으로 스펙을.
+#
+# ⚠️ 앱의 간단 온보딩이 타는 길이다 (ADR 0006 M4-4c).
+#
+#    비개발자에게 터미널 대화를 강요하지 않으려면 앱이 질문을 받아야 하는데,
+#    **앱이 스펙 JSON 을 직접 조립하면 안 된다** — 그러면 스펙의 모양이 두
+#    벌이 되고, 이 저장소가 반복해 겪은 결함이 그대로 재현된다.
+#
+#    그래서 앱은 값 세 개만 넘기고, 스펙은 여기서 만든다. 빠진 값은
+#    sp_normalize 가 채운다 — 기본값의 출처도 한 곳이다.
+#
+# ⚠️ **플러그인은 받지 않는다** (bootstrap_plugins: false).
+#
+#    두 가지 이유다.
+#
+#    1) 플러그인 설치는 GitHub 에서 **내려받는다.** 사용자 승인 없는 네트워크
+#       요청을 하지 않는 것이 이 프로젝트의 약속이다. 간단 셋업이라고 해서
+#       조용히 네 개를 받아오면 안 된다.
+#    2) 대화형 경로는 여기서 **묻는다**(`confirm`). 터미널이 붙어 있으면
+#       답을 기다리고, 없으면 조용히 건너뛴다 — 즉 **tty 유무로 결과가
+#       갈린다.** 앱이 부르는 길에 그런 불확정성을 두지 않는다.
+#
+#    앱은 셋업을 마친 뒤 `devtrail plugins install` 을 **따로** 권한다.
+sp_from_quick() {
+  local lang="$1" vault="$2" mode="$3"
+  jq -n \
+    --argjson v "$DT_SPEC_VERSION" \
+    --arg lang "$lang" \
+    --arg path "$vault" \
+    --arg mode "$mode" \
+    '{
+       spec_version: $v,
+       lang: $lang,
+       vault: { backend: "local", path: $path, root: "", mode: $mode },
+       bootstrap_plugins: false
+     }'
+}
+
 # sp_from_init  → 대화형 수집 결과(전역)를 스펙으로.
 #
 # ⚠️ 여기가 대화형과 비대화형이 만나는 지점이다. 질문이 늘면 이 함수도

@@ -446,6 +446,32 @@ done
 t_eq "CLI 가 폐지를 말한다" "1" \
   "$(printf '%s' "$("$ROOT/bin/devtrail" dashboard 2>&1)" | grep -c '폐지' | tr -d ' ')"
 
+t_start "간단 셋업 — 판정도 적용도 CLI 가 한다 (M4-4c)"
+OB=$(grep -vE '^\s*//' "$ROOT/app/Sources/DevTrailApp/Onboarding.swift" 2>/dev/null)
+t_eq "Onboarding 이 있다" "yes" \
+  "$([ -n "$OB" ] && echo yes || echo no)"
+# ⚠️ 볼트 후보를 앱이 직접 뒤지지 않는다 — 두 벌이 되면 앱과 CLI 가 다른
+#    볼트를 가리킨다.
+t_eq "볼트 후보를 CLI 에서 받는다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c '"setup", "env", "--json"' | tr -d ' ')"
+t_eq "스펙 조립을 CLI 에 맡긴다" "yes" \
+  "$([ "$(printf '%s\n' "$OB" | grep -c '"setup", "quick", "--vault"' | tr -d ' ')" != 0 ] \
+     && echo yes || echo no)"
+# ⚠️ 앱이 스펙 JSON 을 직접 만들면 스펙의 모양이 두 벌이 된다.
+t_eq "앱이 spec_version 을 적지 않는다" "0" \
+  "$(printf '%s\n' "$OB" | grep -c 'spec_version' | tr -d ' ')"
+t_eq "앱이 기본값(modules·ai)을 정하지 않는다" "0" \
+  "$(printf '%s\n' "$OB" | grep -cE '"devlog"|"provider"' | tr -d ' ')"
+# ⚠️ 바꾸기 전에 먼저 보여준다. --apply 는 확인 뒤에만.
+t_eq "미리보기가 --apply 없이 돈다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c 'func preview' | tr -d ' ')"
+
+t_start "간단 셋업 — 터미널 경로를 없애지 않았다"
+# ⚠️ 앱이 못 하는 것(기존 폴더 채택 · GitHub · 동기화 · AI)을 정하려면
+#    대화형 경로가 필요하다. 기본에서 내렸을 뿐 없애지 않는다.
+t_eq "고급으로 남아 있다" "1" \
+  "$(printf '%s\n' "$MV" | grep -c 'status.startSetup()' | tr -d ' ')"
+
 t_start "온보딩 — 번들에서 거짓 안내를 하지 않는다"
 # ⚠️ 앱 안에 CLI 가 실려 나가므로(M4-3), 번들인데 CLI 가 없다면 그건
 #    **번들이 손상된** 것이다. 그때 "curl | bash 로 설치하세요" 는 거짓말이다.
