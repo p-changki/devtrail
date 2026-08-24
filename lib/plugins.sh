@@ -17,7 +17,7 @@
 #     4. 받은 뒤 manifest 의 id 가 기대한 값인지 확인하고 옮긴다.
 # ⚠️ 한글 앞 변수는 중괄호로: "${n}개"  (bash 3.2)
 
-DT_PLUGINS_JSON="$DEVTRAIL_ROOT/preset/plugins.json"
+DT_PLUGINS_JSON="$DT_PRESET/plugins.json"
 
 # ── 조회 ─────────────────────────────────────────────────────────────────────
 # id<TAB>name<TAB>repo<TAB>tag<TAB>files(공백구분)<TAB>required<TAB>why

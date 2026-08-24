@@ -25,9 +25,9 @@ _ob_hotkeys() {
     "$DEVTRAIL_ROOT/templates/obsidian/shellcommands.json" > "$ids" 2>/dev/null || echo '{}' > "$ids"
 
   local out; out=$(mktemp)
-  if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates/$(dt_lang)" \
+  if DT_TEMPLATES_DIR="$DT_PRESET/templates/$(dt_lang)" \
      dt_gen gen-hotkeys hotkeys \
-      "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
+      "$DT_PRESET/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$hk" ] && printf '%s' "$hk")" "$ids" > "$out"; then
     jr_backup "$hk" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $hk"; }
     mv "$out" "$hk"

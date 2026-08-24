@@ -15,7 +15,7 @@ TARGET_FILE=$(devlog_path "$TODAY")
 
 [ "$(cfg '.ai.summary_enabled' 'true')" = "true" ] || { echo "AI 요약 비활성(ai.summary_enabled=false)"; exit 0; }
 [ -n "$GH_USER" ] || { echo "github.user 미설정 — devtrail init" >&2; exit 1; }
-[ -f "$TARGET_FILE" ] || { echo "개발일지 없음 - 건너뜀: $TARGET_FILE"; exit 0; }
+[ -f "$TARGET_FILE" ] || { hint_devlog_missing "$TARGET_FILE"; exit 0; }
 
 T_EPOCH=$(epoch_of "$TODAY")
 T_START=$(utc_of_epoch "$T_EPOCH")

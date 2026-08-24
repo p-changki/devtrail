@@ -18,7 +18,7 @@ _ob_templater() {
   local dot="$1"
   local data="$dot/plugins/templater-obsidian/data.json"
   local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
+  local profile="$DT_PRESET/profiles/${mode}.json"
   local paths; paths=$(_ob_paths_json)
 
   step "$(L "Templater 폴더 매핑" "Templater folder mapping")"
@@ -32,10 +32,10 @@ _ob_templater() {
   local out; out=$(mktemp)
   # ⚠️ DT_TEMPLATER_DIR 로 '설치된 플러그인' 을 가리킨다. 생성기가 거기서
   #    설정 스키마 버전을 읽어 맞는 키를 쓴다 — 짐작하지 않는다.
-  if DT_TEMPLATES_DIR="$DEVTRAIL_ROOT/preset/templates/$(dt_lang)" \
+  if DT_TEMPLATES_DIR="$DT_PRESET/templates/$(dt_lang)" \
      DT_TEMPLATER_DIR="$dot/plugins/templater-obsidian" \
      dt_gen gen-hotkeys templater \
-      "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
+      "$DT_PRESET/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$data" ] && printf '%s' "$data")" > "$out"; then
     jr_backup "$data" >/dev/null || { rm -f "$out"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $data"; }
     mv "$out" "$data"
@@ -59,7 +59,7 @@ _ob_templater() {
   fi
   local out2; out2=$(mktemp)
   if dt_gen gen-hotkeys daily \
-      "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" "$paths" \
+      "$DT_PRESET/obsidian/hotkeys.tmpl.json" "$paths" \
       "$([ -f "$dn" ] && printf '%s' "$dn")" > "$out2"; then
     jr_backup "$dn" >/dev/null || { rm -f "$out2"; die "$(L "백업 실패 — 원본을 건드리지 않습니다" "Backup failed — leaving the original alone"): $dn"; }
     mv "$out2" "$dn"

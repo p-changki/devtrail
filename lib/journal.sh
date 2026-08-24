@@ -61,10 +61,26 @@ jr_begin() {
 # 기존 동작이 깨지지 않아야 한다.
 _jr_active() { [ -n "${DT_JOB_DIR:-}" ] && [ -d "$DT_JOB_DIR" ]; }
 
-# jr_backup <파일>  — 덮어쓰기 전에 부른다. 백업 경로를 stdout 으로 낸다.
+# jr_backup <파일>  — **쓰기 전에** 부른다. 백업 경로를 stdout 으로 낸다.
+#
+# ⚠️ 파일이 **없을 때도 기록한다** (2026-08-24 실물 QA).
+#
+#    예전에는 없으면 조용히 0 을 냈다. 그래서 `jr_backup` 뒤에 파일을 새로
+#    만드는 곳들이 **저널에 아무것도 남기지 않았고**, `devtrail undo` 가
+#    그 파일을 지우지 못했다 — 사용자 볼트에 `.obsidian/app.json` ·
+#    `hotkeys.json` 이 정체 모를 채로 남았다.
+#
+#    호출부를 하나씩 고치는 대신 여기서 정한다. "쓰기 전에 부른다" 는 계약은
+#    그대로이고, 없던 파일은 **생성으로** 기록될 뿐이다.
+#
+# ⚠️ 부르고 나서 실제로 안 쓰는 경우가 있어도 안전하다 — undo 는 "이미 없음"
+#    을 정상으로 다룬다.
 jr_backup() {
   local target="$1"
-  [ -f "$target" ] || return 0
+  if [ ! -f "$target" ]; then
+    jr_created "$target"
+    return 0
+  fi
 
   # 저널이 없으면 예전 방식(파일 옆 .bak)으로 남긴다.
   if ! _jr_active; then

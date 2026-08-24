@@ -15,8 +15,8 @@ _ob_linter() {
   local dot="$1"
   local data="$dot/plugins/obsidian-linter/data.json"
   local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
-  local src="$DEVTRAIL_ROOT/preset/obsidian/linter.json"
+  local profile="$DT_PRESET/profiles/${mode}.json"
+  local src="$DT_PRESET/obsidian/linter.json"
 
   step "Linter ($(L "frontmatter 규약" "frontmatter rules"))"
   if [ "$(jq -r '.merge.linter // false' "$profile" 2>/dev/null)" != "true" ]; then

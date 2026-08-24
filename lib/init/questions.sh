@@ -187,7 +187,7 @@ _init_src_root() {
 
 # ── 모듈 ─────────────────────────────────────────────────────────────────────
 _init_modules() {
-  local tree="$DEVTRAIL_ROOT/preset/tree.json" list
+  local tree="$DT_PRESET/tree.json" list
   # ⚠️ label_en 이 있으면 그걸 쓴다. 없으면 label 로 떨어진다.
   local en; en=$([ "$(dt_lang)" = en ] && echo true || echo false)
   list=$(jq -r --argjson en "$en" '

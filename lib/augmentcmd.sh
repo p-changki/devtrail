@@ -13,7 +13,7 @@
 # ⚠️ 기본이 dry-run 이다. 남의 볼트를 건드리는 도구의 기본은 "안 하는 것"이다.
 # ⚠️ 한글이 뒤따르는 변수는 중괄호로 감싼다: "${n}개"  (bash 3.2)
 
-DT_TREE="${DEVTRAIL_TREE:-$DEVTRAIL_ROOT/preset/tree.json}"
+DT_TREE="${DEVTRAIL_TREE:-$DT_PRESET/tree.json}"
 
 augment_cmd() {
   require_config
@@ -275,8 +275,8 @@ EOF
 # 커리큘럼은 사람마다 달라서 빈 골격만 준다. 76일을 실제로 굴려본 구조다.
 _aug_learn() {
   # 언어별. 번역이 없으면 ko 로 떨어진다.
-  local src="$DEVTRAIL_ROOT/preset/learn/$(dt_lang)"
-  [ -d "$src" ] || src="$DEVTRAIL_ROOT/preset/learn/ko"
+  local src="$DT_PRESET/learn/$(dt_lang)"
+  [ -d "$src" ] || src="$DT_PRESET/learn/ko"
   local dest; dest="$(vault_root)/$(dt_dir study)"
   [ -d "$src" ] || return 0
   mkdir -p "$dest"
@@ -299,8 +299,8 @@ _aug_learn() {
 _aug_guides() {
   # 언어별 하위 폴더. 없는 언어는 ko 로 떨어진다 — 번역이 늦어도
   # 가이드가 통째로 사라지는 것보다 낫다.
-  local src="$DEVTRAIL_ROOT/preset/guides/$(dt_lang)"
-  [ -d "$src" ] || src="$DEVTRAIL_ROOT/preset/guides/ko"
+  local src="$DT_PRESET/guides/$(dt_lang)"
+  [ -d "$src" ] || src="$DT_PRESET/guides/ko"
   local dest; dest="$(vault_root)/$(dt_dir guides)"
   [ -d "$src" ] || return 0
   jr_mkdir "$dest"

@@ -19,20 +19,27 @@ _ob_snippets() {
   local dir="$dot/snippets"
   local app="$dot/appearance.json"
   local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
-  local src="$DEVTRAIL_ROOT/preset/obsidian/snippets"
+  local profile="$DT_PRESET/profiles/${mode}.json"
+  local src="$DT_PRESET/obsidian/snippets"
 
   step "$(L "CSS 스니펫" "CSS snippets")"
   [ "$(jq -r '.merge.snippets // false' "$profile" 2>/dev/null)" = "true" ] \
     || { dim "     $(L "이 모드에서는 건드리지 않습니다" "This mode leaves it alone")"; return 0; }
   [ -d "$src" ] || { warn "$(L "프리셋 없음" "Preset missing"): $src"; return 0; }
 
-  mkdir -p "$dir"
-  local n=0 f name
+  # ⚠️ 만든 폴더도 저널에 남긴다 — 되돌린 뒤 빈 껍데기가 남으면 안 된다.
+  jr_mkdir "$dir" || { warn "$(L "폴더를 만들지 못했습니다" "Could not create folder"): $dir"; return 0; }
+  local n=0 f name existed
   for f in "$src"/*.css; do
     [ -e "$f" ] || continue
     name=$(basename "$f" .css)
-    cp "$f" "$dir/$name.css" && n=$((n + 1))
+    # ⚠️ 이미 있던 것은 **백업**하고, 새로 만드는 것은 **기록**한다.
+    #    둘을 구분하지 않으면 되돌릴 때 남의 파일을 지운다.
+    existed=0; [ -f "$dir/$name.css" ] && existed=1
+    [ "$existed" = 1 ] && { jr_backup "$dir/$name.css" >/dev/null || continue; }
+    cp "$f" "$dir/$name.css" || continue
+    [ "$existed" = 0 ] && jr_created "$dir/$name.css"
+    n=$((n + 1))
   done
 
   # 활성화 등록 — 이게 없으면 파일만 있고 적용은 안 된다

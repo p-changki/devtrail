@@ -25,7 +25,7 @@ template_cmd() {
 }
 
 _tpl_src_dir() {
-  local base="$DEVTRAIL_ROOT/preset/templates"
+  local base="$DT_PRESET/templates"
   local d="$base/$(dt_lang)"
   [ -d "$d" ] || d="$base/ko"
   printf '%s' "$d"
