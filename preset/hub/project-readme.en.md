@@ -5,7 +5,7 @@ tags:
   - area/dev
 type: project-home
 status: active
-stage: planning
+stage: {{STAGE}}
 created: {{TODAY}}
 updated: {{TODAY}}
 project: {{NAME}}
