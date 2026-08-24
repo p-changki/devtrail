@@ -466,6 +466,33 @@ t_eq "앱이 기본값(modules·ai)을 정하지 않는다" "0" \
 t_eq "미리보기가 --apply 없이 돈다" "1" \
   "$(printf '%s\n' "$OB" | grep -c 'func preview' | tr -d ' ')"
 
+t_start "⚠️ 터미널이 안 열려도 길이 있다 (2026-08-24 QA)"
+# ⚠️ Terminal 은 명령을 **타이핑해서** 넣는다. 그 순간 셸 초기화가 입력을
+#    기다리고 있으면 글자를 먹는다 — oh-my-zsh 의 "Would you like to
+#    update? [Y/n]" 가 경로 첫 글자 `/` 를 삼켜, 터미널이 열리기만 하고
+#    `var/folders/…: no such file or directory` 로 죽었다.
+#
+#    사용자의 .zshrc 를 우리가 통제할 수 없으므로 근본은 못 고친다.
+#    **붙여넣을 명령을 늘 함께 보여준다** — 이 길은 셸 설정과 무관하다.
+t_eq "붙여넣을 명령을 화면에 그린다" "1" \
+  "$(printf '%s\n' "$MV" | grep -cF 'Text(status.setupCommand)' | tr -d ' ')"
+t_eq "복사 버튼이 그 명령을 넣는다" "1" \
+  "$(printf '%s\n' "$MV" | grep -cF 'setString(status.setupCommand' | tr -d ' ')"
+t_eq "쓰기 전에 clearContents 를 부른다 (짝이 맞는다)" "yes" \
+  "$([ "$(printf '%s\n' "$MV" | grep -cF 'NSPasteboard.general.clearContents()' | tr -d ' ')" \
+      = "$(printf '%s\n' "$MV" | grep -cF 'NSPasteboard.general.setString' | tr -d ' ')" ] \
+     && echo yes || echo no)"
+# ⚠️ 명령을 만드는 규칙은 CLI 경로와 같은 곳에서 온다 — 화면이 직접 조립하면
+#    실제로 실행되는 것과 갈린다.
+t_eq "명령을 Status 가 만든다" "1" \
+  "$(printf '%s\n' "$ST" | grep -c 'var setupCommand' | tr -d ' ')"
+# ⚠️ 인용 규칙이 두 벌이면 공백 있는 경로에서 한쪽만 깨진다.
+t_eq "인용 규칙이 한 곳이다" "1" \
+  "$(printf '%s\n' "$ST" | grep -c 'static func shellQuoted' | tr -d ' ')"
+t_eq "직접 따옴표를 조립하지 않는다" "0" \
+  "$(printf '%s\n' "$ST" | grep -c 'replacingOccurrences(of: "'"'"'", with:' | tr -d ' ' \
+     | awk '{ print ($1 > 1) ? 1 : 0 }')"
+
 t_start "간단 셋업 — 터미널 경로를 없애지 않았다"
 # ⚠️ 앱이 못 하는 것(기존 폴더 채택 · GitHub · 동기화 · AI)을 정하려면
 #    대화형 경로가 필요하다. 기본에서 내렸을 뿐 없애지 않는다.

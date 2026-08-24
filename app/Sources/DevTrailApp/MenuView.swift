@@ -592,6 +592,38 @@ struct MenuView: View {
             textRow("터미널로 설정 (고급)", "terminal") { status.startSetup() }
             Text("GitHub · 동기화 · AI 까지 한 번에 정합니다.")
                 .font(.system(size: 9)).foregroundStyle(.tertiary)
+
+            // ⚠️ **항상 통하는 길을 하나 둔다** (2026-08-24 실물 QA).
+            //
+            //    Terminal 은 명령을 타이핑해서 넣는다. 그 순간 셸 초기화가
+            //    입력을 기다리고 있으면 글자를 먹는다 — oh-my-zsh 의
+            //    "Would you like to update? [Y/n]" 가 경로 첫 글자를 삼켜
+            //    터미널이 열리기만 하고 아무것도 안 됐다.
+            //
+            //    사용자의 .zshrc 를 우리가 통제할 수 없다. 근본은 못 고치므로
+            //    붙여넣을 명령을 **늘** 함께 보여준다.
+            Text("터미널이 열리지 않으면 아래를 복사해 붙여넣으세요.")
+                .font(.system(size: 9)).foregroundStyle(.tertiary)
+                .padding(.top, 3)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(status.setupCommand)
+                .font(.system(size: 8.5, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+                .lineLimit(2).truncationMode(.middle)
+            Button(action: {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(status.setupCommand, forType: .string)
+                status.lastOutput = "명령을 복사했습니다. 터미널에 붙여넣으세요."
+            }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "doc.on.doc").font(.system(size: 9.5))
+                    Text("명령 복사").font(.system(size: 10.5))
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(Hover(radius: 5))
         }
     }
 

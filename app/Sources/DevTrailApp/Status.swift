@@ -138,6 +138,26 @@ final class Status: ObservableObject {
     ///
     /// AppleScript 대신 실행 파일을 Terminal 로 여는 방식을 쓴다 —
     /// 자동화 권한 대화상자를 띄우지 않는다.
+    /// 사용자가 직접 붙여넣을 수 있는 셋업 명령.
+    ///
+    /// ⚠️ 왜 필요한가 (2026-08-24 실물 QA)
+    ///
+    ///    Terminal 은 명령을 **타이핑해서** 넣는다. 그 순간 셸 초기화가
+    ///    입력을 기다리고 있으면 글자를 먹는다 — oh-my-zsh 의
+    ///    "Would you like to update? [Y/n]" 가 경로의 첫 글자 `/` 를 삼켜
+    ///    `var/folders/…: no such file or directory` 로 죽었다.
+    ///
+    ///    사용자의 `.zshrc` 를 우리가 통제할 수 없으므로 근본은 못 고친다.
+    ///    **항상 통하는 길을 하나 둔다** — 복사해서 붙여넣기.
+    var setupCommand: String {
+        "\(Self.shellQuoted(CLI.binary)) init"
+    }
+
+    /// 경로에 공백·따옴표가 있어도 안전하게.
+    static func shellQuoted(_ p: String) -> String {
+        "'" + p.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     func startSetup() {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("devtrail-setup", isDirectory: true)
@@ -146,7 +166,7 @@ final class Status: ObservableObject {
 
         // 경로에 공백·따옴표가 있어도 안전하도록 작은따옴표로 감싸고,
         // 안의 작은따옴표는 이스케이프한다.
-        let quoted = "'" + CLI.binary.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let quoted = Self.shellQuoted(CLI.binary)
         let body = """
         #!/bin/sh
         clear
