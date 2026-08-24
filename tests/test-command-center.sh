@@ -313,7 +313,8 @@ fi
 t_start "카드가 실재 소스를 읽는다"
 # 설계안 §6 의 읽기 모델. 없는 필드를 지어내지 않는다.
 t_contains "프로젝트: project-home"  "project-home"   "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
-t_contains "프로젝트: status active" "'active'"       "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
+t_contains "프로젝트: project-home 전체" "if (type === 'project-home')" \
+  "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
 t_contains "Inbox: status inbox"     "'inbox'"        "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
 t_contains "리뷰: review_at"         "review_at"      "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
 # ⚠️ v1 에 없는 필드를 만들지 않는다. frontmatter 커버리지가 고르지 않아
@@ -417,6 +418,10 @@ t_contains "남은 뷰를 닫는다" "l.detach()" "$(cat "$JS" "$RMJS" "$CMDJS" 
 #    레이아웃이 준비되면 스스로 옮겨야 한다.
 t_contains "레이아웃 준비 후 정리한다" "onLayoutReady" "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
 t_contains "복원된 사이드 뷰를 옮긴다" "relocateIfSide" "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
+t_contains "시작할 때 대시보드를 앞으로 가져온다" "openDashboardOnStartup" "$(cat "$JS")"
+t_contains "열려 있던 대시보드 탭을 실제 활성화한다" "workspace.setActiveLeaf(main, { focus: false })" "$(cat "$JS")"
+t_contains "늦게 여는 시작 플러그인 뒤에도 대시보드를 연다" "window.setTimeout(openAtStartup, 2500)" "$(cat "$JS")"
+t_contains "시작 대시보드를 끌 수 있다" "toggle-open-on-startup" "$(cat "$JS")"
 
 cat > "$T_TMP/leaf.js" <<'JSEOF'
 const Module = require('module'); const orig = Module._load;
@@ -728,7 +733,7 @@ t_contains "미지정을 따로 다룬다" "unstaged" "$(cat "$JS" "$RMJS" "$CMD
 t_eq "컬럼은 넷이다" "4" \
   "$(grep -A8 'BOARD_COLUMNS = \[' "$RMJS" | grep -c "^\s*\['")"
 
-t_start "카드가 노트에서 읽은 것만 보여준다"
+t_start "카드가 프로젝트 상태를 읽고 사용자가 바꿀 수 있다"
 t_contains "프로젝트명" "p.name" "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
 t_contains "next_action" "p.next" "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
 t_contains "마지막 수정" "p.file.stat.mtime" "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
@@ -739,11 +744,17 @@ t_contains "카드를 키보드로 연다" "ev.key === 'Enter'" \
   "$(sed -n '/projectCard(parent, t, p, colKey)/,/^    }/p' "$VIEWJS")"
 t_contains "카드 전체가 눌린다" "c.addEventListener('click', open)" \
   "$(sed -n '/projectCard(parent, t, p, colKey)/,/^    }/p' "$VIEWJS")"
+t_contains "단계 선택기가 있다" "projectStageSelect" "$(cat "$VIEWJS")"
+t_contains "선택한 stage만 저장한다" "frontmatter.stage = stage" "$(cat "$VIEWJS")"
+t_contains "Obsidian frontmatter API를 쓴다" "fileManager.processFrontMatter" "$(cat "$VIEWJS")"
+t_contains "카드 열기 이벤트와 분리한다" "ev.stopPropagation()" \
+  "$(sed -n '/projectStageSelect(parent, t, project, currentKey)/,/^    }/p' "$VIEWJS")"
 t_contains "빈 컬럼 문구" "emptyColumn" "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
 
-t_start "노트를 쓰지 않는다"
-# ⚠️ 플러그인은 읽기 모델이다. 쓰기는 Templater 통로 하나뿐이다.
-for m in "vault.create" "vault.modify" "vault.append" "processFrontMatter"; do
+t_start "단계 외의 노트를 쓰지 않는다"
+# ⚠️ 사용자가 고른 프로젝트 stage만 processFrontMatter로 바꾼다. 새 노트를
+# 만들거나 본문을 고치는 두 번째 생성기가 되면 안 된다.
+for m in "vault.create" "vault.modify" "vault.append"; do
   t_eq "$m 를 부르지 않는다" "0" "$(grep -c "$m" "$JS" | tr -d ' ')"
 done
 t_start "쓰는 문구가 전부 정의돼 있다"
@@ -1001,6 +1012,10 @@ t_eq "정상 원본은 0 으로 끝난다" "0" "$?"
 t_start "대시보드가 주어진 폭을 쓴다"
 t_eq "본문에 폭 상한이 없다" "0" \
   "$(sed -n '/^\.devtrail-cc-body/,/}/p' "$CSS" | grep -c 'max-width')"
+t_eq "루트에도 폭 상한이 없다" "0" \
+  "$(sed -n '/^\.devtrail-command-center {/,/^}/p' "$CSS" | grep -cE 'max-width: *[0-9]')"
+t_contains "루트가 leaf 전체 폭을 쓴다" "width: 100%" \
+  "$(sed -n '/^\.devtrail-command-center {/,/^}/p' "$CSS")"
 t_start "여백이 하나의 리듬을 따른다"
 # ⚠️ 4·6·8·10·12·16 이 섞이면 무엇이 한 묶음인지 눈이 못 읽는다.
 #    4 의 배수 하나로 통일한다.
@@ -1304,6 +1319,13 @@ else
 fi
 t_contains "수집이 그 규칙을 쓴다" "bearsTasks(" \
   "$(sed -n '/async function openTasksInVault/,/^}/p' "$RMJS")"
+
+t_start "오늘 현황은 오늘 개발일지에서만 읽는다"
+TODAY_PANEL="$(sed -n '/async panelToday(parent, t, devlog)/,/^    }/p' "$VIEWJS")"
+t_contains "오늘 일지를 직접 읽는다" "cachedRead(devlog)" "$TODAY_PANEL"
+t_contains "일지 체크박스를 파싱한다" "openTasks(raw)" "$TODAY_PANEL"
+t_contains "작업 출처도 오늘 일지다" "file: devlog" "$TODAY_PANEL"
+t_eq "볼트 전체 작업함을 섞지 않는다" "0" "$(printf '%s' "$TODAY_PANEL" | grep -c 'openTasksInVault' | tr -d ' ')"
 
 # ── 상단 입력창은 전체 검색이다 ─────────────────────────────────────────────
 #

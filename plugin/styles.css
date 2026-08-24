@@ -10,9 +10,13 @@
    *    부모가 gap 으로 리듬을 주면 빠뜨릴 자리가 없다. */
   display: flex;
   flex-direction: column;
-  /* 사양: max-width 1180px, padding 28px 40px 56px, gap 24px */
-  max-width: 1180px;
-  margin: 0 auto;
+  /* Command Center는 문서가 아니라 작업 화면이다. 1180px로 잘라 가운데
+   * 몰아두면 큰 모니터의 오른쪽이 통째로 비어 보인다. leaf가 준 폭을 전부
+   * 쓰고, 내부 보드·카드가 auto-fit으로 적절한 열 수를 고른다. */
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   padding: 28px 40px 56px;
   gap: 24px;
 }
@@ -420,6 +424,26 @@
   margin-left: auto;
 }
 
+/* 카드 전체는 열기, 이 메뉴만 단계 변경이다. 작지만 충분히 넓고 테마의
+ * 기본 control 색을 따른다. */
+.devtrail-cc-stage-select {
+  max-width: 100%;
+  min-width: 0;
+  padding: 2px 22px 2px 7px;
+  font: inherit;
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.devtrail-cc-stage-select:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
 /* ── 단계 미지정 ────────────────────────────────────────────────────────────
  * 상태가 아니라 '빠진 것' 이다. 컬럼이 아니라 보드 위에 둔다. */
 .devtrail-cc-unstaged {
@@ -497,6 +521,43 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 0 28px;
+}
+
+/* 유튜브는 제목 → 한 줄 요약 순서로만 보인다. 긴 요약이 카드 폭을 밀어
+ * 다른 정보의 리듬을 깨지 않도록 두 줄에서 멈추고, 전체는 _index에서 본다. */
+.devtrail-cc-youtube {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.devtrail-cc-youtube-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.devtrail-cc-youtube-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.devtrail-cc-youtube-row .devtrail-cc-link {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.devtrail-cc-youtube-meta {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 

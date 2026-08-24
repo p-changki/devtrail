@@ -12,9 +12,11 @@ struct MenuView: View {
     @ObservedObject var status: Status
     @State private var showSettings = false
 
-    private let panelWidth: CGFloat = 274
+    /// 한국어 설명·버튼을 줄이지 않고 읽을 수 있는 메뉴바 패널 폭.
+    private let panelWidth: CGFloat = 342
 
     @State private var captureURL = ""
+    @State private var showCaptureComposer = false
     @StateObject private var onboard = Onboarding()
 
     var body: some View {
@@ -66,7 +68,7 @@ struct MenuView: View {
                 output
             }
         }
-        .padding(11)
+        .padding(14)
         .frame(width: panelWidth)
     }
 
@@ -76,11 +78,11 @@ struct MenuView: View {
         HStack(spacing: 7) {
             Circle().fill(healthColor).frame(width: 8, height: 8)
             Text(showSettings ? "설정" : "DevTrail")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
             Spacer()
             if let b = status.busy {
                 ProgressView().controlSize(.small).scaleEffect(0.7)
-                Text(b).font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(b).font(.system(size: 11.5)).foregroundStyle(.secondary)
             } else {
                 iconButton(showSettings ? "chevron.backward" : "gearshape",
                            help: showSettings ? "뒤로" : "설정") {
@@ -98,18 +100,172 @@ struct MenuView: View {
 
     private var homeBody: some View {
         VStack(alignment: .leading, spacing: 0) {
-            stats
+            todayCard
             Divider().padding(.vertical, 8)
-            vaultState
+            devlogToolbar
             Divider().padding(.vertical, 8)
-            captureRow
+            aiActions
             Divider().padding(.vertical, 8)
-            toolbar
-            Divider().padding(.vertical, 8)
-            backfillRow
-            Divider().padding(.vertical, 8)
-            openRow
+            if showCaptureComposer {
+                captureRow
+                Divider().padding(.vertical, 8)
+            }
+            moreActions
         }
+    }
+
+    /// 홈의 첫 화면은 수치 목록이 아니라 "지금 무엇을 하면 되는가"에 답한다.
+    private var todayCard: some View {
+        let hasToday = status.snapshot?.today?.devlogExists ?? false
+        return VStack(alignment: .leading, spacing: 8) {
+            Label(status.headline, systemImage: hasToday ? "checkmark.circle.fill" : "calendar.badge.plus")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(hasToday ? Color.dtSuccess : Color.primary)
+            Text(status.detail).font(.system(size: 12.5)).foregroundStyle(.secondary)
+            Button(hasToday ? "오늘 개발일지 열기" : "오늘 개발일지 만들기") {
+                if hasToday { status.openInObsidian(path: status.devlogFile) }
+                else { status.createTodayDevlog() }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            .disabled(status.busy != nil)
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.dtSuccess.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Claude를 실제로 호출하는 두 가지 기능을 이름 그대로 앞에 둔다.
+    /// 스킬 설치 목록을 그대로 노출하면 "무엇을 누르면 어떤 결과가 생기는지"
+    /// 알 수 없으므로, 사용자가 바로 끝낼 수 있는 작업만 보인다.
+    private var aiActions: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.dtSuccess)
+                Text("AI 작업")
+                    .font(.system(size: 12.5, weight: .semibold))
+                Spacer()
+                Text(status.toggles["ai.summary_enabled"] == true ? "Claude 사용" : "AI 요약 꺼짐")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 6) {
+                tool("play.rectangle", "유튜브 정리") { showCaptureComposer.toggle() }
+                tool("sparkles", "PR AI 요약") { status.summarizePullRequests() }
+            }
+            summaryFeedback
+        }
+    }
+
+    /// 메뉴바에서도 Obsidian에서 자주 쓰는 개발일지 단축키의 역할을 바로
+    /// 실행한다. 키를 외우지 못해도 같은 행동에 도달하고, 키를 쓰는 사람은
+    /// 버튼의 키캡으로 다시 확인할 수 있다.
+    private var devlogToolbar: some View {
+        let hasToday = status.snapshot?.today?.devlogExists ?? false
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.dtSuccess)
+                Text("개발일지 도구")
+                    .font(.system(size: 12.5, weight: .semibold))
+                Spacer()
+                Text("Obsidian 단축키")
+                    .font(.system(size: 10.5)).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 6) {
+                shortcutTool(hasToday ? "doc.text" : "doc.badge.plus",
+                             hasToday ? "일지 열기" : "일지 만들기",
+                             status.hotkey(forTemplate: ["개발일지양식.md", "Devlog.md"])) {
+                    if hasToday { status.openInObsidian(path: status.devlogFile) }
+                    else { status.createTodayDevlog() }
+                }
+                shortcutTool("arrow.down.circle", "활동", status.hotkey(for: activityCommand)) {
+                    status.run("활동 가져오기", ["activity"])
+                }
+                shortcutTool("sparkles", "PR 요약", status.hotkey(for: summaryCommand)) {
+                    status.summarizePullRequests()
+                }
+            }
+            HStack(spacing: 6) {
+                templateShortcut("square.and.pencil", "개발메모", ["개발메모 템플릿.md", "Dev note.md"])
+                templateShortcut("checklist", "워크로그", ["워크로그 템플릿.md", "Worklog.md"])
+                templateShortcut("lightbulb", "아이디어", ["아이디어 빠른저장 템플릿.md", "Quick idea.md"])
+            }
+        }
+    }
+
+    private let activityCommand = "obsidian-shellcommands:shell-command-devtrail-activity"
+    private let summaryCommand = "obsidian-shellcommands:shell-command-devtrail-summary"
+    private func templateShortcut(_ icon: String, _ label: String, _ names: [String]) -> some View {
+        shortcutTool(icon, label, status.hotkey(forTemplate: names)) {
+            status.createFromTemplate(names, label: label)
+        }
+    }
+
+    /// PR 요약은 GitHub 인증과 Claude 실행을 거친다. 누른 뒤 조용하면
+    /// "안 됐나? 기다리면 되나?"를 알 수 없으므로 결과를 AI 작업 안에 남긴다.
+    @ViewBuilder
+    private var summaryFeedback: some View {
+        if status.summaryBusy {
+            Label("PR AI 요약 중… 머지된 PR을 확인하고 Claude가 개발일지에 정리하고 있습니다.",
+                  systemImage: "arrow.triangle.2.circlepath")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(Color.dtSuccess)
+                .padding(.top, 2)
+        } else if let error = status.summaryError {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("PR AI 요약을 완료하지 못했습니다", systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Color.dtDanger)
+                Text(error)
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                Text("GitHub 인증이 필요하면 설정에서 다시 연결한 뒤 재시도하세요.")
+                    .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.dtDanger.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else if let result = status.summaryResult {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("PR AI 요약을 완료했습니다", systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Color.dtSuccess)
+                Text(result).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(3)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.dtSuccess.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private var moreActions: some View {
+        DisclosureGroup("더보기") {
+            VStack(alignment: .leading, spacing: 8) {
+                compactVaultState
+                Divider()
+                textRow("활동 가져오기", "arrow.down.circle") {
+                    status.run("활동", ["activity"])
+                }
+                textRow("이번 주 리뷰", "calendar") {
+                    status.run("주간리뷰", ["weekly"])
+                }
+                textRow("프로젝트 문서 동기화", "folder.badge.gearshape") {
+                    status.run("동기화", ["sync"])
+                }
+                backfillRow
+                openRow
+            }
+            .padding(.top, 8)
+        }
+        .font(.system(size: 13))
     }
 
     // MARK: - Obsidian 없이 보는 상태
@@ -121,12 +277,12 @@ struct MenuView: View {
             if let err = status.snapshotError {
                 // ⚠️ 못 읽은 것을 '0' 으로 보여주지 않는다.
                 Label(err, systemImage: "exclamationmark.triangle")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             } else if let s = status.snapshot {
                 if !s.vaultAvailable {
                     Label("볼트를 찾지 못했습니다", systemImage: "folder.badge.questionmark")
-                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
                 } else {
                     stateLine("오늘",
                               s.today.map { $0.devlogExists ? "개발일지 있음" : "개발일지 없음" } ?? "확인 불가",
@@ -140,23 +296,41 @@ struct MenuView: View {
                     stateLine("Command Center", s.commandCenterLine, detail: "")
                 }
             } else {
-                Text("상태를 읽는 중…").font(.system(size: 10.5)).foregroundStyle(.secondary)
+                Text("상태를 읽는 중…").font(.system(size: 12)).foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("볼트 상태")
     }
 
+    /// 부가 지표는 홈의 결정을 방해하지 않도록 더보기 안에 둔다.
+    private var compactVaultState: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if let s = status.snapshot, s.vaultAvailable {
+                stateLine("프로젝트", s.activeProjects.map { "활성 \($0)개" } ?? "확인 불가",
+                          detail: s.nextActions.first.map { "\($0.project) · \($0.text)" } ?? "")
+                stateLine("Inbox", s.inboxCount.map { $0 == 0 ? "비어 있음" : "\($0)개" } ?? "확인 불가",
+                          detail: (s.inboxCount ?? 0) > 0 ? (s.inboxPreview.first?.title ?? "") : "")
+                stateLine("상태", "Command Center \(s.commandCenterLine)", detail: "")
+            } else if let error = status.snapshotError {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            } else {
+                Text("볼트 상태를 읽는 중…").font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private func stateLine(_ label: String, _ value: String, detail: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(label)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(.secondary)
-                .frame(width: 92, alignment: .leading)
+                .frame(width: 102, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
-                Text(value).font(.system(size: 11))
+                Text(value).font(.system(size: 12.5))
                 if !detail.isEmpty {
-                    Text(detail).font(.system(size: 9.5)).foregroundStyle(.secondary)
+                    Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
             }
@@ -171,10 +345,10 @@ struct MenuView: View {
     // ⚠️ Obsidian 이 꺼져 있어도 된다. 노트를 만드는 것은 CLI 이고,
     //    저널에 남아 undo 로 사라진다 (ADR 0003).
     private var captureRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "link").font(.system(size: 10))
-                Text("링크 받아두기").font(.system(size: 10, weight: .medium))
+                Image(systemName: "link").font(.system(size: 11.5))
+                Text("링크 받아두기").font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("클립보드") {
@@ -182,33 +356,94 @@ struct MenuView: View {
                     captureURL = NSPasteboard.general.string(forType: .string) ?? ""
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 9.5))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .help("클립보드의 링크를 붙여넣습니다")
             }
             HStack(spacing: 6) {
                 TextField("https://youtu.be/…", text: $captureURL)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12.5))
                     .disabled(status.captureBusy)
                     .accessibilityLabel("유튜브 링크")
-                Button(status.captureBusy ? "저장 중…" : "저장") {
+                Button(status.captureBusy ? "AI 정리 중…" : "저장하고 정리") {
                     status.captureYouTube(captureURL, apply: true)
                 }
-                .font(.system(size: 11))
+                .font(.system(size: 12.5, weight: .medium))
+                .controlSize(.regular)
                 // ⚠️ 두 번 누르면 노트가 두 개 생긴다.
                 .disabled(status.captureBusy || captureURL.trimmingCharacters(in: .whitespaces).isEmpty)
-                .help("Obsidian 없이 볼트에 저장합니다")
+                .help("AI 요약이 켜져 있으면 Claude가 자막을 분석해 노트를 정리합니다")
             }
-            if let e = status.captureError {
-                Text(e).font(.system(size: 9.5)).foregroundStyle(.red).lineLimit(3)
-            } else if let r = status.captureResult {
-                Text(r).font(.system(size: 9.5)).foregroundStyle(.secondary).lineLimit(4)
+            captureFeedback
+        }
+    }
+
+    /// 실행 중·완료·실패를 서로 다른 문장과 색으로 고정해 둔다. 이전에는
+    /// 실패가 빨간 한 줄로 잘려 "아직 실행 중인가"를 판단할 수 없었다.
+    @ViewBuilder
+    private var captureFeedback: some View {
+        if status.captureBusy {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("유튜브 정리 중…", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Color.dtSuccess)
+                Text("링크를 저장한 뒤 Claude가 자막을 분석해 노트를 채우고 있습니다.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                ProgressView().controlSize(.small)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.dtSuccess.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else if let error = status.captureError {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("유튜브 정리에 실패했습니다", systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Color.dtDanger)
+                Text(error)
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                Text("아래 실행 로그에서 전체 내용을 확인할 수 있습니다.")
+                    .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.dtDanger.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else if let warning = status.captureWarning {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("링크는 저장했고, AI 요약만 건너뛰었습니다", systemImage: "checkmark.circle.badge.exclamationmark")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Color.dtWarning)
+                Text(warning)
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let job = status.captureUndoJob {
                     Text("되돌리기: devtrail undo \(job) --apply")
-                        .font(.system(size: 9)).foregroundStyle(.secondary).textSelection(.enabled)
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary).textSelection(.enabled)
                 }
             }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.dtWarning.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else if let result = status.captureResult {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("유튜브 정리를 완료했습니다", systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Color.dtSuccess)
+                Text(result).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(3)
+                if let job = status.captureUndoJob {
+                    Text("되돌리기: devtrail undo \(job) --apply")
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.dtSuccess.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
     }
 
@@ -233,14 +468,15 @@ struct MenuView: View {
     }
 
     private var backfillRow: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 10.5)).foregroundStyle(.secondary).frame(width: 13)
+                .font(.system(size: 12)).foregroundStyle(.secondary).frame(width: 15)
             TextField("YYYY-MM-DD", text: $status.backfillDate)
                 .textFieldStyle(.roundedBorder)
-                .font(.system(size: 11))
+                .font(.system(size: 12.5))
             Button("채우기") { status.runBackfill() }
-                .font(.system(size: 11))
+                .font(.system(size: 12.5, weight: .medium))
+                .controlSize(.regular)
                 .disabled(status.busy != nil)
         }
     }
@@ -265,10 +501,10 @@ struct MenuView: View {
             //    **나가는 길(종료)만 남긴다** — 그게 이 화면에서 필요한 전부다.
             if status.needsSetup {
                 Text("아직 셋업하지 않았습니다")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(.system(size: 12.5)).foregroundStyle(.secondary)
                     .padding(.top, 8)
                 Text("설정은 셋업을 마친 뒤에 쓸 수 있습니다.")
-                    .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                    .font(.system(size: 11)).foregroundStyle(.tertiary)
                     .padding(.top, 2)
             } else {
             group("자동화") {
@@ -296,16 +532,16 @@ struct MenuView: View {
             }
             }
 
-            Divider().padding(.vertical, 7)
+            Divider().padding(.vertical, 10)
             HStack {
                 Text(status.needsSetup ? "" : status.vaultLabel)
-                    .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                    .font(.system(size: 10.5)).foregroundStyle(.tertiary)
                     .lineLimit(1).truncationMode(.head)
                 Spacer()
                 Button("종료") {
                     NSApplication.shared.terminate(nil)
                 }
-                    .buttonStyle(.plain).font(.system(size: 11))
+                    .buttonStyle(.plain).font(.system(size: 12.5))
                     .foregroundStyle(.secondary)
             }
         }
@@ -315,11 +551,11 @@ struct MenuView: View {
 
     private func group<C: View>(_ title: String,
                                 @ViewBuilder _ content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 5) {
             Text(title)
-                .font(.system(size: 9.5, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.tertiary)
-                .padding(.top, 9).padding(.bottom, 1)
+                .padding(.top, 12).padding(.bottom, 3)
             content()
         }
     }
@@ -327,9 +563,26 @@ struct MenuView: View {
     private func tool(_ icon: String, _ label: String,
                       _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: icon).font(.system(size: 16))
+                Text(label).font(.system(size: 11.5, weight: .medium))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(Hover(radius: 7))
+        .disabled(status.busy != nil)
+    }
+
+    private func shortcutTool(_ icon: String, _ label: String, _ key: String,
+                              _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             VStack(spacing: 3) {
-                Image(systemName: icon).font(.system(size: 14))
-                Text(label).font(.system(size: 9.5))
+                Image(systemName: icon).font(.system(size: 15))
+                Text(label).font(.system(size: 11.5, weight: .medium))
+                Text(key).font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 7)
@@ -337,17 +590,18 @@ struct MenuView: View {
         }
         .buttonStyle(Hover(radius: 7))
         .disabled(status.busy != nil)
+        .help("Obsidian에서 \(key): \(label)")
     }
 
     private func linkButton(_ icon: String, _ label: String,
                             _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: icon).font(.system(size: 10.5))
-                Text(label).font(.system(size: 11))
+                Image(systemName: icon).font(.system(size: 12))
+                Text(label).font(.system(size: 12.5))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 5)
+            .padding(.vertical, 7)
             .contentShape(Rectangle())
         }
         .buttonStyle(Hover(radius: 6))
@@ -357,8 +611,8 @@ struct MenuView: View {
                          _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 7) {
-                Image(systemName: icon).font(.system(size: 10.5)).frame(width: 13)
-                Text(title).font(.system(size: 12))
+                Image(systemName: icon).font(.system(size: 12)).frame(width: 15)
+                Text(title).font(.system(size: 13))
                 Spacer()
             }
             .contentShape(Rectangle())
@@ -371,8 +625,8 @@ struct MenuView: View {
                             _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 11))
-                .frame(width: 20, height: 18)
+                .font(.system(size: 12))
+                .frame(width: 24, height: 22)
                 .contentShape(Rectangle())
         }
         .buttonStyle(Hover(radius: 5))
@@ -393,27 +647,27 @@ struct MenuView: View {
     private func toggleRow(_ title: String, isOn: Binding<Bool>,
                            unknown: Bool = false) -> some View {
         HStack(spacing: 0) {
-            Text(title).font(.system(size: 12))
+            Text(title).font(.system(size: 13))
                 .foregroundStyle(unknown ? Color.secondary : Color.primary)
             Spacer(minLength: 8)
             if unknown {
                 Text("값 불명")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(Color.dtWarning)
                     .help("설정을 읽지 못했습니다 — devtrail init 또는 doctor 를 확인하세요")
             } else {
                 Toggle("", isOn: isOn)
-                    .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                    .labelsHidden().toggleStyle(.switch).controlSize(.small)
                     .disabled(status.busy != nil)
             }
         }
-        .padding(.vertical, 1)
+        .padding(.vertical, 3)
     }
 
     private var output: some View {
         ScrollView {
             Text(status.lastOutput)
-                .font(.system(size: 10, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -431,7 +685,8 @@ struct MenuView: View {
             case .picking:   onboardPicking
             case .preview(let text): onboardPreview(text)
             case .applying:  onboardApplying
-            case .done(let text):    onboardDone(text)
+            case .done(let text, let pluginsInstalled):
+                onboardDone(text, pluginsInstalled: pluginsInstalled)
             case .failed(let text):  onboardFailed(text)
             }
             terminalLink
@@ -441,14 +696,14 @@ struct MenuView: View {
 
     // MARK: - 온보딩 (ADR 0006 M4-4c)
     //
-    // ⚠️ 여기서 묻는 것은 **언어와 볼트 두 가지뿐**이다. 나머지는 CLI 의
-    //    기본값이 채운다 — 앱이 기본값을 갖기 시작하면 대화형과 갈린다.
+    // ⚠️ 추천값(언어·가장 큰 볼트)만 먼저 채운다. 실제 설치 방식과 기본값은
+    //    CLI 가 정한다 — 앱이 기본값을 갖기 시작하면 대화형과 갈린다.
 
     private var onboardPicking: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text("시작할 준비를 합니다")
                 .font(.system(size: 12, weight: .medium))
-            Text("볼트와 노트 템플릿을 만듭니다. 두 가지만 고르면 됩니다.")
+            Text("추천 설정으로 볼트와 노트 템플릿을 준비합니다. 바꾸고 싶을 때만 아래에서 고르세요.")
                 .font(.system(size: 10.5)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -462,22 +717,24 @@ struct MenuView: View {
 
             group("볼트") {
                 if onboard.candidates.isEmpty {
-                    // ⚠️ 없는 것을 있는 척하지 않는다. 이 경우는 터미널로 보낸다.
+                    // ⚠️ 등록된 Obsidian 볼트가 없어도 터미널로 밀어내지 않는다.
                     Text("Obsidian 볼트를 찾지 못했습니다.")
                         .font(.system(size: 10.5)).foregroundStyle(.secondary)
-                    Text("Obsidian 에서 볼트를 한 번 연 뒤 새로고침하거나, 아래 '터미널로 설정' 을 쓰세요.")
+                    Text("Finder 에서 사용할 볼트를 고르거나, Obsidian 에서 볼트를 한 번 연 뒤 새로고침하세요.")
                         .font(.system(size: 9.5)).foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
+                    textRow("Finder에서 볼트 선택", "folder") { onboard.chooseVault() }
                 } else {
                     Picker("", selection: $onboard.selected) {
                         ForEach(onboard.candidates) { c in
-                            Text(c.name).tag(c.path)
+                            Text(c.label).tag(c.path)
                         }
                     }
                     .labelsHidden()
                     Text(onboard.selected)
                         .font(.system(size: 9, design: .monospaced))
                         .foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head)
+                    textRow("다른 폴더 선택", "folder") { onboard.chooseVault() }
                 }
             }
 
@@ -485,7 +742,7 @@ struct MenuView: View {
                 Button(action: { onboard.preview() }) {
                     HStack(spacing: 6) {
                         Image(systemName: "eye").font(.system(size: 11))
-                        Text("무엇이 만들어지는지 보기").font(.system(size: 12, weight: .medium))
+                        Text("권장 설정 확인").font(.system(size: 12, weight: .medium))
                         Spacer()
                     }
                     .contentShape(Rectangle())
@@ -502,13 +759,16 @@ struct MenuView: View {
 
     private func onboardPreview(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("이렇게 만듭니다")
+            Text("권장 설정입니다")
                 .font(.system(size: 12, weight: .medium))
             if !onboard.modeLabel.isEmpty {
                 Text(onboard.modeLabel)
                     .font(.system(size: 10)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            Text("기존 노트는 옮기지 않습니다. 변경 내용은 아래에서 확인할 수 있습니다.")
+                .font(.system(size: 10)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             ScrollView {
                 Text(text)
                     .font(.system(size: 9, design: .monospaced))
@@ -517,18 +777,21 @@ struct MenuView: View {
             }
             .frame(maxHeight: 170)
 
-            Button(action: { onboard.apply() }) {
+            Button(action: { onboard.apply(installPlugins: true) }) {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle").font(.system(size: 11))
-                    Text("이대로 만들기").font(.system(size: 12, weight: .medium))
+                    Text("만들고 권장 플러그인 설치").font(.system(size: 12, weight: .medium))
                     Spacer()
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(Hover(radius: 6))
-            // ⚠️ 되돌릴 수 있다는 사실을 누르기 **전에** 말한다.
-            Text("되돌릴 수 있습니다 — 만든 뒤 '되돌리기' 가 나옵니다.")
+            // ⚠️ 되돌릴 수 있다는 사실과 네트워크 동의를 누르기 전에 말한다.
+            Text("GitHub에서 고정 버전 플러그인을 받아 볼트에 넣습니다. 되돌릴 수 있습니다.")
                 .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+            textRow("플러그인 없이 만들기", "arrow.right") {
+                onboard.apply(installPlugins: false)
+            }
             textRow("다시 고르기", "chevron.backward") { onboard.phase = .picking }
         }
     }
@@ -540,19 +803,25 @@ struct MenuView: View {
         }
     }
 
-    private func onboardDone(_ text: String) -> some View {
+    private func onboardDone(_ text: String, pluginsInstalled: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 11)).foregroundStyle(Color.dtSuccess)
-                Text("만들었습니다").font(.system(size: 12, weight: .medium))
+                Text(pluginsInstalled ? "준비를 마쳤습니다" : "만들었습니다")
+                    .font(.system(size: 12, weight: .medium))
             }
-            // ⚠️ 플러그인은 받지 않았다. 그 사실과 다음 걸음을 함께 말한다.
-            Text("Obsidian 플러그인은 아직 받지 않았습니다 — 인터넷에서 내려받는 일이라 따로 물어봅니다.")
-                .font(.system(size: 10)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            textRow("플러그인 설치", "square.and.arrow.down") {
-                status.run("플러그인", ["plugins", "install"])
+            if pluginsInstalled {
+                Text("볼트와 권장 플러그인을 준비했습니다. Obsidian을 열어 시작하세요.")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("플러그인은 아직 받지 않았습니다. 필요하면 아래에서 따로 설치할 수 있습니다.")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                textRow("플러그인 설치", "square.and.arrow.down") {
+                    status.run("플러그인", ["plugins", "install"])
+                }
             }
             ScrollView {
                 Text(text)

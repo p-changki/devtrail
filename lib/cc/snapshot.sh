@@ -24,11 +24,12 @@ _cc_snapshot() {
   done
   require_config; require_bins jq; require_gen
 
-  local root today devlog_rel devlog_path tpl_rel
+  local root today devlog_rel devlog_path tpl_rel projects_rel
   root=$(vault_root)
   today=$(date +%F)
   # 경로는 dt_dir 하나에서만 온다.
   tpl_rel=$(dt_dir templates)
+  projects_rel=$(dt_dir projects)
   devlog_rel=$(dt_dir devlog)
   devlog_path=""
   # ⚠️ 파일명은 dt_devlog_name 하나에서만 온다.
@@ -36,9 +37,9 @@ _cc_snapshot() {
 
   local vault_state
   vault_state=$(dt_gen gen-snapshot \
-    "$(jq -nc --arg r "$root" --arg t "$tpl_rel" --arg d "$devlog_path" \
+    "$(jq -nc --arg r "$root" --arg t "$tpl_rel" --arg p "$projects_rel" --arg d "$devlog_path" \
          --arg today "$today" --argjson lim "$limit" \
-         '{root:$r, templates_rel:$t, devlog_path:$d, today:$today, limit:$lim}')" \
+         '{root:$r, templates_rel:$t, projects_rel:$p, devlog_path:$d, today:$today, limit:$lim}')" \
     2>/dev/null) || vault_state=""
   [ -n "$vault_state" ] || vault_state='{"available":false}'
 

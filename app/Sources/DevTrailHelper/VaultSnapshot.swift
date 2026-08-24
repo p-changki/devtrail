@@ -42,6 +42,7 @@ enum VaultSnapshot {
         }
 
         let c = collect(root: root, templatesRel: Py.str(cfg["templates_rel"]),
+                        projectsRel: Py.str(cfg["projects_rel"]),
                         today: today, nowMS: nowMS)
         let devlog = Py.str(cfg["devlog_path"])
         let exists = !devlog.isEmpty && FileManager.default.fileExists(atPath: devlog)
@@ -118,7 +119,7 @@ enum VaultSnapshot {
         let trouble: Int; let recent: [Recent]; let thisWeek: Int; let total: Int
     }
 
-    static func collect(root: String, templatesRel: String,
+    static func collect(root: String, templatesRel: String, projectsRel: String,
                         today: String, nowMS: Int) -> Collected {
         var projects: [Project] = []
         var inbox: [Inbox] = []
@@ -142,12 +143,9 @@ enum VaultSnapshot {
             let t = meta["type"] ?? ""
             let name = String((rel as NSString).lastPathComponent.dropLast(3))
 
-            if t == "project-home", meta["status"] == "active" {
-                var pname = meta["project"] ?? ""
-                if pname.isEmpty {
-                    pname = ((rel as NSString).deletingLastPathComponent as NSString).lastPathComponent
-                }
-                if pname.isEmpty { pname = name }
+            // draft 상태도 관리 대상이다. 숨기면 상태를 바꿀 입구도 사라진다.
+            if t == "project-home" {
+                let pname = projectName(meta, rel: rel, fallback: name, projectsRel: projectsRel)
                 projects.append(Project(name: pname, stage: meta["stage"] ?? "",
                                         nextAction: meta["next_action"] ?? "",
                                         path: rel, mtime: mtime))
@@ -172,6 +170,25 @@ enum VaultSnapshot {
         return Collected(projects: projects, inbox: inbox, overdue: overdue,
                          trouble: trouble, recent: Array(recent.prefix(10)),
                          thisWeek: thisWeek, total: total)
+    }
+
+    /// project:가 있으면 그것을 쓰고, 없으면 projects 아래 첫 폴더를 쓴다.
+    /// project-home이 docs/00-overview에 있어도 "00-overview"를 프로젝트명으로
+    /// 오인하지 않게 한다.
+    private static func projectName(_ meta: [String: String], rel: String, fallback: String,
+                                    projectsRel: String) -> String {
+        let explicit = (meta["project"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !explicit.isEmpty { return explicit }
+        let base = projectsRel.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let prefix = base.isEmpty ? "" : base + "/"
+        if !prefix.isEmpty && rel.hasPrefix(prefix) {
+            let tail = String(rel.dropFirst(prefix.count))
+            if let first = tail.split(separator: "/").first, !first.isEmpty {
+                return String(first)
+            }
+        }
+        let parent = ((rel as NSString).deletingLastPathComponent as NSString).lastPathComponent
+        return parent.isEmpty ? fallback : parent
     }
 
     /// python: `int(st.st_mtime * 1000)` — **버림**이지 반올림이 아니다.

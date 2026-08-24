@@ -109,4 +109,15 @@ t_eq "경로를 담는다" "notes/개발/개발일지" "$(jq -r '.paths.devlog' 
 t_eq "프로젝트 목록을 담는다" "demo" "$(jq -r '.projects[0]' "$T_TMP/map.json")"
 t_eq "카테고리를 담는다" "6" "$(jq '.categories | length' "$T_TMP/map.json")"
 
+# 루트는 선택 사항이다. 비어 있을 때도 JSON 자체가 깨지면 Obsidian 템플릿이
+# 경로 맵 전체를 읽지 못한다.
+t_start "빈 루트의 경로 맵"
+t_vault pathmap-empty
+t_config ""
+"$DT" augment devlog --apply >/dev/null 2>&1
+map="$T_VAULT/템플릿/_devtrail-paths.md"
+sed -n '/```json/,/```/p' "$map" | sed '1d;$d' > "$T_TMP/map-empty.json"
+t_json "빈 루트여도 코드블록이 유효한 JSON" "$T_TMP/map-empty.json"
+t_eq "빈 루트를 문자열로 담는다" "" "$(jq -r '.root' "$T_TMP/map-empty.json")"
+
 t_end

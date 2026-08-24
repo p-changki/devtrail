@@ -144,13 +144,308 @@ _cap_slug() {
     | sed 's/[^[:alnum:]가-힣]\{1,\}/-/g; s/^-//; s/-$//' | cut -c1-60
 }
 
+. "$DEVTRAIL_ROOT/lib/webcapture.sh"
+
+# ── 개발일지 ─────────────────────────────────────────────────────────────────
+#
+# 메뉴바 앱은 Obsidian의 command URI를 실행할 수 없다. `new` URI는 빈 파일을
+# 만들 뿐 Templater의 folder-template 훅을 보장하지 않아, 첫 일지가 빈 채로
+# 열렸다. 이 좁은 생성기는 CLI가 해석한 파일명·헤딩만 사용해 즉시 쓸 수 있는
+# 기본 일지를 만든다. 프로젝트 선택 같은 Templater 전용 상호작용은 비워 둔다.
+_cap_devlog() {
+  local apply=0 repair_empty=0 repair_template=0 repair_order=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --apply) apply=1 ;;
+      --dry-run) apply=0 ;;
+      --repair-empty) repair_empty=1 ;;
+      --repair-template) repair_template=1 ;;
+      --repair-order) repair_order=1 ;;
+      *) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
+    esac
+    shift
+  done
+  require_config; require_bins jq
+
+  local root rel dir today file issues worklog morning youtube_rel root_rel
+  root=$(vault_root); rel=$(dt_dir devlog)
+  [ -n "$rel" ] || die "$(L "개발일지 폴더가 설정에 없습니다" "The devlog folder is not configured")"
+  dir="$root/$rel"; today=$(date +%F); file="$dir/$(dt_devlog_name "$today")"
+  issues=$(cfg '.headings.issues_pr' '## Issues / PRs')
+  worklog=$(cfg '.headings.worklog' '## Work log')
+  morning=$(cfg '.headings.morning' '### Morning')
+  youtube_rel=$(vault_rel "$(dt_dir youtube)")
+  root_rel=$(cfg '.vault.root')
+
+  step "$(L "오늘 개발일지" "Today's devlog")"
+  if [ "$repair_order" = 1 ] && [ -f "$file" ]; then
+    [ "$apply" = 1 ] || {
+      dim "   $(L "정리할 순서: 오늘 할 것 → 작업 로그 → 오늘의 이슈 / PR" \
+                 "Would order: top 3 → work log → issues / PRs")"
+      return 0
+    }
+    local stage_order; stage_order=$(mktemp "${TMPDIR:-/tmp}/devtrail-devlog-order.XXXXXX") \
+      || die "$(L "임시 파일을 만들지 못했습니다" "Could not create a temporary file")"
+    _cap_devlog_order "$file" "$issues" "$worklog" > "$stage_order" || {
+      rm -f "$stage_order"
+      die "$(L "일지 순서를 안전하게 찾지 못했습니다 — 파일은 바꾸지 않았습니다" \
+               "Could not safely identify the devlog sections — the file was not changed")"
+    }
+    jr_begin capture-devlog-reorder
+    jr_backup "$file" >/dev/null || { rm -f "$stage_order"; jr_end; die "$(L "개발일지를 백업하지 못했습니다" "Could not back up the devlog")"; }
+    cp "$stage_order" "$file" || { rm -f "$stage_order"; jr_end; die "$(L "개발일지 순서를 저장하지 못했습니다" "Could not save the devlog order")"; }
+    rm -f "$stage_order"
+    ok "$(L "개발일지 순서를 정리했습니다" "Reordered the devlog")"
+    printf 'PATH=%s\n' "$file"
+    jr_end
+    return 0
+  fi
+  if [ -f "$file" ] && { [ "$repair_empty" != 1 ] || [ -s "$file" ]; }; then
+    if [ "$repair_template" = 1 ] && ! grep -qF '## 📺 오늘 본 유튜브' "$file"; then
+      [ "$apply" = 1 ] || { dim "   $(L "보완할 자동 집계 영역" "Would restore automatic sections"): $(basename "$file")"; return 0; }
+      jr_begin capture-devlog-template-repair
+      jr_backup "$file" >/dev/null || { jr_end; die "$(L "개발일지를 백업하지 못했습니다" "Could not back up the devlog")"; }
+      _cap_devlog_auto_sections "$youtube_rel" "$root_rel" "$today" >> "$file" \
+        || { jr_end; die "$(L "자동 집계 영역을 보완하지 못했습니다" "Could not restore automatic sections")"; }
+      ok "$(L "자동 집계 영역을 보완했습니다" "Restored automatic sections"): $(basename "$file")"
+      printf 'PATH=%s\n' "$file"; jr_end; return 0
+    fi
+    ok "$(L "이미 있습니다" "Already exists"): $(basename "$file")"
+    printf 'PATH=%s\n' "$file"
+    return 0
+  fi
+  if [ "$apply" != 1 ]; then
+    dim "   $(L "만들 노트" "Would create"): $file"
+    dim "   $(L "(dry-run — 실제로 만들려면 --apply)" "(dry run — pass --apply to create it)")"
+    return 0
+  fi
+
+  local stage; stage=$(mktemp "${TMPDIR:-/tmp}/devtrail-devlog.XXXXXX") \
+    || die "$(L "임시 파일을 만들지 못했습니다" "Could not create a temporary file")"
+  cat > "$stage" <<EOF
+---
+tags:
+  - type/devlog
+type: devlog
+projects: []
+date: $today
+created: $today
+updated: $today
+---
+
+# 📅 $today 개발일지
+
+## ☀️ 아침 — 오늘 할 것 (Top 3)
+
+- [ ]
+- [ ]
+- [ ]
+
+$worklog
+
+$morning
+
+####
+-
+
+### 오후
+
+-
+
+$issues
+
+<!-- DevTrail이 이 헤딩 바로 아래에 GitHub/Linear 활동을 자동 삽입합니다. -->
+
+$( _cap_devlog_auto_sections "$youtube_rel" "$root_rel" "$today" )
+EOF
+  [ -s "$stage" ] || { rm -f "$stage"; die "$(L "빈 일지가 만들어졌습니다" "The devlog came out empty")"; }
+
+  jr_begin capture-devlog
+  jr_mkdir "$dir" || { rm -f "$stage"; jr_end; die "$(L "폴더를 만들지 못했습니다" "Could not create the folder")"; }
+  if [ -e "$file" ] && { [ "$repair_empty" != 1 ] || [ -s "$file" ]; }; then
+    rm -f "$stage"; jr_end
+    ok "$(L "이미 있습니다" "Already exists"): $(basename "$file")"
+    printf 'PATH=%s\n' "$file"
+    return 0
+  fi
+  local existed=0; [ -e "$file" ] && existed=1
+  if [ "$existed" = 1 ]; then
+    jr_backup "$file" >/dev/null || {
+      rm -f "$stage"; jr_end
+      die "$(L "기존 빈 일지를 백업하지 못했습니다" "Could not back up the empty devlog")"
+    }
+  fi
+  cp "$stage" "$file" || { rm -f "$stage"; jr_end; die "$(L "개발일지를 저장하지 못했습니다" "Could not save the devlog")"; }
+  rm -f "$stage"; [ "$existed" = 1 ] || jr_created "$file"
+  ok "$(basename "$file")"
+  printf 'PATH=%s\n' "$file"
+  dim "   $(L "GitHub 활동은 생성 직후 자동으로 채워집니다." "GitHub activity is filled automatically after creation.")"
+  jr_end
+}
+
+# 이미 만든 오늘 일지도 같은 순서로 바꾼다. 헤딩·본문 전체를 문자열 치환하지
+# 않는다. 사용자가 기록한 PR 표·작업 로그가 섞여 있으므로, 검증된 세 섹션만
+# 통째로 이동하고 형식이 다르면 파일을 건드리지 않는다.
+_cap_devlog_order() {
+  local file="$1" issues="$2" worklog="$3"
+  awk -v issues="$issues" -v worklog="$worklog" '
+    BEGIN { state="before"; found_issues=0; found_worklog=0 }
+    $0 == issues && state == "before" {
+      state="issues"; found_issues=1; issue = issue $0 ORS; next
+    }
+    $0 == worklog && state == "issues" {
+      state="worklog"; found_worklog=1; work = work $0 ORS; next
+    }
+    state == "issues" { issue = issue $0 ORS; next }
+    state == "worklog" && /^## / {
+      state="after"; after = after $0 ORS; next
+    }
+    state == "before" { before = before $0 ORS; next }
+    state == "worklog" { work = work $0 ORS; next }
+    { after = after $0 ORS }
+    END {
+      if (!found_issues || !found_worklog) exit 1
+      printf "%s%s%s%s", before, work, issue, after
+    }
+  ' "$file"
+}
+
+# CLI로 만든 일지에도 원래 Templater 양식의 읽기 전용 집계 영역을 보존한다.
+# 이 블록은 볼트에 쓰지 않고 Dataview가 열 때 읽을 경로만 담는다.
+_cap_devlog_auto_sections() {
+  local youtube="$1" root="$2" today="$3"
+  cat <<EOF
+
+## 📺 오늘 본 유튜브 (자동 집계 — 없으면 섹션째 삭제)
+
+\`\`\`dataview
+TABLE WITHOUT ID
+  file.link AS "영상",
+  channel AS "채널",
+  tl_dr_oneline AS "한 줄 요약"
+FROM "$youtube"
+WHERE type = "youtube" AND watched_at = date(this.date)
+SORT file.ctime ASC
+\`\`\`
+
+## 💡 오늘 배운 것 (1개만 — 없으면 "없음")
+
+-
+
+## 🔗 오늘 만든 노트 (자동 집계)
+
+\`\`\`dataview
+TABLE dateformat(file.ctime, "yyyy-MM-dd HH:mm") AS "생성일시"
+FROM "$root"
+WHERE file.ctime >= date(this.date) AND file.ctime < date(this.date) + dur(1 day)
+  AND file.name != this.file.name
+SORT file.ctime DESC
+LIMIT 20
+\`\`\`
+
+---
+
+## ⏮ 어제 개발일지
+
+\`\`\`dataview
+LIST
+FROM "$(vault_rel "$(dt_dir devlog)")"
+WHERE file.day < this.file.day AND file.day >= this.file.day - dur(7 days)
+SORT file.day DESC
+LIMIT 1
+\`\`\`
+EOF
+}
+
 # ── 유튜브 캡처 ──────────────────────────────────────────────────────────────
+# Claude가 /tmp의 자막을 Read 하게 하면 로컬 보안 훅이 경로를 막을 수 있다.
+# 그래서 자막 수집은 DevTrail이 맡고, 필요한 텍스트만 프롬프트에 직접 넣는다.
+_cap_youtube_transcript() {
+  local url="$1" tmp sub text
+  [ -n "${DT_CAPTURE_TRANSCRIPT:-}" ] && { printf '%s' "$DT_CAPTURE_TRANSCRIPT"; return 0; }
+  has yt-dlp || return 1
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/devtrail-youtube.XXXXXX") || return 1
+  # 와일드카드(ko.*)는 번역 자막 조합을 수십 개까지 요청해 YouTube 429를
+  # 부른다. 대표 언어 하나씩만 요청하고, SRT 변환 실패에도 원본 VTT를 읽는다.
+  yt-dlp --skip-download --write-subs --write-auto-subs \
+    --sub-langs 'ko,ja,en' \
+    -o "$tmp/%(id)s.%(ext)s" -- "$url" >/dev/null 2>&1 || true
+  sub=$(find "$tmp" -type f \( -name '*.ko*.srt' -o -name '*.ko*.vtt' -o -name '*.ja*.srt' -o -name '*.ja*.vtt' -o -name '*.en*.srt' -o -name '*.en*.vtt' -o -name '*.srt' -o -name '*.vtt' \) \
+    -print 2>/dev/null | head -1)
+  if [ -n "$sub" ] && [ -s "$sub" ]; then
+    text=$(sed -E '/^[0-9]+$/d; /^[0-9]{2}:[0-9]{2}:/d; s/<[^>]*>//g; /^[[:space:]]*$/d' "$sub" | head -c 72000)
+  else
+    text=""
+  fi
+  rm -rf "$tmp"
+  [ -n "$text" ] || return 1
+  printf '%s' "$text"
+}
+
+_cap_youtube_ai() {
+  # AI 실패는 링크 저장 실패가 아니다. 사용자는 URL을 잃지 않고 나중에 다시
+  # 정리할 수 있어야 한다.
+  local url="$1" file="$2" root="$3" provider prompt out transcript note_dir
+  [ "$(cfg '.ai.summary_enabled' 'true')" = "true" ] || {
+    dim "   $(L "AI 요약이 꺼져 있어 링크만 저장했습니다." "AI summaries are off; saved the link only.")"
+    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=skipped'
+    return 0
+  }
+  provider=$(cfg '.ai.provider' 'claude')
+  if [ "$provider" != "claude" ] || ! has claude; then
+    warn "$(L "Claude를 찾지 못해 링크만 저장했습니다" "Claude was not found; saved the link only")"
+    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
+    return 0
+  fi
+  if [ ! -d "$HOME/.claude/skills/devtrail-youtube" ]; then
+    warn "$(L "유튜브 스킬이 없어 링크만 저장했습니다 — devtrail skills sync" "The YouTube skill is missing; saved the link only — run devtrail skills sync")"
+    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
+    return 0
+  fi
+
+  transcript=$(_cap_youtube_transcript "$url") || {
+    warn "$(L "자막을 읽지 못해 링크만 저장했습니다" "Could not read captions; saved the link only")"
+    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
+    return 0
+  }
+  # 자막은 이미 DevTrail이 확보했다. Claude에는 노트가 있는 폴더만 열어
+  # 읽기·쓰기 범위를 그 파일 하나로 실질적으로 제한한다.
+  note_dir=$(dirname "$file")
+  prompt="아래 자막을 근거로 **지정한 노트 한 파일만** 완성하세요.
+URL: $url
+노트: $file
+
+frontmatter의 tl_dr_oneline·key_for_me·channel·duration·title과 본문의 메타, TL;DR, 핵심 포인트, 타임라인, 인사이트를 채우세요. 자막에 없는 내용은 만들지 마세요. 다른 파일·설정·프로젝트는 수정하지 마세요. 작업을 끝낸 뒤에는 이 노트를 실제로 저장해야 합니다.
+
+--- 자막 시작 ---
+$transcript
+--- 자막 끝 ---"
+  info "  $(L "Claude로 자막을 분석하는 중…" "Analyzing transcript with Claude…")"
+  out=$(claude -p "$prompt" --add-dir "$note_dir" --allowedTools 'Read,Edit,Write' \
+    --permission-mode acceptEdits --max-budget-usd 1 2>&1) || {
+      warn "$(L "AI 정리에 실패했습니다 — 링크 노트는 저장됐습니다" "AI analysis failed — the link note was saved")"
+      printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
+      return 0
+    }
+  # 종료 코드만 0이라고 완료로 말하지 않는다. 실제 노트가 비어 있으면
+  # 사용자에게는 실패다. 이 검증이 없어서 기존에는 '완료'처럼 보였다.
+  if ! grep -qE '^tl_dr_oneline: *[^[:space:]]' "$file"; then
+    warn "$(L "AI가 노트를 채우지 못했습니다 — 링크 노트는 저장됐습니다" "AI did not populate the note — the link note was saved")"
+    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
+    return 0
+  fi
+  ok "$(L "AI 정리 완료" "AI analysis complete")"
+  printf '%s\n' 'DEVTRAIL_CAPTURE_AI=complete'
+  [ -n "$out" ] && dim "   $(printf '%s' "$out" | tail -1)"
+}
+
 _cap_youtube() {
-  local url="" apply=0
+  local url="" apply=0 ai=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --url) shift; url="${1:-}" ;;
       --apply) apply=1 ;;
+      --ai) ai=1 ;;
       --dry-run) apply=0 ;;
       *) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
     esac
@@ -185,8 +480,23 @@ _cap_youtube() {
   #    사용자는 왜 두 개가 생겼다 하나가 사라졌는지 모른다.
   local dup; dup=$(cap_existing "$dir" "$id")
   if [ -n "$dup" ]; then
+    # 사용자가 같은 링크에서 "저장하고 정리"를 다시 눌렀다면, 새 파일을
+    # 만들지 말고 비어 있는 기존 노트의 AI 정리만 재시도한다.
+    if [ "$apply" = 1 ] && [ "$ai" = 1 ]; then
+      jr_begin capture-youtube-ai-retry
+      jr_backup "$dup" >/dev/null || { jr_end; die "$(L "AI 정리 전 백업에 실패했습니다" "Could not back up before AI analysis")"; }
+      printf 'DEVTRAIL_CAPTURE_PATH=%s\n' "$dup"
+      _cap_youtube_ai "$url" "$dup" "$root"
+      ok "$(L "기존 유튜브 노트를 다시 정리했습니다" "Retried the existing YouTube note")"
+      dim "   $(basename "$dup")"
+      jr_end
+      return 0
+    fi
     echo
     warn "$(L "이미 저장된 영상입니다" "You already saved this video")"
+    # 앱에서는 이 결과를 재실행 성공으로 오해하지 않고 기존 노트 안내로
+    # 보여 준다. 같은 URL을 다시 눌러도 새 파일은 만들지 않는다.
+    printf 'DEVTRAIL_CAPTURE_DUPLICATE=%s\n' "$dup"
     dim "   $(basename "$dup")"
     dim "   $dir"
     return 0
@@ -241,12 +551,23 @@ _cap_youtube() {
   cp "$stage" "$file" || { rm -f "$stage"; jr_end; die "$(L "저장하지 못했습니다" "Could not save")"; }
   rm -f "$stage"
   jr_created "$file"
+  # 이후 AI 단계가 외부 영상 권한 때문에 중단돼도 앱은 이 표식으로
+  # "링크 노트는 저장됨"을 정확히 구분한다.
+  printf 'DEVTRAIL_CAPTURE_PATH=%s\n' "$file"
+
+  # AI가 같은 노트를 보완하므로 생성 직후 상태를 같은 저널에 백업한다.
+  # undo 하면 링크를 지우거나(생성 저널) 분석 전 상태로 되돌릴 수 있다.
+  if [ "$ai" = 1 ]; then
+    jr_backup "$file" >/dev/null || { jr_end; die "$(L "AI 정리 전 백업에 실패했습니다" "Could not back up before AI analysis")"; }
+    _cap_youtube_ai "$url" "$file" "$root"
+  fi
 
   ok "$(basename "$file")"
   dim "   $dir"
-  # ⚠️ 분석은 아직 안 했다. 그렇게 말한다 — 빈 칸을 채워 준 척하지 않는다.
-  dim "   $(L "요약·적용점은 비어 있습니다. 자막 분석은 유튜브 스킬이 채웁니다." \
-             "The summary and takeaways are empty. The YouTube skill fills those in.")"
+  if [ "$ai" != 1 ]; then
+    dim "   $(L "요약·적용점은 비어 있습니다. --ai를 붙이면 유튜브 스킬이 채웁니다." \
+               "The summary and takeaways are empty. Pass --ai to run the YouTube skill.")"
+  fi
   dim "   $(L "되돌리기" "Undo"): devtrail undo"
   jr_end
 }
@@ -255,19 +576,25 @@ capture_cmd() {
   local what="${1:-}"; shift 2>/dev/null || true
   case "$what" in
     youtube) _cap_youtube "$@" ;;
+    web)     _cap_web "$@" ;;
+    devlog)  _cap_devlog "$@" ;;
     ""|-h|--help) usage_capture ;;
     *) die "$(L "알 수 없는 대상" "Unknown target"): $what
-   $(L "받는 것" "Supported"): youtube" ;;
+   $(L "받는 것" "Supported"): youtube, web, devlog" ;;
   esac
 }
 
 usage_capture() {
   cat <<EOF
-$(L "사용법" "Usage"): devtrail capture youtube --url "<URL>" [--apply]
+$(L "사용법" "Usage"): devtrail capture <youtube|web|devlog> [options] [--apply]
 
   $(L "Obsidian 없이 링크를 받아 둡니다. 요약과 적용점은 비어 있고," \
      "Saves a link without Obsidian. The summary and takeaways stay empty;")
   $(L "자막 분석은 유튜브 스킬이 나중에 채웁니다." \
      "the YouTube skill fills those in later.")
+
+  $(L "일반 웹 링크는 AI 없이 title·Open Graph 메타만 자료실 Inbox에 저장합니다." \
+     "General web links save title and Open Graph metadata to the Library Inbox without AI.")
+  devtrail capture web --url "https://example.com" [--apply]
 EOF
 }

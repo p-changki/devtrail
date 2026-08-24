@@ -96,8 +96,12 @@ doctor_run() {
 
   _d_section "$(L "AI 스킬" "AI skills")"
   if [ -d "$HOME/.claude/skills" ]; then
-    local have want
-    want=$(find "$DEVTRAIL_ROOT/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+    local have want skill_src
+    # 스킬 원본은 skills/ko·skills/en 아래에 있다. 상위 폴더(언어 두 개)를
+    # 세면 설치본 12개가 12/2 "누락"으로 거꾸로 보인다.
+    skill_src="$DEVTRAIL_ROOT/skills/$(dt_lang)"
+    [ -d "$skill_src" ] || skill_src="$DEVTRAIL_ROOT/skills/ko"
+    want=$(find "$skill_src" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
     have=$(find "$HOME/.claude/skills" -mindepth 1 -maxdepth 1 -type d -name 'devtrail-*' 2>/dev/null | wc -l | tr -d ' ')
     if [ "${have:-0}" -eq "${want:-0}" ] && [ "${want:-0}" -gt 0 ]; then
       ok "$(L "스킬" "Skills") ${have}/${want}"

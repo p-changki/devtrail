@@ -115,16 +115,25 @@ sp_normalize() {
 #
 #    앱은 셋업을 마친 뒤 `devtrail plugins install` 을 **따로** 권한다.
 sp_from_quick() {
-  local lang="$1" vault="$2" mode="$3"
+  local lang="$1" vault="$2" mode="$3" root="$4" modules="$5" gh_user="$6" ai="$7" src_root="$8" repos="$9" projects="${10}"
+  [ -n "$modules" ] || modules="devlog"
   jq -n \
     --argjson v "$DT_SPEC_VERSION" \
     --arg lang "$lang" \
     --arg path "$vault" \
     --arg mode "$mode" \
+    --arg root "$root" \
+    --argjson modules "$(_dt_json_array "$modules")" \
+    --arg gh "$gh_user" --arg ai "$ai" --arg src "$src_root" \
+    --argjson repos "$(_dt_json_array "$repos")" \
+    --argjson projects "$(_dt_json_array "$projects")" \
     '{
        spec_version: $v,
        lang: $lang,
-       vault: { backend: "local", path: $path, root: "", mode: $mode },
+       vault: { backend: "local", path: $path, root: $root, mode: $mode },
+       modules: $modules,
+       github: { user: $gh, src_root: $src, repos: $repos, sync_repos: $repos, projects: $projects },
+       ai: { provider: $ai },
        bootstrap_plugins: false
      }'
 }

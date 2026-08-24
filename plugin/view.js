@@ -9,8 +9,9 @@
  *    절대 경로로 불러 여기에 넘긴다 — 로딩 경로가 한 곳이어야 무엇이
  *    언제 붙는지 알 수 있다.
  *
- * ⚠️ 노트를 쓰지 않는다. 이 화면은 읽기 모델이고, 만드는 일은 등록된
- *    Templater 명령이 한다 (ADR 0002).
+ * ⚠️ 평소에는 읽기 모델이다. 단, 프로젝트 카드의 단계 선택은 사용자가 직접
+ *    고른 한 필드(`stage`)만 Obsidian의 frontmatter API로 바꾼다. CLI만으로
+ *    상태를 관리하게 하면 대시보드가 '보기 전용'으로 끝나기 때문이다.
  *
  * ⚠️ **여기서 require('obsidian') 을 하지 않는다.** 절대 경로로 불러온 모듈은
  *    'obsidian' 을 못 찾는다 — 그 이름은 플러그인 진입점(main.js)에서만
@@ -33,10 +34,10 @@ module.exports = function makeView(deps) {
     BOARD_COLUMNS,
     localDate,
     openTasks,
-    openTasksInVault,
     userNotes,
     noteTimesByDir,
     buildFlow,
+    recordedAt,
     weeklyBars,
     parseDue,
     isStale,
@@ -64,6 +65,16 @@ module.exports = function makeView(deps) {
     PATH_MAP_FILE,
     textFor,
   } = deps;
+
+  // 화면의 active는 보드 컬럼 이름이고, 노트에 쓰는 정식 값은 in-progress다.
+  // 이 대응을 한 곳에만 둔다. 그렇지 않으면 버튼은 active를 쓰고 CLI는
+  // in-progress를 쓰는 식으로 같은 상태가 두 값으로 갈라진다.
+  const STAGE_VALUES = {
+    planning: 'planning',
+    active: 'in-progress',
+    blocked: 'blocked',
+    done: 'done',
+  };
 
   class CommandCenterView extends obsidian.ItemView {
     route = 'home';
@@ -191,7 +202,12 @@ module.exports = function makeView(deps) {
      *    스크롤 아래로 밀어냈다. 만들기는 ⌘P 로 간다. */
     async viewHome(body, t, model, devlog) {
       const now = Date.now();
-      const flow = buildFlow(this.files, now, FLOW_WEEKS);
+      // iCloud로 옮긴 기존 일지는 파일 생성일이 실제 작성일과 다를 수 있다.
+      // date·created·파일명의 날짜를 먼저 써야 기록 흐름이 사실을 말한다.
+      const flowFiles = this.files.map((file) => Object.assign({}, file, {
+        ctime: recordedAt(this.app, file),
+      }));
+      const flow = buildFlow(flowFiles, now, FLOW_WEEKS);
 
       const top = body.createEl('div', { cls: 'devtrail-cc-grid-2' });
       this.panelFlow(top, t, flow);
@@ -201,6 +217,7 @@ module.exports = function makeView(deps) {
 
       const bottom = body.createEl('div', { cls: 'devtrail-cc-grid-3' });
       this.panelComposition(bottom, t, model);
+      this.panelYouTube(bottom, t);
       this.panelRecent(bottom, t, model);
     }
 
@@ -292,9 +309,16 @@ module.exports = function makeView(deps) {
       const countEl = sub.createEl('span', { text: '…', cls: 'devtrail-cc-mono devtrail-cc-faint' });
       const list = card.createEl('div', { cls: 'devtrail-cc-tasks' });
 
-      // ⚠️ 읽기는 비동기다. 화면을 먼저 그리고 채운다 — 목록을 기다리느라
-      //    나머지 패널이 늦게 뜨면 "느린 대시보드" 가 된다.
-      const tasks = await openTasksInVault(this.app, this.paths, 5, this.files);
+      // 오늘 현황은 볼트 전체의 작업함이 아니다. 오늘 개발일지에 적은 Top 3을
+      // 다시 보는 자리다. 예전에는 다른 프로젝트·워크로그의 체크박스까지 섞여
+      // "오늘 할 일"이 아닌 다섯 항목을 보여줬다.
+      let tasks = [];
+      if (devlog) {
+        try {
+          const raw = await this.app.vault.cachedRead(devlog);
+          tasks = openTasks(raw).slice(0, 5).map((text) => ({ text, file: devlog }));
+        } catch (e) { tasks = []; }
+      }
       countEl.setText(String(tasks.length));
       if (tasks.length === 0) {
         list.createEl('p', { text: t.noTasks, cls: 'devtrail-cc-muted' });
@@ -467,7 +491,53 @@ module.exports = function makeView(deps) {
       });
     }
 
-    /* 3b. 최근 기록 — 2열. */
+    /* 3b. 유튜브 — 최근 몇 건만 훑고, 자세한 정리는 기존 _index에 맡긴다.
+     * 대시보드가 두 번째 유튜브 허브가 되면 Dataview 쿼리와 상태가 갈린다. */
+    panelYouTube(parent, t) {
+      const card = parent.createEl('section', { cls: 'devtrail-cc-panel' });
+      const head = card.createEl('div', { cls: 'devtrail-cc-panel-head' });
+      head.createEl('span', { text: t.youtubeTitle, cls: 'devtrail-cc-eyebrow' });
+
+      // view.js는 읽기 모델 모듈의 내부 함수에 기대지 않는다. 메타데이터는
+      // Obsidian이 이미 가진 캐시에서 읽어 패널 오류가 전체 화면을 멈추게
+      // 하지 않는다.
+      const metaOf = (file) => this.app.metadataCache.getFileCache(file)?.frontmatter || {};
+
+      const videos = this.files
+        .filter((f) => metaOf(f).type === 'youtube')
+        .sort((a, b) => b.stat.mtime - a.stat.mtime)
+        .slice(0, 3);
+      const list = card.createEl('div', { cls: 'devtrail-cc-youtube' });
+      if (videos.length === 0) {
+        list.createEl('p', { text: t.youtubeEmpty, cls: 'devtrail-cc-muted' });
+      } else {
+        for (const file of videos) {
+          const meta = metaOf(file);
+          const row = list.createEl('div', { cls: 'devtrail-cc-youtube-row' });
+          const a = row.createEl('a', { text: meta.title || file.basename || t.youtubeUntitled,
+                                        cls: 'devtrail-cc-link' });
+          a.setAttr('role', 'button'); a.setAttr('tabindex', '0');
+          const open = () => this.app.workspace.getLeaf(false).openFile(file);
+          a.addEventListener('click', open);
+          a.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+          });
+          row.createEl('span', { text: meta.tl_dr_oneline || meta.channel || localDate(file.stat.mtime),
+                                 cls: 'devtrail-cc-youtube-meta' });
+        }
+      }
+
+      const index = this.paths && this.paths.youtube
+        ? this.app.vault.getAbstractFileByPath(`${this.paths.youtube}/_index.md`) : null;
+      const openIndex = card.createEl('button', { text: t.youtubeIndex,
+                                                   cls: 'devtrail-cc-linkbtn' });
+      openIndex.disabled = !index;
+      if (index) openIndex.addEventListener('click', () => {
+        this.app.workspace.getLeaf(false).openFile(index);
+      });
+    }
+
+    /* 3c. 최근 기록 — 2열. */
     panelRecent(parent, t, model) {
       const card = parent.createEl('section', { cls: 'devtrail-cc-panel' });
       card.createEl('div', { text: t.colRecent, cls: 'devtrail-cc-eyebrow' });
@@ -752,7 +822,7 @@ module.exports = function makeView(deps) {
       }
     }
 
-    /* 카드 하나. 제목 → 다음 행동 → 보조 메타 순으로 읽히게 둔다.
+    /* 카드 하나. 제목 → 다음 행동 → 단계 선택 → 보조 메타 순으로 읽히게 둔다.
      *
      * ⚠️ 카드 전체가 눌린다. 링크만 누르게 하면 표적이 너무 작다. */
     projectCard(parent, t, p, colKey) {
@@ -773,7 +843,8 @@ module.exports = function makeView(deps) {
       }
 
       const meta = c.createEl('div', { cls: 'devtrail-cc-pcard-meta' });
-      if (p.stage) this.badge(meta, p.stage, colKey || 'unknown');
+      const currentKey = colKey || normalizeStage(p.stage);
+      this.projectStageSelect(meta, t, p, currentKey);
       // 실제 파일 메타데이터를 쓴다. '오래됨' 기준을 임의로 만들지 않는다.
       if (p.file && p.file.stat && p.file.stat.mtime) {
         meta.createEl('span', {
@@ -787,6 +858,44 @@ module.exports = function makeView(deps) {
       c.addEventListener('click', open);
       c.addEventListener('keydown', (ev) => {
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+      });
+    }
+
+    /* 단계는 프로젝트 허브의 frontmatter 한 필드다. 드래그앤드롭처럼
+     * 추측해서 바꾸지 않고, 사용자가 고른 값만 쓴다. 이 선택기는 카드 안에
+     * 있으므로 클릭/키보드 이벤트가 카드 열기로 번지지 않게 막는다. */
+    projectStageSelect(parent, t, project, currentKey) {
+      const select = parent.createEl('select', {
+        cls: 'devtrail-cc-stage-select',
+        attr: { 'aria-label': `${project.name} ${t.stage}` },
+      });
+      select.createEl('option', {
+        value: '', text: currentKey ? t.stageChange : t.stageChoose,
+        attr: currentKey ? {} : { disabled: 'true' },
+      });
+      for (const [key] of BOARD_COLUMNS) {
+        select.createEl('option', { value: STAGE_VALUES[key], text: t.col[key] });
+      }
+      select.value = currentKey ? STAGE_VALUES[currentKey] : '';
+
+      const stop = (ev) => ev.stopPropagation();
+      select.addEventListener('click', stop);
+      select.addEventListener('keydown', stop);
+      select.addEventListener('change', async (ev) => {
+        ev.stopPropagation();
+        const stage = ev.target.value;
+        if (!stage || stage === project.stage) return;
+        try {
+          await this.app.fileManager.processFrontMatter(project.file, (frontmatter) => {
+            frontmatter.stage = stage;
+          });
+          new obsidian.Notice(t.stageChanged(project.name, t.col[normalizeStage(stage)]));
+          await this.render();
+        } catch (error) {
+          console.error('[DevTrail] 프로젝트 단계 저장 실패', error);
+          new obsidian.Notice(t.stageChangeFailed);
+          select.value = currentKey ? STAGE_VALUES[currentKey] : '';
+        }
       });
     }
 

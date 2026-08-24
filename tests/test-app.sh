@@ -48,9 +48,13 @@ t_contains "JSON 으로 읽는다" "CLI.json" "$ALL"
 # ⚠️ 경로 규칙을 앱이 다시 만들지 않는다 — CLI 가 단일 출처다.
 # ⚠️ 경로·파일명 규칙을 앱이 갖지 않는다. CLI 가 단일 출처다 —
 #    이 저장소는 dirs.devlog 로 같은 병을 네 번 고쳤다.
-for bad in "notes/" "\.obsidian" "\{\{DATE\}\}"; do
+for bad in "notes/" "\{\{DATE\}\}"; do
   t_eq "경로를 짐작하지 않는다: $bad" "0" "$(printf '%s' "$CODE" | grep -cE "$bad")"
 done
+# hotkeys.json은 파일 경로·노트 규칙이 아니라 Obsidian이 확정한 키 배정의
+# 읽기 전용 출처다. 메뉴가 기본값을 거짓으로 보여주지 않도록 정확히 이 파일만
+# 읽는 것은 허용한다.
+t_contains "실제 단축키 설정만 읽는다" "/.obsidian/hotkeys.json" "$CODE"
 # ⚠️ 변수가 '있다' 와 devlogFile 이 '그걸 쓴다' 는 다르다. 이 세션에서
 #    같은 방식으로 세 번 놓쳤다 — 선언이 아니라 사용을 본다.
 t_contains "devlogFile 이 snapshot 경로를 그대로 쓴다" \
@@ -65,6 +69,64 @@ t_eq "body 안에서 CLI 를 부르지 않는다" "0" \
   "$(printf '%s' "$BODY" | grep -cE "CLI\.(run|json|start)")"
 t_contains "명시적으로 새로고침한다" "refreshSnapshot" "$ALL"
 
+t_start "첫 실행은 메뉴바 아이콘을 찾게 하지 않는다"
+# MenuBarExtra 의 내용은 사용자가 아이콘을 눌러야 만들어진다. 미설정 사용자는
+# 그 전에 중앙 온보딩 창을 한 번 봐야 한다. 이미 설정한 사람에게 매번 창을
+# 띄우면 메뉴바 앱의 장점이 사라지므로 needsSetup 조건도 함께 본다.
+t_contains "앱 시작을 AppDelegate 가 받는다" "applicationDidFinishLaunching" "$ALL"
+t_contains "미설정일 때만 첫 실행 창을 연다" "guard status.needsSetup" "$ALL"
+t_contains "첫 실행 창은 독립 NSWindow 다" "NSWindow(" "$ALL"
+t_contains "첫 실행 전용 화면을 연다" "NSHostingView(rootView: FirstRunView" "$ALL"
+t_contains "첫 실행 창을 앞으로 가져온다" "window.makeKeyAndOrderFront(nil)" "$ALL"
+t_contains "첫 실행 화면은 볼트·언어를 역할별 카드로 묶는다" "볼트 선택" "$ALL"
+t_contains "첫 실행 화면은 선택 설정을 접어 둔다" "DisclosureGroup(\"선택 설정" "$ALL"
+t_contains "첫 실행 화면은 GitHub·동기화·AI를 선택형으로 둔다" "나중에 연결해도 됩니다" "$ALL"
+t_contains "앱이 전체 설정을 CLI로 넘긴다" "--github-user" "$ALL"
+t_contains "GitHub 입력 형식을 설명한다" "프로필 URL이 아닌 아이디입니다" "$ALL"
+
+t_start "홈은 오늘의 행동을 먼저 보여준다"
+t_contains "오늘 카드가 있다" "private var todayCard" "$ALL"
+t_contains "오늘 개발일지 생성 행동이 있다" "오늘 개발일지 만들기" "$ALL"
+t_contains "개발일지는 CLI로 표준 본문을 만든다" "func createTodayDevlog" "$ALL"
+t_contains "없는 일지에서 활동 삽입을 부르지 않는다" "else { status.createTodayDevlog() }" "$ALL"
+t_contains "일지 생성은 CLI에 맡긴다" "[\"capture\", \"devlog\", \"--apply\", \"--repair-empty\"]" "$ALL"
+t_contains "부가 기능은 더보기에 둔다" "DisclosureGroup(\"더보기\")" "$ALL"
+
+t_start "개발일지 핵심 단축키를 메뉴바에도 보여준다"
+t_contains "개발일지 도구 구역이 있다" "private var devlogToolbar" "$ALL"
+t_contains "실제 Obsidian 단축키를 읽는다" "func hotkey(for command" "$ALL"
+t_contains "활동 키는 실제 배정값을 쓴다" "status.hotkey(for: activityCommand)" "$ALL"
+t_contains "PR 키는 실제 배정값을 쓴다" "status.hotkey(for: summaryCommand)" "$ALL"
+t_contains "개발메모 도구가 있다" "개발메모" "$ALL"
+t_contains "워크로그 도구가 있다" "워크로그" "$ALL"
+t_contains "아이디어 도구가 있다" "아이디어" "$ALL"
+t_contains "템플릿은 실제 Obsidian 명령을 실행한다" "func createFromTemplate" "$ALL"
+
+t_start "AI 작업은 메뉴바에서 바로 시작한다"
+# 설치된 스킬 이름을 나열하지 않는다. 누르면 결과가 생기는 두 작업만 앞에 둔다.
+t_contains "AI 작업 구역이 있다" "private var aiActions" "$ALL"
+t_contains "유튜브 정리를 바로 연다" "유튜브 정리" "$ALL"
+t_contains "유튜브 정리가 캡처 입력을 연다" "showCaptureComposer.toggle()" \
+  "$(sed -n '/private var aiActions/,/^    }/p' "$SRC/MenuView.swift")"
+t_contains "PR AI 요약을 바로 실행한다" "status.summarizePullRequests()" "$ALL"
+t_contains "PR 요약은 전용 상태로 실행한다" 'CLI.runAsync(["summary"])' "$ALL"
+
+t_start "유튜브 정리 상태를 결과별로 보여준다"
+t_contains "실행 중 상태가 있다" "유튜브 정리 중…" "$ALL"
+t_contains "완료 상태가 있다" "유튜브 정리를 완료했습니다" "$ALL"
+t_contains "실패 상태가 있다" "유튜브 정리에 실패했습니다" "$ALL"
+t_contains "실패 로그를 보존한다" "self.lastOutput = r.text" "$ALL"
+t_contains "실패 원인은 stderr를 먼저 보여준다" "let error = r.err" "$ALL"
+t_contains "저장 후 AI 분석 불가를 별도 상태로 둔다" "captureWarning" "$ALL"
+t_contains "저장 표식이 있으면 부분 성공으로 처리한다" "Status.capturePath(from: r.text)" "$ALL"
+t_contains "중복 링크는 기존 노트로 안내한다" "DEVTRAIL_CAPTURE_DUPLICATE=" "$ALL"
+t_contains "분석 불가를 빨간 실패로 보이지 않는다" "링크는 저장했고, AI 요약만 건너뛰었습니다" "$ALL"
+
+t_start "PR AI 요약도 결과를 남긴다"
+t_contains "PR 요약 실행 중 상태가 있다" "PR AI 요약 중…" "$ALL"
+t_contains "PR 요약 완료 상태가 있다" "PR AI 요약을 완료했습니다" "$ALL"
+t_contains "PR 요약 실패 상태가 있다" "PR AI 요약을 완료하지 못했습니다" "$ALL"
+
 t_start "저장은 한 번만 눌린다"
 # ⚠️ 두 번 누르면 노트가 두 개 생긴다. CLI 의 중복 검사가 잡아 주지만,
 #    그건 마지막 방어선이지 첫 방어선이 아니다.
@@ -72,6 +134,8 @@ t_start "저장은 한 번만 눌린다"
 #    그랬다. 두 곳을 다 본다.
 t_contains "화면이 버튼을 잠근다" "disabled(status.captureBusy" "$ALL"
 t_contains "모델도 막는다" "guard !captureBusy else { return }" \
+  "$(sed -n '/func captureYouTube/,/^    }/p' "$SRC/Status.swift")"
+t_contains "AI 요약이 켜진 경우에만 자동 정리를 요청한다" 'args.append("--ai")' \
   "$(sed -n '/func captureYouTube/,/^    }/p' "$SRC/Status.swift")"
 
 t_start "네트워크는 저장할 때만"

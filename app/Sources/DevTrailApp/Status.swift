@@ -44,9 +44,19 @@ final class Status: ObservableObject {
     // ── 링크 받아두기 ──────────────────────────────────────────────────────
     @Published var captureBusy = false
     @Published var captureError: String? = nil
+    /// 링크 저장은 끝났지만 AI 분석을 할 수 없을 때의 부분 성공 상태.
+    /// 실패와 같은 빨간 카드로 섞으면 사용자가 다시 저장해 중복 노트를 만든다.
+    @Published var captureWarning: String? = nil
     @Published var captureResult: String? = nil
     @Published var captureUndoJob: String? = nil
+    @Published var summaryBusy = false
+    @Published var summaryError: String? = nil
+    @Published var summaryResult: String? = nil
     @Published var backfillDate = ""
+    /// 실제 Obsidian hotkeys.json에서 읽은 키. 설치 과정은 기존 키 충돌을
+    /// 피해 재배정할 수 있으므로, 화면에 배포 기본값을 고정해 두면 거짓말이
+    /// 된다. 이 값은 표시와 메뉴바에서 템플릿 명령을 여는 데만 쓴다.
+    @Published private(set) var hotkeys: [String: String] = [:]
 
     // MARK: - 터미널 연결 (ADR 0006 M4-4b)
     //
@@ -120,6 +130,7 @@ final class Status: ObservableObject {
         }
 
         loadConfig()
+        loadHotkeys()
         loadDevlog()
         loadSchedule()
         loadLastRun()
@@ -257,6 +268,77 @@ final class Status: ObservableObject {
         loadEffectiveToggles()
     }
 
+    /// Obsidian이 실제로 배정한 단축키를 읽는다. `config`의 볼트 경로는 CLI가
+    /// 판정했고, 앱은 여기서 키 표시만 해석한다.
+    private func loadHotkeys() {
+        guard let vault = dig("vault.path") as? String, !vault.isEmpty else {
+            hotkeys = [:]
+            return
+        }
+        let path = "\(vault)/.obsidian/hotkeys.json"
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            hotkeys = [:]
+            return
+        }
+
+        var next: [String: String] = [:]
+        for (command, value) in json {
+            guard let bindings = value as? [[String: Any]],
+                  let first = bindings.first,
+                  let key = first["key"] as? String, !key.isEmpty
+            else { continue }
+            let modifiers = first["modifiers"] as? [String] ?? []
+            let symbols = modifiers.compactMap { modifier -> String? in
+                switch modifier {
+                case "Mod": return "⌘"
+                case "Shift": return "⇧"
+                case "Alt": return "⌥"
+                case "Ctrl": return "⌃"
+                default: return nil
+                }
+            }
+            next[command] = symbols.joined() + key.uppercased()
+        }
+        hotkeys = next
+    }
+
+    /// 실제 배정값이 없으면 '미배정'이라고 표시한다. 기본값을 그럴듯하게
+    /// 보여주면 누른 사람이 아무 반응 없는 키를 외우게 된다.
+    func hotkey(for command: String) -> String {
+        hotkeys[command] ?? "미배정"
+    }
+
+    func hotkey(forTemplate names: [String]) -> String {
+        guard let command = templateCommand(names) else { return "미배정" }
+        return hotkey(for: command)
+    }
+
+    /// Templater가 등록한 명령을 Obsidian URI로 실행한다. 템플릿 파일을 그냥
+    /// 여는 것이 아니라, 새 노트를 만드는 실제 Templater 명령을 누른 것과
+    /// 같은 결과가 된다.
+    func createFromTemplate(_ names: [String], label: String) {
+        guard let command = templateCommand(names) else {
+            lastOutput = "\(label) 단축키를 찾지 못했습니다. Obsidian 설정 → 단축키에서 Templater를 확인하세요."
+            return
+        }
+        openObsidianCommand(command)
+    }
+
+    private func templateCommand(_ names: [String]) -> String? {
+        hotkeys.keys.first { id in names.contains(where: id.hasSuffix) }
+    }
+
+    private func openObsidianCommand(_ command: String) {
+        guard let encoded = command.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+              let url = URL(string: "obsidian://command?commandname=\(encoded)") else {
+            lastOutput = "Obsidian 명령을 열 수 없습니다: \(command)"
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
     static let toggleKeys = ["ai.summary_enabled", "backup.enabled", "linear.enabled"]
 
     /// 토글 값은 설정 파일에서 직접 읽지 않는다.
@@ -390,6 +472,30 @@ final class Status: ObservableObject {
         }
     }
 
+    /// PR 요약은 오래 걸릴 수 있고 GitHub 인증·Claude 설정에도 의존한다.
+    /// 일반 실행 로그 한 줄에 묻지 않고, 메뉴바에서 상태를 끝까지 보여준다.
+    func summarizePullRequests() {
+        guard busy == nil, !summaryBusy else { return }
+        busy = "PR AI 요약"
+        summaryBusy = true
+        summaryError = nil
+        summaryResult = nil
+
+        CLI.runAsync(["summary"]) { [weak self] r in
+            guard let self else { return }
+            self.busy = nil
+            self.summaryBusy = false
+            self.lastOutput = r.text
+            guard r.ok else {
+                self.summaryError = self.cliFailure(r)
+                return
+            }
+            let out = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.summaryResult = out.isEmpty ? "머지된 PR 요약을 개발일지에 반영했습니다." : out
+            self.refresh()
+        }
+    }
+
     // MARK: - 로그인 시 자동 시작
     //
     // 메뉴바 앱이 재부팅으로 사라지면 "항상 거기 있는 것"이라는 전제가 깨진다.
@@ -464,6 +570,24 @@ final class Status: ObservableObject {
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
+    /// CLI가 표준 개발일지를 만든 뒤 Obsidian으로 연다.
+    ///
+    /// `activity` 는 이미 있는 일지에 GitHub 활동을 넣는 명령이다. URI로 만든
+    /// 빈 파일은 Templater 훅이 보장되지 않아 활동 삽입도 실패했다. CLI가
+    /// 설정된 파일명·헤딩을 가진 완성된 기본 본문을 원자적으로 만든다.
+    func createTodayDevlog() {
+        guard busy == nil else { return }
+        let target = devlogFile
+        busy = "오늘 개발일지"
+        CLI.runAsync(["capture", "devlog", "--apply", "--repair-empty"]) { [weak self] r in
+            guard let self else { return }
+            self.lastOutput = r.text
+            self.busy = nil
+            if r.ok { self.openInObsidian(path: target) }
+            self.refresh()
+        }
+    }
+
     func openPath(_ path: String?) {
         guard let path, FileManager.default.fileExists(atPath: path) else {
             lastOutput = "경로가 없습니다" + (path.map { ":\n\($0)" } ?? "")
@@ -508,8 +632,14 @@ final class Status: ObservableObject {
 
     private func cliFailure(_ r: CLI.Result) -> String {
         if self.cliMissing { return "devtrail 을 찾지 못했습니다" }
-        let err = r.err.trimmingCharacters(in: .whitespacesAndNewlines)
-        return err.isEmpty ? "devtrail 실행에 실패했습니다" : err
+        // 실패 원인은 stderr를 먼저 쓴다. stdout에는 "유튜브 캡처·제목…"처럼
+        // 정상 진행 메시지가 섞여 있어 그것을 먼저 보여주면 진짜 원인이 카드
+        // 아래로 밀려난다. stdout만 남긴 오래된 스크립트에만 차선책으로 쓴다.
+        let error = r.err.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !error.isEmpty { return error }
+        let output = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !output.isEmpty { return output }
+        return "devtrail 실행에 실패했습니다 (종료 코드 \(r.code))"
     }
 
     // ── 링크 받아두기 ──────────────────────────────────────────────────────
@@ -528,24 +658,63 @@ final class Status: ObservableObject {
         guard !captureBusy else { return }
         captureBusy = true
         captureError = nil
+        captureWarning = nil
         captureResult = nil
 
         var args = ["capture", "youtube", "--url", trimmed]
         if apply { args.append("--apply") }
+        // 사용자가 설정에서 AI 요약을 켠 경우에만 명시적으로 --ai를 넘긴다.
+        // 값을 읽지 못한 상태에서는 과금·외부 실행을 추측하지 않고 링크만 저장한다.
+        if toggles["ai.summary_enabled"] == true && aiProvider == "claude" {
+            args.append("--ai")
+        }
         CLI.runAsync(args) { [weak self] r in
             guard let self = self else { return }
             self.captureBusy = false
+            // 성공·실패 모두 마지막 실행 내용을 남긴다. 앱 화면에서 실패 원인을
+            // 한 줄로 축약해도, 아래 출력에서 원문을 다시 확인할 수 있다.
+            self.lastOutput = r.text
             let out = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+            let savedNote = Status.capturePath(from: r.text)
             guard r.ok else {
+                if savedNote != nil {
+                    self.captureWarning = "링크 노트는 저장했습니다. 다만 AI가 이 영상의 자막을 읽지 못해 요약은 비어 있습니다. 비공개·삭제·연령 제한 영상은 자동 정리할 수 없습니다."
+                    if apply {
+                        self.captureUndoJob = Status.undoJob(from: r.text)
+                        self.refreshSnapshot()
+                    }
+                    return
+                }
                 self.captureError = self.cliFailure(r)
                 return
             }
-            self.captureResult = out.isEmpty ? "완료" : out
+            if r.text.contains("DEVTRAIL_CAPTURE_DUPLICATE=") {
+                self.captureResult = "이 링크는 이미 저장되어 있습니다. 기존 노트를 열어 확인하세요."
+            } else if r.text.contains("DEVTRAIL_CAPTURE_AI=unavailable") {
+                self.captureWarning = "링크 노트는 저장했습니다. 이 영상의 자막을 읽지 못해 AI 요약은 비어 있습니다. 다른 공개 영상은 정상적으로 정리할 수 있습니다."
+            } else if r.text.contains("DEVTRAIL_CAPTURE_AI=skipped") {
+                self.captureResult = "링크 노트를 저장했습니다. AI 요약은 현재 꺼져 있습니다."
+            } else if r.text.contains("DEVTRAIL_CAPTURE_AI=complete") {
+                self.captureResult = "링크 노트와 AI 요약을 저장했습니다."
+            } else {
+                self.captureResult = out.isEmpty ? "링크 노트를 저장했습니다." : out
+            }
             if apply {
-                self.captureUndoJob = Status.undoJob(from: out)
+                self.captureUndoJob = Status.undoJob(from: r.text)
                 self.refreshSnapshot()
             }
         }
+    }
+
+    /// CLI가 노트를 만든 직후 내보내는 경로 표식. 이 표식이 있으면 이후
+    /// 네트워크·AI 단계 오류를 "저장 실패"로 취급하지 않는다.
+    static func capturePath(from output: String) -> String? {
+        output.split(separator: "\n").compactMap { line in
+            let prefix = "DEVTRAIL_CAPTURE_PATH="
+            guard line.hasPrefix(prefix) else { return nil }
+            let path = String(line.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+            return path.isEmpty ? nil : path
+        }.first
     }
 
     /// 출력에서 되돌리기 작업 번호를 찾는다. 없으면 nil —

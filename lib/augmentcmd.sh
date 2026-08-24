@@ -224,7 +224,10 @@ _aug_paths_json() {
   local keys k
   keys=$(jq -r '[ .folders[] | . as $p | $p.key, (($p.children // [])[] | .key) ] | .[]' "$DT_TREE")
   {
-    printf '{\n  "root": %s,\n  "paths": {\n' "$(cfg '.vault.root' | jq -R .)"
+    # jq -R 은 빈 stdin 에 아무것도 내지 않는다. 루트가 비어 있는 정상적인
+    # 셋업에서는 `"root": ,`가 되어 템플릿이 전체 맵을 읽지 못한다.
+    # slurp로 문자열 하나를 만들면 빈 루트도 반드시 JSON 문자열 `""`가 된다.
+    printf '{\n  "root": %s,\n  "paths": {\n' "$(cfg '.vault.root' | jq -Rs .)"
     local first=1
     while IFS= read -r k; do
       [ -n "$k" ] || continue

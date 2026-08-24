@@ -51,10 +51,10 @@ devtrail doctor      # 뭐가 안 되는지 정확히 알려줍니다
 
 ## 무엇이 생기나
 
-`init` 에서 정한 루트(예: `창기/`) 아래에 이런 트리가 생깁니다.
+`init` 에서 정한 루트(예: `DevTrail/`) 아래에 이런 트리가 생깁니다.
 
 ```
-창기/
+DevTrail/
 ├── 대시보드.md            오늘·이번 주가 한눈에
 ├── 일일 체크인.md
 ├── 개발/
@@ -71,7 +71,7 @@ devtrail doctor      # 뭐가 안 되는지 정확히 알려줍니다
 │   ├── 10_원본/           첨부 · 원본 파일
 │   ├── 20_카드노트/        승격된 것만. MOC 포함
 │   └── 30_아카이브/
-├── 템플릿/                노트 템플릿 22종
+├── 템플릿/                노트 템플릿 23종
 └── 가이드/                시작하기 · 폴더와 태그 · 단축키 · 늘려 쓰기
 ```
 
@@ -209,6 +209,27 @@ devtrail install-schedule  자동 실행 등록
 devtrail uninstall         자동화 제거 (볼트는 건드리지 않음)
 ```
 
+### 링크 저장 (AI 불필요)
+
+일반 웹 링크는 자료실 Inbox에 작은 고정 `type`과 자유 태그를 가진 노트로
+저장합니다. 기본은 미리보기이며, `--apply`를 붙일 때만 파일을 만듭니다.
+
+```bash
+devtrail capture web --url "https://developer.mozilla.org/"          # dry-run
+devtrail capture web --url "https://developer.mozilla.org/" --apply  # 저장
+```
+
+title·description·Open Graph·canonical URL을 읽을 수 있으면 함께 저장합니다.
+읽지 못한 페이지도 원본 URL은 `reference`로 저장됩니다. `docs`, `tool`,
+`inspiration`, `asset`, `article`, `reference` 중 하나를 URL·도메인·제목의
+명확한 규칙으로만 고르고, 태그는 `type/<값>`, `source/<도메인>`과 필요한
+한두 개의 주제 태그만 만듭니다. 같은 URL 또는 canonical URL은 중복 저장하지
+않으며, 모든 생성은 `devtrail undo`로 되돌릴 수 있습니다.
+
+보안을 위해 `http/https`의 기본 포트만 받고, 로컬·사설·link-local 주소 및
+리다이렉트 대상에는 요청하지 않습니다. JavaScript 렌더링·로그인 전용 페이지는
+메타데이터 없이 링크만 저장될 수 있습니다.
+
 ---
 
 ## AI 스킬 12종
@@ -286,7 +307,7 @@ Obsidian
 
 ## 현재 상태 (v0.3)
 
-**되는 것** — 볼트 구조 생성 · 기존 볼트에 얹기 · 모드 3종 · 노트 템플릿 22종
+**되는 것** — 볼트 구조 생성 · 기존 볼트에 얹기 · 모드 3종 · 노트 템플릿 23종
 · 폴더별 허브 · 자동 분류 · GitHub 활동/PR 요약 · 주간리뷰 · AI 스킬 12종 ·
 되돌리기 · 메뉴바 앱 · 웹 대시보드
 
