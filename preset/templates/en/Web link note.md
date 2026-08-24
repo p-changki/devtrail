@@ -1,6 +1,9 @@
 ---
 tags: {{WEB_TAGS}}
 type: {{WEB_TYPE}}
+area: {{WEB_AREA}}
+topic: {{WEB_TOPIC}}
+source_kind: {{WEB_SOURCE_KIND}}
 status: inbox
 source: "{{WEB_SOURCE}}"
 url: "{{WEB_URL}}"

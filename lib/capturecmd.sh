@@ -1,23 +1,4 @@
-# devtrail capture — Obsidian 없이 여는 좁은 쓰기 통로 (ADR 0003)
-#
-# ⚠️ ADR 0002 는 Templater 를 쓰기의 유일한 통로로 정했다. 그 결정은 지금도
-#    옳다 — 노트 형식이 두 곳에서 만들어지면 반드시 어긋난다. 이 파일은 그
-#    경계를 **한 뼘만** 넓힌다. 넓히는 대가로 네 가지를 지킨다:
-#
-#      1. 기본이 dry-run    --apply 없이는 파일이 생기지 않는다
-#      2. 저널              모든 생성이 devtrail undo 로 사라진다
-#      3. 원자적            검증을 다 마친 뒤에만 쓴다
-#      4. 템플릿 단일 출처  형식은 볼트의 템플릿에서 온다
-#
-#    넷 중 하나라도 빼면 두 번째 쓰기 출처가 된다.
-
 # ── URL ──────────────────────────────────────────────────────────────────────
-#
-# ⚠️ 애매하면 거절한다. 잘못 만든 노트보다 안 만든 게 낫다 — 사람이 나중에
-#    지워야 하고, 그때는 왜 생겼는지도 모른다.
-#
-# 받는 것: watch?v=ID · youtu.be/ID · m.youtube.com · 추가 파라미터
-# 받지 않는 것: 채널 · 재생목록만 있는 주소 · 유튜브가 아닌 곳
 cap_video_id() {
   local url="$1" id=""
   case "$url" in
@@ -41,22 +22,19 @@ cap_existing() {
 }
 
 # ── 템플릿 ───────────────────────────────────────────────────────────────────
-#
-# ⚠️ 형식을 여기서 만들지 않는다. 볼트의 템플릿을 읽어 Templater 문법만
-#    치환한다 — 그래야 Obsidian 에서 만든 노트와 같은 모양이 된다.
 _cap_render() {
   local tpl="$1" title="$2" url="$3" channel="$4" today="$5" now="$6"
-  # ⚠️ python3 을 쓰지 않는다 (D7-B). 캡처는 python3 이 없는 기계에서도
-  #    돌아야 한다 — 링크를 잃는 것보다 나쁜 것은 없다.
-  #
-  # ⚠️ 치환값을 **문자 그대로** 넣는다. python 의 re.sub 는 치환문자열의
-  #    `\1` 을, awk 의 gsub 는 `&` 를 특수 취급한다 — 제목에 그 문자가 있으면
-  #    둘 다 조용히 망가진다. 그래서 정규식 치환 대신 잘라 붙인다.
-  #
-  # ⚠️ `<% %>` 가 여러 줄에 걸치는 경우는 다루지 않는다. 캡처가 읽는
-  #    템플릿에는 없고(실측), 남으면 아래 검사가 **소리내어** 실패한다 —
-  #    조용히 틀린 노트를 만드는 것보다 낫다.
+  # 기존 볼트는 템플릿을 사용자가 이미 고쳐 두었을 수 있다. 새 분류 필드가
+  # 없는 옛 YouTube 템플릿도 캡처 자체가 미분류가 되지 않도록, 빈 필드만
+  # category 바로 뒤에 보수적으로 덧붙인다. 템플릿의 다른 내용은 바꾸지 않는다.
+  local add_area=0 add_topic=0 add_source_kind=0
+  grep -qE '^area:' "$tpl" || add_area=1
+  grep -qE '^topic:' "$tpl" || add_topic=1
+  grep -qE '^source_kind:' "$tpl" || add_source_kind=1
+  # 값은 정규식 치환이 아닌 splice로 문자 그대로 넣고, 남은 Templater
+  # 문법은 아래 검사에서 실패시킨다.
   DT_T="$title" DT_U="$url" DT_C="$channel" DT_D="$today" DT_N="$now" \
+  DT_Y_ADD_AREA="$add_area" DT_Y_ADD_TOPIC="$add_topic" DT_Y_ADD_SOURCE_KIND="$add_source_kind" \
   awk '
     function splice(s, val,   out) {
       # RSTART/RLENGTH 자리를 val 로 바꿔 이어 붙인다 (문자 그대로).
@@ -88,6 +66,14 @@ _cap_render() {
       }
 
       buf[n++] = line
+      # 새 템플릿은 자체 필드를 쓰고, 이전 템플릿에만 누락된 필드를 넣는다.
+      # category는 frontmatter에만 등장하는 DevTrail 계약 필드다.
+      if (line ~ /^category:[ \t]*/ && !classification_added) {
+        if (ENVIRON["DT_Y_ADD_AREA"] == "1") buf[n++] = "area:"
+        if (ENVIRON["DT_Y_ADD_TOPIC"] == "1") buf[n++] = "topic:"
+        if (ENVIRON["DT_Y_ADD_SOURCE_KIND"] == "1") buf[n++] = "source_kind: youtube"
+        classification_added = 1
+      }
     }
     END {
       # 캡처가 아는 것만 채운다. 모르는 것은 비워 둔다 —
@@ -114,13 +100,7 @@ _cap_render() {
   ' "$tpl"
 }
 
-# yt-dlp 출력에서 한 필드를 뽑는다.
-#
-# ⚠️ 한 줄에 탭으로 이어 붙이지 않는다 — --print 의 서식 문자열에서 \t 는
-#    문자 그대로 나가고, 제목과 채널이 한 덩어리가 된다. 2026-08-22 에
-#    실제로 그랬다. 줄바꿈이 기준이다.
-# ⚠️ 채널을 못 얻으면 빈 값이다. 제목을 채널 자리에 넣지 않는다 —
-#    없는 것을 있는 척하는 순간 노트가 거짓을 말한다.
+# yt-dlp --print의 두 줄에서 제목·채널을 각각 읽는다.
 cap_parse_meta() {
   case "${1:-}" in
     title)   sed -n '1p' ;;
@@ -129,8 +109,6 @@ cap_parse_meta() {
   esac
 }
 
-# 제목·채널을 가져온다. 실패해도 저장은 계속한다 —
-# 링크를 잃는 것보다 제목이 없는 편이 낫다.
 _cap_meta() {
   local url="$1"
   command -v yt-dlp >/dev/null 2>&1 || return 1
@@ -144,14 +122,12 @@ _cap_slug() {
     | sed 's/[^[:alnum:]가-힣]\{1,\}/-/g; s/^-//; s/-$//' | cut -c1-60
 }
 
+. "$DEVTRAIL_ROOT/lib/taxonomy.sh"
 . "$DEVTRAIL_ROOT/lib/webcapture.sh"
 
 # ── 개발일지 ─────────────────────────────────────────────────────────────────
 #
-# 메뉴바 앱은 Obsidian의 command URI를 실행할 수 없다. `new` URI는 빈 파일을
-# 만들 뿐 Templater의 folder-template 훅을 보장하지 않아, 첫 일지가 빈 채로
-# 열렸다. 이 좁은 생성기는 CLI가 해석한 파일명·헤딩만 사용해 즉시 쓸 수 있는
-# 기본 일지를 만든다. 프로젝트 선택 같은 Templater 전용 상호작용은 비워 둔다.
+# 메뉴바용 생성기는 CLI가 해석한 파일명·헤딩으로 즉시 쓸 기본 일지를 만든다.
 _cap_devlog() {
   local apply=0 repair_empty=0 repair_template=0 repair_order=0
   while [ $# -gt 0 ]; do
@@ -417,6 +393,20 @@ URL: $url
 
 frontmatter의 tl_dr_oneline·key_for_me·channel·duration·title과 본문의 메타, TL;DR, 핵심 포인트, 타임라인, 인사이트를 채우세요. 자막에 없는 내용은 만들지 마세요. 다른 파일·설정·프로젝트는 수정하지 마세요. 작업을 끝낸 뒤에는 이 노트를 실제로 저장해야 합니다.
 
+분류는 반드시 채우세요. `category`와 `area`에는 같은 값 하나를 넣습니다:
+frontend | backend | infra | data-ai | design | common
+
+`topic`은 영상 내용에 가장 가까운 하나만 넣습니다:
+official-docs | ui-components | css-animation | accessibility | api | database |
+auth-payments | deploy-operations | monitoring | models-tools | prompts-examples |
+icons | images-illustrations | landing-references | design-tools | developer-tools |
+github-open-source | productivity-career | security | documentation | articles | uncategorized
+
+자막에 근거가 있으면 `uncategorized`를 쓰지 마세요. 예: React 컴포넌트 영상은
+frontend / ui-components, Figma 플러그인은 design / design-tools, 배포 자동화는
+infra / deploy-operations입니다. `tags`에는 기존 type/youtube를 유지하며
+area/<area>와 topic/<topic>도 추가하세요.
+
 --- 자막 시작 ---
 $transcript
 --- 자막 끝 ---"
@@ -432,6 +422,16 @@ $transcript
   if ! grep -qE '^tl_dr_oneline: *[^[:space:]]' "$file"; then
     warn "$(L "AI가 노트를 채우지 못했습니다 — 링크 노트는 저장됐습니다" "AI did not populate the note — the link note was saved")"
     printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
+    return 0
+  fi
+  local category area topic
+  category=$(sed -n 's/^category:[[:space:]]*//p' "$file" | head -1)
+  area=$(sed -n 's/^area:[[:space:]]*//p' "$file" | head -1)
+  topic=$(sed -n 's/^topic:[[:space:]]*//p' "$file" | head -1)
+  case "$area" in frontend|backend|infra|data-ai|design|common) ;; *) area="" ;; esac
+  if [ -z "$area" ] || [ "$category" != "$area" ] || [ -z "$topic" ] || [ "$topic" = "uncategorized" ]; then
+    warn "$(L "AI 요약은 저장됐지만 자료 분류를 채우지 못했습니다 — 같은 링크를 다시 정리해 보세요" "The AI summary was saved but its library category is missing — retry this link")"
+    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=partial'
     return 0
   fi
   ok "$(L "AI 정리 완료" "AI analysis complete")"
@@ -593,8 +593,8 @@ $(L "사용법" "Usage"): devtrail capture <youtube|web|devlog> [options] [--app
   $(L "자막 분석은 유튜브 스킬이 나중에 채웁니다." \
      "the YouTube skill fills those in later.")
 
-  $(L "일반 웹 링크는 AI 없이 title·Open Graph 메타만 자료실 Inbox에 저장합니다." \
-     "General web links save title and Open Graph metadata to the Library Inbox without AI.")
+  $(L "일반 웹 링크는 AI 없이 title·Open Graph 메타를 읽어 자료실 링크 폴더에 분류해 저장합니다." \
+     "General web links read title and Open Graph metadata and file them into categorized Library links without AI.")
   devtrail capture web --url "https://example.com" [--apply]
 EOF
 }

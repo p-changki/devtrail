@@ -1,6 +1,6 @@
 ---
 name: devtrail-web-capture
-description: 웹 페이지를 마크다운으로 정리해 Inbox에 담습니다. 승격은 별도입니다.
+description: 웹 URL을 개발 자료실의 분야·용도별 Markdown 노트로 저장합니다. AI를 사용하지 않습니다.
 triggers:
   - "웹 저장"
   - "이 페이지 정리"
@@ -8,70 +8,49 @@ triggers:
 user_invocable: true
 ---
 
-# 웹 → Inbox
+# 웹 → 개발 자료실
 
-읽은 것을 나중에 처리하려고 담아두는 곳입니다.
+일반 웹 자료는 기존 Inbox를 건드리지 않고, 그 옆 `링크/분야/세부용도`에 저장합니다.
+예: React 공식 문서는 `개발/프론트엔드/공식문서`, Lucide는 `디자인/아이콘`입니다.
 
-## 🔑 경로
+## 저장 원칙
 
-```bash
-devtrail path inbox
-```
+- AI·외부 API를 사용하지 않습니다.
+- URL의 title·description·Open Graph 메타만 읽습니다.
+- 명확한 도메인·URL·제목 규칙이 있을 때만 분류합니다.
+- 확신할 수 없는 자료는 `공통/미분류`에 저장합니다. 억지로 추측하지 마세요.
+- 같은 URL/canonical URL은 중복 저장하지 않습니다.
 
-## Inbox 는 임시 보관소입니다
-
-**여기서 완성하려 하지 마세요.** 담고, 2일 뒤에 다시 보고, 승격하거나 버립니다.
-승격은 `/devtrail-promote` 가 합니다.
-
-Inbox 가 20개를 넘으면 담는 속도가 처리 속도를 앞선 것입니다.
-그때는 **담기 전에 비우라고 알려주세요.**
+## 실행
 
 ```bash
-ls "$(devtrail path inbox)"/*.md 2>/dev/null | wc -l
+devtrail path inbox --rel                         # 현재 볼트의 자료실 경로 확인
+devtrail capture web --url "https://react.dev/"          # 미리보기
+devtrail capture web --url "https://react.dev/" --apply  # 실제 저장
+devtrail capture web --organize                   # 기존 미분류 링크 정리 미리보기
 ```
 
-## 절차
+`--apply`에서만 노트와 없는 `_index.md` 허브를 생성하며, 모두
+`devtrail undo`로 되돌릴 수 있습니다.
 
-### 1. 가져오기
+폴더 경로를 추측하거나 하드코딩하지 말고 `devtrail path inbox --rel`로 현재
+볼트의 자료실 경로를 먼저 확인하세요.
 
-URL 이면 내용을 읽습니다. 붙여넣은 텍스트면 그대로 씁니다.
+## 노트 메타데이터
 
-### 2. 정리
-
-| 채울 것 | 내용 |
-|---|---|
-| 제목 | 원문 제목. 없으면 내용에서 뽑습니다 |
-| 원문/맥락 | **왜 이걸 담았는가** — 이게 없으면 2일 뒤에 왜 담았는지 모릅니다 |
-| 한 줄 캡처 | 핵심 하나 |
-
-**전문을 옮겨 적지 마세요.** 원문 URL 이 있으면 링크로 충분합니다.
-담는 목적은 보관이 아니라 **다시 볼 이유를 남기는 것**입니다.
-
-### 3. 저장
-
-파일명: `YYYY-MM-DD HHmm 제목.md`
-템플릿: `$(devtrail path templates)/Inbox Capture 템플릿.md`
-
-frontmatter 에 반드시:
 ```yaml
-type: inbox-capture
-status: inbox
-source: <URL>
-source_type: web
-review_at: <2일 뒤>
+type: docs | tool | inspiration | asset | article | reference
+area: frontend | backend | infra | data-ai | design | common
+topic: <세부 용도>
+source: <도메인>
+url: <원문 URL>
 ```
 
-`review_at` 이 비면 허브의 「재방문할 때가 됐다」에 안 잡힙니다.
-
-## 하지 말 것
-
-- 전문 복사 — 링크 + 한 줄 캡처면 됩니다
-- Inbox 를 건너뛰고 카드노트로 직행 — 승격 게이트를 거쳐야 합니다
-- 「왜 담았는가」 비우기
+`area`와 `topic`은 폴더·자료실 `_index.md`·DevTrail 자료 탭의 필터가 함께
+사용합니다. 전문을 복사하지 말고 원문 링크와 메타데이터를 보존하세요.
 
 ## 결과 보고
 
 ```
-✅ 2026-08-20 1430 RAG 청킹 전략.md → Inbox/
-   ⚠️ Inbox 가 22개입니다 — /devtrail-promote 로 비우세요
+✅ React docs.md → 자료실/링크/개발/프론트엔드/공식문서/
 ```

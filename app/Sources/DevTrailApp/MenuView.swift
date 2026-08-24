@@ -17,6 +17,7 @@ struct MenuView: View {
 
     @State private var captureURL = ""
     @State private var showCaptureComposer = false
+    @State private var showBackfillComposer = false
     @StateObject private var onboard = Onboarding()
 
     var body: some View {
@@ -70,6 +71,11 @@ struct MenuView: View {
         }
         .padding(14)
         .frame(width: panelWidth)
+        // 성공(중복 포함)만 다음 입력을 위해 비운다. 실패한 URL은 그대로 남겨
+        // 사용자가 오타를 고치거나 다시 시도할 수 있게 한다.
+        .onChange(of: status.captureCompletedID) { _, _ in
+            captureURL = ""
+        }
     }
 
     // MARK: - 헤더
@@ -154,15 +160,17 @@ struct MenuView: View {
             }
             HStack(spacing: 6) {
                 tool("play.rectangle", "유튜브 정리") { showCaptureComposer.toggle() }
-                tool("sparkles", "PR AI 요약") { status.summarizePullRequests() }
+                tool("link.badge.plus", "링크 저장") { showCaptureComposer.toggle() }
             }
-            summaryFeedback
         }
     }
 
-    /// 메뉴바에서도 Obsidian에서 자주 쓰는 개발일지 단축키의 역할을 바로
-    /// 실행한다. 키를 외우지 못해도 같은 행동에 도달하고, 키를 쓰는 사람은
-    /// 버튼의 키캡으로 다시 확인할 수 있다.
+    /// 메뉴바에서도 실제 DevTrail 명령을 바로 실행한다. 키를 외우지 못해도
+    /// 같은 결과에 도달하고, 키를 쓰는 사람은 버튼의 키캡으로 다시 확인한다.
+    ///
+    /// Templater 개별 명령은 Obsidian 기본 URI가 실행할 수 없다. 이전에는
+    /// 존재하지 않는 `obsidian://command` URI를 열어 오류만 냈으므로, 여기에는
+    /// CLI가 끝까지 실행할 수 있는 세 가지 개발일지 작업만 둔다.
     private var devlogToolbar: some View {
         let hasToday = status.snapshot?.today?.devlogExists ?? false
         return VStack(alignment: .leading, spacing: 6) {
@@ -173,39 +181,47 @@ struct MenuView: View {
                 Text("개발일지 도구")
                     .font(.system(size: 12.5, weight: .semibold))
                 Spacer()
-                Text("Obsidian 단축키")
+                Text("DevTrail 단축키")
                     .font(.system(size: 10.5)).foregroundStyle(.secondary)
             }
             HStack(spacing: 6) {
                 shortcutTool(hasToday ? "doc.text" : "doc.badge.plus",
                              hasToday ? "일지 열기" : "일지 만들기",
-                             status.hotkey(forTemplate: ["개발일지양식.md", "Devlog.md"])) {
+                             nil) {
                     if hasToday { status.openInObsidian(path: status.devlogFile) }
                     else { status.createTodayDevlog() }
                 }
-                shortcutTool("arrow.down.circle", "활동", status.hotkey(for: activityCommand)) {
-                    status.run("활동 가져오기", ["activity"])
+                shortcutTool("arrow.down.circle", "오늘 이슈/PR", status.hotkey(for: activityCommand)) {
+                    status.fetchTodayActivity()
                 }
                 shortcutTool("sparkles", "PR 요약", status.hotkey(for: summaryCommand)) {
                     status.summarizePullRequests()
                 }
+                shortcutTool("calendar.badge.clock", "백필", status.hotkey(for: backfillCommand)) {
+                    status.prepareBackfill()
+                    showBackfillComposer = true
+                }
             }
-            HStack(spacing: 6) {
-                templateShortcut("square.and.pencil", "개발메모", ["개발메모 템플릿.md", "Dev note.md"])
-                templateShortcut("checklist", "워크로그", ["워크로그 템플릿.md", "Worklog.md"])
-                templateShortcut("lightbulb", "아이디어", ["아이디어 빠른저장 템플릿.md", "Quick idea.md"])
+            activityFeedback
+            summaryFeedback
+            if showBackfillComposer {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("지난 날짜의 이슈·PR과 PR 요약을 채웁니다. 날짜를 확인한 뒤 실행하세요.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    backfillRow
+                    backfillFeedback
+                }
+                .padding(9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.dtWarning.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
     }
 
     private let activityCommand = "obsidian-shellcommands:shell-command-devtrail-activity"
     private let summaryCommand = "obsidian-shellcommands:shell-command-devtrail-summary"
-    private func templateShortcut(_ icon: String, _ label: String, _ names: [String]) -> some View {
-        shortcutTool(icon, label, status.hotkey(forTemplate: names)) {
-            status.createFromTemplate(names, label: label)
-        }
-    }
-
+    private let backfillCommand = "obsidian-shellcommands:shell-command-devtrail-backfill"
     /// PR 요약은 GitHub 인증과 Claude 실행을 거친다. 누른 뒤 조용하면
     /// "안 됐나? 기다리면 되나?"를 알 수 없으므로 결과를 AI 작업 안에 남긴다.
     @ViewBuilder
@@ -246,13 +262,47 @@ struct MenuView: View {
         }
     }
 
+    @ViewBuilder
+    private var activityFeedback: some View {
+        if status.activityBusy {
+            Label("오늘 GitHub 이슈/PR을 개발일지에 넣는 중…", systemImage: "arrow.triangle.2.circlepath")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(Color.dtSuccess)
+                .padding(.top, 2)
+        } else if let error = status.activityError {
+            Label("오늘 이슈/PR을 가져오지 못했습니다: \(error)", systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 11)).foregroundStyle(Color.dtDanger)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if let result = status.activityResult {
+            Label("오늘 이슈/PR을 반영했습니다 · \(result)", systemImage: "checkmark.circle.fill")
+                .font(.system(size: 11)).foregroundStyle(Color.dtSuccess)
+                .lineLimit(2)
+        }
+    }
+
+    @ViewBuilder
+    private var backfillFeedback: some View {
+        if status.backfillBusy {
+            Label("백필 실행 중…", systemImage: "arrow.triangle.2.circlepath")
+                .font(.system(size: 11.5, weight: .medium)).foregroundStyle(Color.dtSuccess)
+        } else if let error = status.backfillError {
+            Label("백필을 완료하지 못했습니다: \(error)", systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 11)).foregroundStyle(Color.dtDanger)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if let result = status.backfillResult {
+            Label("백필 완료 · \(result)", systemImage: "checkmark.circle.fill")
+                .font(.system(size: 11)).foregroundStyle(Color.dtSuccess)
+                .lineLimit(2)
+        }
+    }
+
     private var moreActions: some View {
         DisclosureGroup("더보기") {
             VStack(alignment: .leading, spacing: 8) {
                 compactVaultState
                 Divider()
                 textRow("활동 가져오기", "arrow.down.circle") {
-                    status.run("활동", ["activity"])
+                    status.fetchTodayActivity()
                 }
                 textRow("이번 주 리뷰", "calendar") {
                     status.run("주간리뷰", ["weekly"])
@@ -340,7 +390,7 @@ struct MenuView: View {
         .accessibilityLabel("\(label): \(value). \(detail)")
     }
 
-    // MARK: - 링크 받아두기
+    // MARK: - 링크 저장
     //
     // ⚠️ Obsidian 이 꺼져 있어도 된다. 노트를 만드는 것은 CLI 이고,
     //    저널에 남아 undo 로 사라진다 (ADR 0003).
@@ -348,7 +398,7 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "link").font(.system(size: 11.5))
-                Text("링크 받아두기").font(.system(size: 11.5, weight: .medium))
+                Text("링크 저장").font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("클립보드") {
@@ -361,22 +411,42 @@ struct MenuView: View {
                 .help("클립보드의 링크를 붙여넣습니다")
             }
             HStack(spacing: 6) {
-                TextField("https://youtu.be/…", text: $captureURL)
+                TextField("YouTube 또는 웹 링크 붙여넣기", text: $captureURL)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12.5))
                     .disabled(status.captureBusy)
-                    .accessibilityLabel("유튜브 링크")
-                Button(status.captureBusy ? "AI 정리 중…" : "저장하고 정리") {
-                    status.captureYouTube(captureURL, apply: true)
+                    .accessibilityLabel("저장할 링크")
+                Button(captureButtonTitle) {
+                    status.captureLink(captureURL, apply: true)
                 }
                 .font(.system(size: 12.5, weight: .medium))
                 .controlSize(.regular)
                 // ⚠️ 두 번 누르면 노트가 두 개 생긴다.
                 .disabled(status.captureBusy || captureURL.trimmingCharacters(in: .whitespaces).isEmpty)
-                .help("AI 요약이 켜져 있으면 Claude가 자막을 분석해 노트를 정리합니다")
+                .help(captureHelp)
             }
+            Text(captureHint)
+                .font(.system(size: 10.5)).foregroundStyle(.tertiary)
             captureFeedback
         }
+    }
+
+    private var captureIsYouTube: Bool { status.isYouTubeURL(captureURL) }
+    private var captureButtonTitle: String {
+        if status.captureBusy {
+            return status.captureKind == .youtube ? "AI 정리 중…" : "저장 중…"
+        }
+        return captureIsYouTube ? "저장하고 정리" : "링크 저장"
+    }
+    private var captureHint: String {
+        captureIsYouTube
+            ? "YouTube는 AI 요약 설정이 켜진 경우에만 자막을 정리합니다."
+            : "일반 웹 링크는 AI 없이 자료실에 안전하게 저장합니다."
+    }
+    private var captureHelp: String {
+        captureIsYouTube
+            ? "AI 요약이 켜져 있으면 Claude가 자막을 분석해 노트를 정리합니다"
+            : "제목과 기본 정보를 읽어 자료실에 저장합니다. AI는 사용하지 않습니다"
     }
 
     /// 실행 중·완료·실패를 서로 다른 문장과 색으로 고정해 둔다. 이전에는
@@ -385,10 +455,12 @@ struct MenuView: View {
     private var captureFeedback: some View {
         if status.captureBusy {
             VStack(alignment: .leading, spacing: 4) {
-                Label("유튜브 정리 중…", systemImage: "arrow.triangle.2.circlepath")
+                Label(status.captureKind == .youtube ? "유튜브 정리 중…" : "링크 저장 중…", systemImage: "arrow.triangle.2.circlepath")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(Color.dtSuccess)
-                Text("링크를 저장한 뒤 Claude가 자막을 분석해 노트를 채우고 있습니다.")
+                Text(status.captureKind == .youtube
+                     ? "링크를 저장한 뒤 Claude가 자막을 분석해 노트를 채우고 있습니다."
+                     : "제목과 기본 정보를 읽어 자료실 노트를 만들고 있습니다.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 ProgressView().controlSize(.small)
             }
@@ -398,7 +470,7 @@ struct MenuView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         } else if let error = status.captureError {
             VStack(alignment: .leading, spacing: 4) {
-                Label("유튜브 정리에 실패했습니다", systemImage: "exclamationmark.triangle.fill")
+                Label(status.captureKind == .youtube ? "유튜브 정리에 실패했습니다" : "링크를 저장하지 못했습니다", systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(Color.dtDanger)
                 Text(error)
@@ -431,7 +503,7 @@ struct MenuView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
         } else if let result = status.captureResult {
             VStack(alignment: .leading, spacing: 4) {
-                Label("유튜브 정리를 완료했습니다", systemImage: "checkmark.circle.fill")
+                Label(status.captureKind == .youtube ? "유튜브 정리를 완료했습니다" : "링크를 저장했습니다", systemImage: "checkmark.circle.fill")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(Color.dtSuccess)
                 Text(result).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(3)
@@ -460,7 +532,7 @@ struct MenuView: View {
     /// 자주 쓰는 4개를 가로 아이콘으로. 세로 4줄 → 1줄.
     private var toolbar: some View {
         HStack(spacing: 4) {
-            tool("arrow.down.circle", "활동")   { status.run("활동", ["activity"]) }
+            tool("arrow.down.circle", "활동")   { status.fetchTodayActivity() }
             tool("sparkles", "요약")            { status.run("요약", ["summary"]) }
             tool("calendar", "주간")            { status.run("주간리뷰", ["weekly"]) }
             tool("folder", "docs")              { status.run("동기화", ["sync"]) }
@@ -575,14 +647,16 @@ struct MenuView: View {
         .disabled(status.busy != nil)
     }
 
-    private func shortcutTool(_ icon: String, _ label: String, _ key: String,
+    private func shortcutTool(_ icon: String, _ label: String, _ key: String? = nil,
                               _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 3) {
                 Image(systemName: icon).font(.system(size: 15))
                 Text(label).font(.system(size: 11.5, weight: .medium))
-                Text(key).font(.system(size: 9.5, weight: .medium))
-                    .foregroundStyle(.secondary)
+                if let key {
+                    Text(key).font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 7)
@@ -590,7 +664,7 @@ struct MenuView: View {
         }
         .buttonStyle(Hover(radius: 7))
         .disabled(status.busy != nil)
-        .help("Obsidian에서 \(key): \(label)")
+        .help(key.map { "Obsidian에서 \($0): \(label)" } ?? label)
     }
 
     private func linkButton(_ icon: String, _ label: String,

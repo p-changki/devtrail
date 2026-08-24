@@ -9,6 +9,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/tests/lib/harness.sh"
 SRC="$ROOT/app/Sources/DevTrailApp"
 ALL="$(cat "$SRC"/*.swift)"
+SUMMARY_TEMPLATE="$(cat "$ROOT/templates/scripts/summary.sh.tmpl")"
 # ⚠️ 주석까지 훑으면 "우리는 frontmatter 를 해석하지 않는다" 는 주석이
 #    위반으로 잡힌다. 검사 대상은 코드다.
 CODE="$(cat "$SRC"/*.swift | sed 's#//.*##; s#/\*.*\*/##')"
@@ -97,10 +98,12 @@ t_contains "개발일지 도구 구역이 있다" "private var devlogToolbar" "$
 t_contains "실제 Obsidian 단축키를 읽는다" "func hotkey(for command" "$ALL"
 t_contains "활동 키는 실제 배정값을 쓴다" "status.hotkey(for: activityCommand)" "$ALL"
 t_contains "PR 키는 실제 배정값을 쓴다" "status.hotkey(for: summaryCommand)" "$ALL"
-t_contains "개발메모 도구가 있다" "개발메모" "$ALL"
-t_contains "워크로그 도구가 있다" "워크로그" "$ALL"
-t_contains "아이디어 도구가 있다" "아이디어" "$ALL"
-t_contains "템플릿은 실제 Obsidian 명령을 실행한다" "func createFromTemplate" "$ALL"
+t_contains "오늘 이슈/PR을 메뉴바에서 바로 넣는다" "func fetchTodayActivity" "$ALL"
+t_contains "메뉴바의 오늘 이슈/PR은 이미 만든 오늘 블록도 새로고침한다" '["activity", "--refresh"]' "$ALL"
+t_contains "활동 완료·실패를 메뉴바에서 말한다" "activityResult" "$ALL"
+t_contains "백필 버튼이 날짜 입력을 바로 연다" "showBackfillComposer = true" "$ALL"
+t_contains "백필 완료·실패를 메뉴바에서 말한다" "backfillResult" "$ALL"
+t_not_contains "지원하지 않는 Obsidian command URI를 열지 않는다" "obsidian://command?commandname=" "$ALL"
 
 t_start "AI 작업은 메뉴바에서 바로 시작한다"
 # 설치된 스킬 이름을 나열하지 않는다. 누르면 결과가 생기는 두 작업만 앞에 둔다.
@@ -108,8 +111,13 @@ t_contains "AI 작업 구역이 있다" "private var aiActions" "$ALL"
 t_contains "유튜브 정리를 바로 연다" "유튜브 정리" "$ALL"
 t_contains "유튜브 정리가 캡처 입력을 연다" "showCaptureComposer.toggle()" \
   "$(sed -n '/private var aiActions/,/^    }/p' "$SRC/MenuView.swift")"
-t_contains "PR AI 요약을 바로 실행한다" "status.summarizePullRequests()" "$ALL"
+t_not_contains "AI 영역에 PR 요약을 중복하지 않는다" "summarizePullRequests" \
+  "$(sed -n '/private var aiActions/,/^    }/p' "$SRC/MenuView.swift")"
+t_contains "PR 요약은 개발일지 도구에서 실행한다" "status.summarizePullRequests()" \
+  "$(sed -n '/private var devlogToolbar/,/^    }/p' "$SRC/MenuView.swift")"
 t_contains "PR 요약은 전용 상태로 실행한다" 'CLI.runAsync(["summary"])' "$ALL"
+t_contains "날짜 백필도 개발일지 도구에 있다" "shortcutTool(\"calendar.badge.clock\", \"백필\"" "$ALL"
+t_contains "백필은 날짜를 먼저 확인하게 한다" "func prepareBackfill" "$ALL"
 
 t_start "유튜브 정리 상태를 결과별로 보여준다"
 t_contains "실행 중 상태가 있다" "유튜브 정리 중…" "$ALL"
@@ -126,6 +134,10 @@ t_start "PR AI 요약도 결과를 남긴다"
 t_contains "PR 요약 실행 중 상태가 있다" "PR AI 요약 중…" "$ALL"
 t_contains "PR 요약 완료 상태가 있다" "PR AI 요약을 완료했습니다" "$ALL"
 t_contains "PR 요약 실패 상태가 있다" "PR AI 요약을 완료하지 못했습니다" "$ALL"
+t_contains "PR 요약은 실제 삽입 완료를 확인한다" "요약 삽입 완료" "$ALL"
+t_contains "PR 요약 섹션 누락을 성공으로 보지 않는다" "섹션 없음 - 건너뜀" "$ALL"
+t_contains "PR 요약 중복은 전용 마커로 판단한다" "devtrail:pr-summary" "$SUMMARY_TEMPLATE"
+t_contains "PR 요약은 최신 활동 표를 사용한다" "devtrail:activity:end" "$SUMMARY_TEMPLATE"
 
 t_start "저장은 한 번만 눌린다"
 # ⚠️ 두 번 누르면 노트가 두 개 생긴다. CLI 의 중복 검사가 잡아 주지만,
@@ -135,8 +147,19 @@ t_start "저장은 한 번만 눌린다"
 t_contains "화면이 버튼을 잠근다" "disabled(status.captureBusy" "$ALL"
 t_contains "모델도 막는다" "guard !captureBusy else { return }" \
   "$(sed -n '/func captureYouTube/,/^    }/p' "$SRC/Status.swift")"
+t_contains "유튜브 분류 누락을 완료로 오해하지 않는다" "DEVTRAIL_CAPTURE_AI=partial" \
+  "$(sed -n '/func captureYouTube/,/^    }/p' "$SRC/Status.swift")"
 t_contains "AI 요약이 켜진 경우에만 자동 정리를 요청한다" 'args.append("--ai")' \
   "$(sed -n '/func captureYouTube/,/^    }/p' "$SRC/Status.swift")"
+
+t_start "일반 웹 링크도 메뉴바에서 저장한다"
+t_contains "URL 종류를 자동 구분한다" "func captureLink" "$ALL"
+t_contains "YouTube가 아닌 링크는 웹 캡처로 보낸다" "captureWeb(url, apply: apply)" "$ALL"
+t_contains "일반 웹 링크는 CLI 인자로 안전하게 보낸다" '["capture", "web", "--url", trimmed]' "$ALL"
+t_contains "웹 링크는 AI 없이 저장한다고 안내한다" "일반 웹 링크는 AI 없이 자료실에 안전하게 저장합니다" "$ALL"
+t_contains "링크 저장 입력을 바로 연다" "tool(\"link.badge.plus\", \"링크 저장\")" "$ALL"
+t_contains "성공한 링크 입력은 다음 저장을 위해 비운다" "captureCompletedID" "$ALL"
+t_contains "실패한 URL은 화면이 지우지 않는다" ".onChange(of: status.captureCompletedID)" "$ALL"
 
 t_start "네트워크는 저장할 때만"
 # ⚠️ URL 을 붙여넣는 것만으로 요청하면 사용자가 모르는 사이 통신이 일어난다.

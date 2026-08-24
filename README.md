@@ -1,441 +1,90 @@
 # DevTrail
 
 [![CI](https://github.com/p-changki/devtrail/actions/workflows/ci.yml/badge.svg)](https://github.com/p-changki/devtrail/actions/workflows/ci.yml)
-<!-- ⚠️ 이 배지는 **태그 릴리스·수동 실행**의 결과다. 일상 PR 은 여기서
-     검증되지 않는다 — 정식 게이트는 로컬 ./scripts/verify-local.sh 다. -->
 
-***한국어** · [English](README.en.md)*
+*[**한국어**](README.md) · [English](README.en.md)*
 
-> 개발 기록용 **Obsidian 볼트 한 벌**을 만들어 주는 CLI.
-> 폴더 구조 · 노트 템플릿 · 자동 분류 · GitHub 활동 수집 · AI 스킬까지 한 번에.
+> 개발한 것, 배운 것, 참고한 것을 오늘 기록하고 매주 다시 꺼내 쓰는 Obsidian 작업 공간
 
-손으로 쓰지 않아도 기록이 쌓이고, 쌓인 것이 주간리뷰로 굴러 올라갑니다.
+DevTrail은 macOS용 CLI·메뉴바 앱·Obsidian Command Center를 묶어, 개발자의 GitHub 활동·개발일지·프로젝트·학습 자료를 하나의 로컬 Markdown 흐름으로 연결합니다.
 
-> **언어**: 한국어가 기본이고 영어를 함께 지원합니다. `init` 이 가장 먼저
-> 언어를 묻고, 폴더 이름과 볼트 내용이 그에 맞춰 만들어집니다.
-> 영어 지원 범위는 [README.en.md](README.en.md) 를 보세요.
->
-> **플랫폼**: macOS. Linux 는 아직 시험해보지 않았습니다.
+## 누구를 위한 도구인가
 
----
+- Obsidian을 처음 쓰거나 기록 체계를 만들고 싶은 개발자
+- GitHub 작업, 개발일지, 프로젝트 문서, 학습 자료를 한 볼트에서 쓰고 싶은 사람
+- macOS에서 개인 로컬 Markdown 환경을 선호하는 사람
 
-## 30초 요약
+Raindrop·Readwise·Web Clipper를 대체하는 범용 서비스는 아닙니다. 링크를 모으는 입구보다, 모은 자료를 개발일지와 주간 회고에서 다시 쓰는 흐름에 집중합니다.
+
+## 5분 시작
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash
-
-devtrail init        # 이거 하나면 끝납니다
-                     #   1) 언어 — 한국어 / English
-                     #   2) 볼트 — Obsidian 이 아는 볼트 목록에서 고르거나 새로 만들기
-                     #   3) 설치 방식 — 기존 볼트에 얹기 / 새로 시작 / 분리 설치
-                     #   4) 루트 폴더 이름 · 모듈 · GitHub · AI
-                     # → 플러그인 4개 설치 · 설정 병합 · Obsidian 실행까지 자동
-devtrail doctor      # 뭐가 안 되는지 정확히 알려줍니다
+devtrail init
 ```
 
-`init` 이 Obsidian 플러그인 4개를 **버전을 고정해** 내려받아 넣고, 설정을
-병합한 뒤, 볼트를 열어 줍니다. 터미널과 Obsidian 을 오갈 일이 없습니다.
-설치 전에 무엇을 어디서 받는지 화면에 띄우고 동의를 받습니다.
+처음 실행하면 볼트와 언어를 고르고, 기존 볼트에 안전하게 얹을지 새로 시작할지 선택합니다. 메뉴바 앱에서는 오늘 기록, GitHub 활동, 링크 저장을 바로 실행합니다.
 
-> 사용자가 직접 해야 하는 것은 하나입니다 — Obsidian 이 "커뮤니티 플러그인을
-> 신뢰하시겠습니까?" 라고 물으면 허용하는 것. 서드파티 코드에 대한 Obsidian 의
-> 보안 확인이라 우회하지 않습니다.
->
-> 볼트를 직접 만지고 싶으면 `devtrail init --no-bootstrap` 으로 설정만 만들고
-> `devtrail obsidian` 을 나중에 실행할 수 있습니다.
+1. 볼트 선택
+2. 안전한 설정 확인
+3. 오늘 개발일지 만들기
+4. 링크 또는 빠른 메모 저장
+5. Obsidian 대시보드 열기
 
-이미 쓰던 볼트가 있어도 됩니다. `init` 이 먼저 진단하고 **기존 폴더를 그대로
-쓰는 쪽**을 제안합니다. 이미 깔려 있는 플러그인은 건드리지 않습니다.
+## 핵심 흐름
 
----
-
-## 무엇이 생기나
-
-`init` 에서 정한 루트(예: `DevTrail/`) 아래에 이런 트리가 생깁니다.
-
-```
-DevTrail/
-├── 대시보드.md            오늘·이번 주가 한눈에
-├── 일일 체크인.md
-├── 개발/
-│   ├── 개발일지/          날짜별. GitHub 활동이 자동으로 들어옵니다
-│   ├── 개발메모/
-│   │   ├── Frontend/  Backend/  DevOps/  Infra/  Testing/  General/
-│   ├── 트러블슈팅/  아이디어/  유튜브/  라이브러리/  도구/  AI/  투두/
-│   ├── 주간리뷰/  월간리뷰/  회고/    회고는 주간·월간·분기·프로젝트로 나뉩니다
-│   ├── 프로젝트/          레포별 docs 골격
-│   ├── 레포docs/          `devtrail sync` 가 프로젝트 문서를 끌어옵니다
-│   └── 학습/
-├── 자료실/
-│   ├── 00_Inbox/          일단 담는 곳
-│   ├── 10_원본/           첨부 · 원본 파일
-│   ├── 20_카드노트/        승격된 것만. MOC 포함
-│   └── 30_아카이브/
-├── 템플릿/                노트 템플릿 23종
-└── 가이드/                시작하기 · 폴더와 태그 · 단축키 · 늘려 쓰기
-```
-
-**폴더마다 `_index.md` 허브**가 있어서, 그 폴더의 노트만 모아 보여줍니다.
-
-노트를 만들면 태그에 따라 **자동으로 제자리를 찾아갑니다.**
-`#type/dev-note/frontend` 를 붙이면 `개발메모/Frontend/` 로 갑니다.
-
-### 모듈 — 필요한 것만
-
-| 모듈 | 무엇 | 기본 |
-|---|---|---|
-| `devlog` | 개발일지 + GitHub 활동 | **필수** |
-| `review` | 주간 · 월간 리뷰 | 켬 |
-| `project` | 프로젝트 구조 + docs 골격 | 켬 |
-| `pkm` | 자료실 · 카드노트 · MOC | 켬 |
-| `learn` | 학습 시스템 | 켬 |
-| `personal` | 개인 (일기 · 책 · 스크랩) | 꺼짐 |
-
-나중에 추가할 수 있습니다: `devtrail augment personal --apply`
-
----
-
-## 이미 볼트를 쓰고 계시다면
-
-가장 걱정되는 부분일 겁니다. **노트를 움직이지 않습니다.**
-
-`devtrail scan` 이 먼저 진단합니다 — 쓰기는 하지 않습니다.
-
-```
-볼트
-  노트   1727개 · 폴더 84개
-  메타   frontmatter 41%
-
-폴더 역할 추론
-  devlog    확신 0.92   312개  Daily
-  ...
-
-제안
-✅ 기존 볼트에 얹기 — 노트 1727개가 있습니다
-   기존 폴더를 그대로 쓰고 설정만 매핑합니다. 노트를 움직이지 않습니다.
-```
-
-폴더 **이름**이 아니라 내용의 형태로 역할을 추론합니다. 확정은 사용자가 합니다.
-`Daily/` 를 개발일지로 매핑하면, DevTrail 은 그 폴더를 씁니다 —
-`개발/개발일지` 를 새로 만들어 평행 구조를 만들지 않습니다.
-
-### 설치 모드 3가지
-
-| | 언제 | 자동 이동 | 기존 설정 |
-|---|---|---|---|
-| **새로 시작** | 빈 볼트 | 켬 | — |
-| **기존에 얹기** | 이미 쓰던 볼트 | **Manual** | 서식 규칙을 건드리지 않음 |
-| **분리 설치** | 가장 안전 | 우리 트리 안에서만 | 건드리지 않음 |
-
-**분리 설치**는 새 하위 트리에만 넣습니다. 마음에 안 들면 폴더째 지우면 끝입니다.
-
----
-
-## 안전 계약
-
-남의 볼트를 건드리는 도구라서, 이게 기능보다 먼저입니다.
-
-**1. 덮어쓰지 않고 병합합니다.**
-Obsidian 설정을 쓰기 전에 반드시 백업합니다. 백업이 실패하면 **원본을
-건드리지 않고 멈춥니다.** 기존 단축키 · 자동 이동 규칙 · 태그는 보존됩니다.
-
-**2. 기본이 dry-run 입니다.**
-볼트를 바꾸는 명령은 무엇을 할지 먼저 보여줍니다. `--apply` 가 있어야 씁니다.
-
-**3. 되돌릴 수 있습니다.**
-
-```bash
-devtrail undo                    # 변경 이력
-devtrail undo <ID>               # 무엇을 되돌릴지 확인 (아무것도 바꾸지 않음)
-devtrail undo <ID> --apply
-```
-
-폴더는 **비어 있을 때만** 지웁니다. 안에 노트를 넣으셨으면 남겨두고,
-남겨뒀다고 말합니다.
-
-**4. 다시 실행해도 안전합니다.**
-`augment` 는 **없는 것만** 만듭니다. 고쳐 쓰신 노트는 그대로 둡니다.
-
----
-
-## 명령
-
-### 설치 · 진단
-
-```bash
-devtrail init              대화형 셋업
-devtrail scan [경로]        볼트 진단 — 구조 · 메타 · 충돌 (쓰기 없음)
-devtrail doctor            의존성 · 인증 · 권한 · 자동화 상태
-devtrail obsidian          Obsidian 설정 병합
-devtrail plugins <sub>     Obsidian 플러그인 (install|status)
-devtrail command-center <sub>  Obsidian 화면 (install|update|enable|disable|status)
-devtrail setup <sub>       비대화형 셋업 (env|plan|apply|status) — 앱·CI 용
-devtrail augment [모듈]     없는 폴더 · 허브만 생성
-devtrail project <하위>     프로젝트 등록 (add|list)
-devtrail template <하위>    노트 템플릿 (list|diff|update)
-devtrail skills <하위>      AI 스킬 설치 (install|sync|list|remove)
-```
-
-### 기록
-
-```bash
-devtrail activity [날짜]    GitHub 이슈/PR 을 개발일지에 삽입
-devtrail summary  [날짜]    머지된 PR 을 AI 로 쉬운말 요약
-devtrail weekly            이번 주 주간리뷰 초안
-devtrail backfill [날짜]    지난 날짜를 채워 넣기
-devtrail sync              프로젝트 docs → 볼트
-```
-
-### 프로젝트
-
-```bash
-devtrail project add my-app              # 등록 + docs 골격 생성
-devtrail project add acme-fe --section acme   # 여러 레포를 한 섹션에
-devtrail project list                    # 등록된 것 보기
-```
-
-`⌘⇧P` 로 만든 프로젝트도 여기서 등록해야 개발일지·개발메모의 선택창에
-나타납니다. Templater 는 셸을 부를 수 없어 자동화할 수 없습니다.
-
-### 관리
-
-```bash
-devtrail update            DevTrail 자체를 최신으로
-devtrail undo [ID]         되돌리기
-devtrail config [get|set]  설정
-devtrail path [키]          볼트 경로 조회
-devtrail app <하위>         메뉴바 앱 (install|start|stop|status|uninstall)
-devtrail install-schedule  자동 실행 등록
-devtrail uninstall         자동화 제거 (볼트는 건드리지 않음)
-```
-
-### 링크 저장 (AI 불필요)
-
-일반 웹 링크는 자료실 Inbox에 작은 고정 `type`과 자유 태그를 가진 노트로
-저장합니다. 기본은 미리보기이며, `--apply`를 붙일 때만 파일을 만듭니다.
-
-```bash
-devtrail capture web --url "https://developer.mozilla.org/"          # dry-run
-devtrail capture web --url "https://developer.mozilla.org/" --apply  # 저장
-```
-
-title·description·Open Graph·canonical URL을 읽을 수 있으면 함께 저장합니다.
-읽지 못한 페이지도 원본 URL은 `reference`로 저장됩니다. `docs`, `tool`,
-`inspiration`, `asset`, `article`, `reference` 중 하나를 URL·도메인·제목의
-명확한 규칙으로만 고르고, 태그는 `type/<값>`, `source/<도메인>`과 필요한
-한두 개의 주제 태그만 만듭니다. 같은 URL 또는 canonical URL은 중복 저장하지
-않으며, 모든 생성은 `devtrail undo`로 되돌릴 수 있습니다.
-
-보안을 위해 `http/https`의 기본 포트만 받고, 로컬·사설·link-local 주소 및
-리다이렉트 대상에는 요청하지 않습니다. JavaScript 렌더링·로그인 전용 페이지는
-메타데이터 없이 링크만 저장될 수 있습니다.
-
----
-
-## AI 스킬 12종
-
-Claude Code 같은 AI 도구에서 쓰는 스킬을 함께 설치합니다.
-`devtrail skills install` 로 넣고, 스킬은 실행 시점에 `devtrail path` 를 불러
-**사용자의 실제 폴더 이름**을 찾습니다.
-
-| | |
+| 지금 할 일 | DevTrail이 하는 일 |
 |---|---|
-| `youtube` | 자막을 뽑아 정리하고 볼트에 저장 |
-| `web-capture` | 웹 페이지를 마크다운으로 Inbox 에 |
-| `promote` | Inbox → 카드노트 승격 (3항목 검증) |
-| `moc` | 흩어진 노트를 주제로 묶기 |
-| `rollup` | 개발일지 → 주간 → 월간 |
-| `worklog` | 작업 하나 = 폴더 하나 |
-| `docs` | 프로젝트 문서를 올바른 위치에 |
-| `pdca` | 계획·설계·분석·보고 |
-| `qa-check` | 재현 가능한 QA 체크리스트 |
-| `refcard` | 라이브러리 레퍼런스 카드 |
-| `study-log` | 학습 진도 기록 |
-| `vault-health` | Inbox 적체 · 고아 노트 · 깨진 링크 |
+| 오늘 개발일지 | 템플릿 생성, GitHub 이슈·PR 반영, AI 선택 요약 |
+| 프로젝트 문서 | 레포 문서를 볼트에 동기화하고 단계별로 표시 |
+| YouTube 링크 | 자막을 읽을 수 있으면 선택한 AI로 요약·분류 |
+| 일반 웹 링크 | AI 없이 제목·설명·Open Graph를 저장하고 분야별 자료실에 정리 |
+| 주간 회고 | 이번 주 기록을 바탕으로 초안을 생성 |
 
-DevTrail 은 **AI 도구를 요구하지 않습니다.** 스킬은 선택입니다.
+### 링크 자료실
 
----
-
-## 요구사항
-
-| | |
-|---|---|
-| **필수** | macOS · `bash` · `git` · `jq` · `python3` |
-| **Obsidian 플러그인 4종** | Shell commands · Templater · Dataview · Auto Note Mover |
-| **권장** | Calendar · Omnisearch · Linter · Homepage |
-| **GitHub 활동** | `gh` (`brew install gh && gh auth login`) |
-| **AI 요약** | Claude 또는 OpenAI (선택) |
-
-플러그인은 **직접 재구현하지 않습니다.** 설치를 안내하고, 활성화되면 설정을
-병합해 드립니다. `devtrail doctor` 가 무엇이 빠졌는지 알려줍니다.
-
----
-
-## `doctor` 를 먼저 보세요
-
-무언가 안 될 때 추측하지 않아도 됩니다.
-
-```
-$ devtrail doctor
-
-의존성
-✅ jq   ✅ gh   ✅ git   ✅ rsync
-
-Obsidian
-❌ 필수 플러그인 누락: dataview
-⚠️  alwaysUpdateLinks 가 꺼져 있습니다 — 노트를 옮기면 링크가 끊깁니다
-```
-
-무엇이 문제인지와 **어떻게 고치는지**를 같이 냅니다.
-
----
-
-## 저장소 위치
-
-| | |
-|---|---|
-| 설치본 | `~/.devtrail/src/` |
-| 설정 | `~/.devtrail/devtrail.config.json` |
-| 변경 저널 | `~/.devtrail/journal/` |
-| 볼트 | 직접 정하신 곳 |
-
-`devtrail uninstall` 은 자동화(launchd)만 제거합니다. **노트는 건드리지 않습니다.**
-메뉴바 앱은 `devtrail app uninstall` 로 따로 지웁니다.
-
----
-
-## 현재 상태 (v0.3)
-
-**되는 것** — 볼트 구조 생성 · 기존 볼트에 얹기 · 모드 3종 · 노트 템플릿 23종
-· 폴더별 허브 · 자동 분류 · GitHub 활동/PR 요약 · 주간리뷰 · AI 스킬 12종 ·
-되돌리기 · 메뉴바 앱 · 웹 대시보드
-
-**프로젝트 관계 (v0.3)** — `devtrail project add` 로 등록하면 개발일지 ·
-개발메모 · 워크로그 · 트러블슈팅이 전부 `#project/<키>` 로 이어지고,
-프로젝트 README 가 그것들을 볼트 전체에서 모읍니다.
-
-**언어** — 한국어 · English 둘 다 완전 지원. 폴더 이름 · 템플릿 · 가이드 ·
-CLI 출력 · AI 스킬 전부. 태그와 frontmatter 키는 양쪽이 같아서 자동 분류와
-Dataview 쿼리는 언어를 타지 않습니다.
-
-**아직인 것** — Linux · Windows · GitHub 외 다른 호스팅 ·
-Obsidian 외 다른 노트 앱
-
-**시험 중** — 실제 볼트에서의 장기 사용. 버그를 만나시면
-[이슈](https://github.com/p-changki/devtrail/issues)로 알려주세요.
-`devtrail doctor` 와 `devtrail scan` 출력이 있으면 훨씬 빨리 고칩니다.
-
----
-
-## 기여
-
-[CONTRIBUTING.md](CONTRIBUTING.md) · [아키텍처](docs/ARCHITECTURE.md) ·
-[디자인 토큰](docs/design-tokens.md) · [변경 이력](CHANGELOG.md)
-
-### 개발 흐름
-
-```
-수정
- → ./scripts/verify-local.sh        로컬 1차 게이트 (약 2분 30초)
- → QA 볼트에서 눈으로 확인            Obsidian ⌘Q → 재시작 → ⌘⇧Y
- → 커밋 / PR                        PR 은 diff·리뷰·결정·이력을 남기는 추적 장치
- → PR 에 로컬 QA 결과 기록
- → 사람이 리뷰하고 수동 머지
- → 태그 릴리스 시 --release (swift 빌드 + 격리 QA 볼트)
-```
-
-**PR 의 기본 대상은 `main` 입니다.** `dev` 를 임시 통합 브랜치로 쓰지
-않습니다 — 검증되지 않은 것이 모이는 곳을 하나 더 만들면, 그 브랜치가
-무엇을 담고 있는지 아무도 확신하지 못하게 됩니다. 작업 브랜치는 `main`
-에서 갈라져 `main` 으로 돌아옵니다.
-
-### 게이트는 로컬입니다
-
-**GitHub Actions 는 일상 PR 에서 돌지 않습니다.** 트리거는 태그와 수동
-실행뿐입니다.
-
-| | 로컬 (`verify-local.sh`) | GitHub Actions |
-|---|---|---|
-| 역할 | **정식 품질 게이트** | 수동 실행 · 태그 릴리스 검증 |
-| 언제 | 커밋·PR 전마다 | 태그를 밀 때, 또는 손으로 |
-| 보는 것 | 내 작업 트리 | 깨끗한 체크아웃 |
-| 환경 | 이 맥 (bash 3.2) | ubuntu + macOS 러너 |
-
-**왜 이렇게 됐나.** 2026-08 에 Actions 한도(3000분)를 다 써 CI 가 멈췄고,
-그때 드러난 것은 비용이 아니라 **게이트 구조**였습니다 — CI 가 1차 검증을
-겸하고 있어서, CI 가 멈추자 **남는 게이트가 없었습니다.** 실측으로 실행
-1회가 청구 38분(전부 macOS)이었고, PR 하나를 머지하면 2회가 돌았습니다.
-이 계정에는 다른 프로덕션 저장소들이 함께 있고, 그 예산을 지키는 것이
-DevTrail 의 편의보다 우선입니다.
-
-**대가를 분명히 적습니다.** 깨끗한 체크아웃에서의 검증과 ubuntu 로케일
-(`C.UTF-8`)의 한글 정규식 검증이 **일상에서 사라집니다.** 둘 다 태그
-릴리스에서 회수합니다 — 그래서 태그에서는 lint · guard · macOS bash 3.2 ·
-swift 빌드가 전부 돕니다.
-
-⚠️ 이 저장소의 Actions 는 현재 **비활성**입니다. 태그 트리거도 다시 켜기
-전까지는 돌지 않습니다. 그때까지 릴리스 검증은 로컬 `--release` 가
-전담합니다 — **게이트가 적혀 있다고 실제로 도는 것은 아닙니다.**
-
-### 명령
+메뉴바의 **링크 저장**에 URL을 붙여넣거나 아래 명령을 사용하세요.
 
 ```bash
-./scripts/verify-local.sh              # 기본 — run.sh fast + 작업 트리 공백
-./scripts/verify-local.sh --release    # + swift 빌드 + 격리 QA 볼트
-./scripts/qa-vault.sh [--keep]         # QA 볼트만 따로
-./tests/run.sh [all|fast|lint|guard]   # 검사의 정본
+devtrail capture web --url https://example.com        # 미리 보기만
+devtrail capture web --url https://example.com --apply
+devtrail capture web --organize --apply                # 기존 미분류 링크 재정리
 ```
 
-`verify-local.sh` 는 **검사 목록을 갖지 않습니다.** `tests/run.sh` 하나가
-정본이고, CI 도 로컬도 그것을 부릅니다. 셋의 대응은 문서가 아니라
-`tests/check-ci-coverage.py` 가 **실행 계약으로** 지킵니다 — 손으로 적은
-대응표는 곧 거짓말이 되기 때문입니다.
+링크는 `type`·분야·주제·자유 태그·도메인으로 정리됩니다. 개발 문서, 도구, 디자인 레퍼런스, 아이콘·에셋, 데이터 자료, 코딩 연습처럼 근거가 분명한 경우에만 자동 분류하고, 확신이 없으면 **미분류**로 남깁니다. 저장 뒤에는 입력칸이 비워져 다음 링크를 바로 붙여넣을 수 있습니다.
 
-### pre-push hook (선택)
+## 안전성 약속
+
+- 기본은 **dry-run**이며 `--apply`가 있을 때만 파일을 바꿉니다.
+- 기존 노트·폴더·Obsidian 설정을 덮어쓰지 않고 병합합니다.
+- 변경은 저널에 남고 `devtrail undo`로 확인·되돌릴 수 있습니다.
+- 일반 웹 링크 저장에는 AI, API 키, 유료 서비스가 필요 없습니다.
+- AI 기능은 선택 사항이며 실행 중·성공·실패 상태를 메뉴바에 표시합니다.
+
+## 구성과 요구사항
+
+- **macOS**, Obsidian, `git`, `jq`가 필요합니다.
+- GitHub 활동은 `gh auth login` 후 사용할 수 있습니다.
+- 필수 Obsidian 플러그인: Shell commands, Templater, Dataview, Auto Note Mover.
+- `DevTrail Command Center`는 CLI가 만드는 경로 맵을 읽는 Obsidian 플러그인입니다. 현재 Community Plugin 등록 전 준비 단계이며, CLI 없이도 깨지지 않고 설정 안내를 표시합니다.
+
+DevTrail은 로컬 파일 중심 도구입니다. 네트워크는 GitHub 활동, 플러그인 설치, 사용자가 저장한 웹 링크의 메타데이터 읽기에만 사용합니다.
+
+## 상태 확인과 도움말
 
 ```bash
-./scripts/install-git-hooks.sh              # 현황을 보여주고 물어봅니다
-./scripts/install-git-hooks.sh --uninstall
+devtrail doctor                    # 설정·권한·의존성 진단
+devtrail app install               # 메뉴바 앱 설치
+devtrail command-center install    # Obsidian 대시보드 설치
+devtrail undo                      # 되돌릴 수 있는 변경 목록
 ```
 
-`lint` + `guard` + **push 될 커밋 범위**의 공백 검사만 돕니다 (약 8초).
-전체 스위트를 여기서 돌리지 않습니다 — 2분짜리 push 는 사람이 반드시
-우회하고, 우회가 습관이 되면 "게이트가 있다" 는 착각만 남습니다.
+문제나 제안은 [Issues](https://github.com/p-changki/devtrail/issues)에 남겨 주세요. 가능하면 `devtrail doctor` 결과와 재현 순서를 함께 적어 주세요.
 
-- 기존 hook 이나 `core.hooksPath` 를 **덮어쓰지 않습니다.** 충돌하면 멈춥니다.
-- `git push --no-verify` 로 우회할 수 있습니다. 이것은 **보안 경계가 아니라
-  실수 방지 장치**입니다.
+## 개발
 
-### QA 볼트 (`--release` 에 포함)
+```bash
+./scripts/verify-local.sh --fast
+```
 
-격리된 임시 볼트를 만들어 **실제로** 돌립니다 — 빈 볼트 설치 → 업데이트 →
-`files.json` 파일 추가·제거 → undo 복구. 그리고 **남의 것이 변하지 않았는지**
-확인합니다: `core-plugins.json` 의 다른 키, `community-plugins.json`,
-`hotkeys.json`, 사용자 노트.
-
-- **실제 사용자 볼트를 거부합니다.** Obsidian 이 아는 볼트 목록을 읽어,
-  그 경로이거나 그 **안**이면 아무것도 하지 않습니다.
-- 저장소의 `plugin/` 도 건드리지 않습니다 (`DT_CC_SRC_OVERRIDE` 로 사본 사용).
-- Obsidian 이 실행 중이면 **안내만** 합니다. 강제 종료하지 않습니다.
-
-결과는 사람이 읽는 요약과 `qa-results/qa-vault.qa.json` (gitignored) 으로 남습니다.
-
-⚠️ **이 하니스는 파일만 봅니다.** Obsidian 재시작 후 실제로 로드되고 화면이
-그려지는지는 **확인하지 못합니다** — 그건 Obsidian 안에서만 일어납니다
-([ADR 0004](docs/decisions/0004-plugin-file-split.md)). 2026-08-23 에 테스트
-300개가 녹색인 채로 화면이 세 번 죽었습니다.
-
-그래서 JSON 에 `restart_verified: false` 와 `requires_human` 을 남깁니다.
-사람이 눈으로 확인한 뒤에만 `true` 가 됩니다. **확인하지 않은 것을
-확인했다고 말하지 않는 것**이 이 하니스의 존재 이유입니다.
-
-⚠️ macOS 기본 bash 는 **3.2** 입니다. `"$n개"` 는 죽습니다 — `"${n}개"` 로 씁니다.
-`verify-local.sh` 가 `/bin/bash` 를 명시하는 이유이기도 합니다 — PATH 의
-최신 bash(5.x)가 잡히면 이 함정을 통과시킵니다.
-
----
-
-## 라이선스
-
-[MIT](LICENSE)
+[변경 이력](CHANGELOG.md) · [기여 안내](CONTRIBUTING.md) · [구조 문서](docs/ARCHITECTURE.md) · [MIT License](LICENSE)

@@ -30,8 +30,13 @@ V=$(_vault v); H="$T_TMP/h"; _cfg "$V" "$H"
 run() { DEVTRAIL_HOME="$H" DEVTRAIL_CONFIG="$H/devtrail.config.json" "$DT" "$@"; }
 ydir() { printf '%s' "$V/$(run path youtube --rel 2>/dev/null)"; }
 count() { find "$(ydir)" -name '*.md' 2>/dev/null | wc -l | tr -d ' '; }
-webdir() { printf '%s' "$V/$(run path inbox --rel 2>/dev/null)"; }
-webcount() { find "$(webdir)" -name '*.md' 2>/dev/null | wc -l | tr -d ' '; }
+webdir() {
+  local inbox library
+  inbox=$(run path inbox --rel 2>/dev/null)
+  library=${inbox%/*}; [ "$library" = "$inbox" ] && library=""
+  printf '%s/%s' "$V/${library:+$library/}" "$( [ "$(jq -r '.lang' "$H/devtrail.config.json")" = en ] && echo Links || echo 링크 )"
+}
+webcount() { find "$(webdir)" -name '*.md' ! -name '_index.md' 2>/dev/null | wc -l | tr -d ' '; }
 
 URL="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
@@ -51,6 +56,16 @@ EOF
 cat > "$T_TMP/web-title.html" <<'EOF'
 <html><head><title>Only a title page</title></head><body>hello</body></html>
 EOF
+
+t_start "웹 분류는 개발 분야와 세부 용도를 함께 고른다"
+TAXONOMY="$({ . "$ROOT/lib/taxonomy.sh"; cap_taxonomy_web 'https://lucide.dev/icons' 'lucide.dev' 'Lucide Icons' ''; printf '%s/%s/%s' "$CAP_TAX_TYPE" "$CAP_TAX_AREA" "$CAP_TAX_TOPIC"; })"
+t_eq "아이콘은 디자인 아이콘으로 분류한다" "asset/design/icons" "$TAXONOMY"
+TAXONOMY="$({ . "$ROOT/lib/taxonomy.sh"; cap_taxonomy_web 'https://react.dev/reference' 'react.dev' 'React reference' ''; printf '%s/%s/%s' "$CAP_TAX_TYPE" "$CAP_TAX_AREA" "$CAP_TAX_TOPIC"; })"
+t_eq "React 문서는 프론트엔드 공식문서로 분류한다" "docs/frontend/official-docs" "$TAXONOMY"
+TAXONOMY="$({ . "$ROOT/lib/taxonomy.sh"; cap_taxonomy_web 'https://seed-design.io/' 'seed-design.io' 'SEED Design System' ''; printf '%s/%s/%s' "$CAP_TAX_TYPE" "$CAP_TAX_AREA" "$CAP_TAX_TOPIC"; })"
+t_eq "디자인 시스템은 디자인 시스템 자료실로 분류한다" "reference/design/color-design-systems" "$TAXONOMY"
+TAXONOMY="$({ . "$ROOT/lib/taxonomy.sh"; cap_taxonomy_web 'https://school.programmers.co.kr/learn/courses/30' 'school.programmers.co.kr' '코딩테스트 연습' ''; printf '%s/%s/%s' "$CAP_TAX_TYPE" "$CAP_TAX_AREA" "$CAP_TAX_TOPIC"; })"
+t_eq "코딩테스트는 연습 자료실로 분류한다" "reference/common/coding-practice" "$TAXONOMY"
 WEBURL="https://docs.example.test/guide?from=test"
 for bad in "" "not a url" "ftp://example.com/x" "http://127.0.0.1/" \
            "http://localhost/" "https://example.com:8443/"; do
@@ -66,7 +81,7 @@ t_contains "분류를 말한다" "type: docs" "$out"
 t_contains "저장 위치를 말한다" "만들 노트" "$out"
 DT_WEB_FETCH_FILE="$T_TMP/web-og.html" run capture web --url "$WEBURL" --apply >/dev/null
 t_eq "웹 노트가 하나 생긴다" "1" "$(webcount)"
-WEBNOTE=$(find "$(webdir)" -name '*.md' | head -1)
+WEBNOTE=$(grep -rlF -- "$WEBURL" "$(webdir)" | head -1)
 WEBBODY="$(cat "$WEBNOTE")"
 t_contains "OG 제목을 쓴다" 'title: "MDN Web Docs"' "$WEBBODY"
 t_contains "OG 설명을 쓴다" 'description: "Documentation for web developers"' "$WEBBODY"
@@ -75,7 +90,13 @@ t_contains "canonical URL을 쓴다" 'canonical_url: "https://docs.example.test/
 t_contains "작은 고정 type" 'type: docs' "$WEBBODY"
 t_contains "도메인 태그" 'source/docs.example.test' "$WEBBODY"
 t_contains "Inbox 상태" 'status: inbox' "$WEBBODY"
+t_contains "개발 분야도 쓴다" 'area: common' "$WEBBODY"
+t_contains "세부 주제도 쓴다" 'topic: documentation' "$WEBBODY"
 t_eq "웹 토큰이 남지 않는다" "0" "$(grep -c '{{WEB_' "$WEBNOTE")"
+t_file "링크 자료실 허브가 생긴다" "$(webdir)/_index.md"
+t_contains "링크 자료실은 분야별 허브도 보여준다" "devtrail:link-library:areas:start" "$(cat "$(webdir)/_index.md")"
+t_file "분야 허브가 생긴다" "$(webdir)/공통/_index.md"
+t_file "세부 분류 허브가 생긴다" "$(webdir)/공통/문서-레퍼런스/_index.md"
 
 t_start "웹 링크는 title만 있어도 저장하고 메타 실패도 폴백한다"
 TITLEURL="https://example.test/only-title"
@@ -108,8 +129,43 @@ n=$(webcount)
 COLLISIONURL="https://another.example.test/only-title"
 DT_WEB_FETCH_FILE="$T_TMP/web-title.html" run capture web --url "$COLLISIONURL" --apply >/dev/null
 t_eq "다른 URL은 새 노트가 된다" "$((n + 1))" "$(webcount)"
-t_file "이름 충돌 노트가 있다" "$(webdir)/$(date +%F)-only-a-title-page-2.md"
-t_contains "새 URL을 보존한다" "$COLLISIONURL" "$(cat "$(webdir)/$(date +%F)-only-a-title-page-2.md")"
+COLLISION_NOTE="$(webdir)/공통/미분류/$(date +%F)-only-a-title-page-2.md"
+t_file "이름 충돌 노트가 있다" "$COLLISION_NOTE"
+t_contains "새 URL을 보존한다" "$COLLISIONURL" "$(cat "$COLLISION_NOTE")"
+
+t_start "기존 미분류 링크도 다시 저장하지 않고 분야별로 정리한다"
+LEGACY_DIR="$(webdir)/공통/미분류"; mkdir -p "$LEGACY_DIR"
+LEGACY_NOTE="$LEGACY_DIR/legacy-seed.md"
+cat > "$LEGACY_NOTE" <<'EOF'
+---
+tags: ["type/reference", "area/common", "topic/uncategorized", "source/seed-design.io"]
+type: reference
+area: common
+topic: uncategorized
+source_kind: site
+status: inbox
+source: "seed-design.io"
+url: "https://seed-design.io/library"
+title: "SEED Design System"
+description: "A design system"
+saved: 2026-08-25
+---
+
+# SEED Design System
+EOF
+out=$(run capture web --organize 2>&1)
+t_eq "기존 링크 분류 dry-run 성공" "0" "$?"
+t_file "dry-run은 기존 미분류 링크를 보존한다" "$LEGACY_NOTE"
+t_contains "dry-run은 분류 계획을 보인다" "design / color-design-systems" "$out"
+run capture web --organize --apply >/dev/null
+MIGRATED_NOTE="$(webdir)/디자인/컬러-디자인시스템/legacy-seed.md"
+t_file "기존 링크를 디자인 자료실로 옮긴다" "$MIGRATED_NOTE"
+t_eq "원래 미분류 파일은 이동된다" "no" "$( [ -e "$LEGACY_NOTE" ] && echo yes || echo no )"
+t_contains "기존 링크의 분야도 바꾼다" 'area: design' "$(cat "$MIGRATED_NOTE")"
+job=$(ls -1 "$H/journal" | tail -1)
+run undo "$job" --apply >/dev/null
+t_file "기존 링크 재분류도 undo로 되돌린다" "$LEGACY_NOTE"
+t_eq "undo는 옮긴 분류 파일을 지운다" "no" "$( [ -e "$MIGRATED_NOTE" ] && echo yes || echo no )"
 
 t_start "웹 링크 생성도 undo로 되돌린다"
 UNDOURL="https://assets.example.test/icon"
@@ -230,6 +286,10 @@ t_contains "노트 읽기·쓰기를 허용한다" "Read,Edit,Write" "$(cat "$T_
 t_contains "노트 폴더만 열어 준다" "--add-dir" "$(cat "$T_TMP/claude.args")"
 t_contains "자막 언어를 하나씩만 요청한다" "--sub-langs 'ko,ja,en'" "$(cat "$ROOT/lib/capturecmd.sh")"
 t_contains "VTT 자막도 읽는다" "-name '*.vtt'" "$(cat "$ROOT/lib/capturecmd.sh")"
+t_contains "AI가 분야를 반드시 채운다" "분류는 반드시 채우세요" "$(cat "$ROOT/lib/capturecmd.sh")"
+t_contains "AI 분류값을 검증한다" "DEVTRAIL_CAPTURE_AI=partial" "$(cat "$ROOT/lib/capturecmd.sh")"
+t_contains "기존 유튜브 템플릿에도 분야 필드를 보완한다" "DT_Y_ADD_AREA" "$(cat "$ROOT/lib/capturecmd.sh")"
+t_contains "기존 웹 템플릿에도 분야 필드를 보완한다" "DT_W_ADD_AREA" "$(cat "$ROOT/lib/webcapture.sh")"
 
 t_start "AI 분석 불가는 링크 저장 실패가 아니다"
 FAILURL="https://youtu.be/EEEEEEEEEEE"
@@ -290,7 +350,7 @@ t_start "사용자 것을 건드리지 않는다"
 t_eq "설정이 그대로" "1" "$(ls -1 "$H/devtrail.config.json" | wc -l | tr -d ' ')"
 t_eq "사용자 노트가 그대로" "0" \
   "$(find "$V/notes" -name '*.md' -newer "$H/devtrail.config.json" \
-     -not -path "*유튜브*" -not -path "*자료실/00_Inbox*" -not -path "*템플릿*" 2>/dev/null | wc -l | tr -d ' ')"
+     -not -path "*유튜브*" -not -path "*자료실/00_Inbox*" -not -path "*자료실/링크*" -not -path "*템플릿*" 2>/dev/null | wc -l | tr -d ' ')"
 
 t_start "메타데이터를 제대로 갈라 읽는다"
 # ⚠️ yt-dlp 출력 파싱을 테스트가 안 타면 네트워크가 켜진 실제 실행에서만

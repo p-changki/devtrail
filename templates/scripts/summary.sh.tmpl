@@ -4,6 +4,7 @@
 #   summary.sh [YYYY-MM-DD]
 #
 # PR 번호 기준으로 중복을 막고, 섹션 헤딩은 레벨(## ~ ######)과 무관하게 찾는다.
+# 활동 수집기가 만든 `devtrail · PR (1)` 헤딩도 `devtrail` 섹션으로 인식한다.
 # AI 호출은 시간·비용이 들므로 자주 돌리지 않는 것을 전제로 한다.
 
 set -euo pipefail
@@ -68,27 +69,39 @@ while IFS= read -r pr; do
   BODY=$(echo "$pr" | jq -r '.body // ""')
   SECTION=$(section_for "$REPO")
 
-  # 섹션 존재 여부 + 중복 여부를 python 한 번으로 판단한다.
+  # 섹션 존재 여부 + AI 요약 중복 여부를 python 한 번으로 판단한다.
+  # 활동 표의 `#40` 링크는 요약 완료가 아니다. 전용 마커만 중복 근거로 쓴다.
   # 헤딩 레벨을 고정("#### ")하면 옛 노트의 "##### xxx"를 못 찾아 실패했었다.
   STATUS=$(python3 - "$TARGET_FILE" "$SECTION" "$NUM" <<'PYEOF'
 import re, sys
 target, section, num = sys.argv[1:4]
 with open(target, encoding="utf-8") as f:
     lines = f.readlines()
-h = re.compile(r'^(#{2,6})\s*' + re.escape(section) + r'\s*$')
+exact = re.compile(r'^(#{2,6})\s*' + re.escape(section) + r'\s*$')
+activity = re.compile(r'^(#{2,6})\s*' + re.escape(section) + r'\s*·\s*PR\s*\(\d+\)\s*$')
 start = level = None
 for i, line in enumerate(lines):
-    m = h.match(line.strip())
+    m = exact.match(line.strip())
     if m:
         start, level = i, len(m.group(1)); break
+if start is None:
+    for i, line in enumerate(lines):
+        m = activity.match(line.strip())
+        if m:
+            # 일지에는 어제와 오늘 활동이 함께 있을 수 있다. 마지막(오늘) 표에
+            # 넣어야 과거 기록에 새 PR 요약이 섞이지 않는다.
+            start, level = i, len(m.group(1))
 if start is None:
     print("MISSING"); sys.exit(0)
 end = len(lines)
 for j in range(start + 1, len(lines)):
+    if lines[j].strip() == "<!-- devtrail:activity:end -->":
+        end = j; break
     m2 = re.match(r'^(#{1,6})\s', lines[j].lstrip())
     if m2 and len(m2.group(1)) <= level:
         end = j; break
-print("DONE" if f"#{num}](" in "".join(lines[start:end]) else "NEW")
+marker = f"<!-- devtrail:pr-summary:{num} -->"
+print("DONE" if marker in "".join(lines[start:end]) else "NEW")
 PYEOF
 )
   case "$STATUS" in
@@ -133,6 +146,7 @@ $BODY"
   BLOCK=$(mktemp)
   {
     # '-' 접미사 = 기본 접힘. 필요한 것만 펼쳐 보게 한다.
+    printf '<!-- devtrail:pr-summary:%s -->\n' "$NUM"
     printf -- '> [!abstract]- [%s #%s](%s) — %s\n' "$REPO" "$NUM" "$URL" "$PT"
     printf -- '> **🤔 왜**\n> %s\n>\n' "$WHY"
     printf -- '> **🛠 어떻게**\n> %s\n>\n' "$HOW"
@@ -144,16 +158,25 @@ import re, sys
 target, block_path, section = sys.argv[1:4]
 with open(target, encoding="utf-8") as f: lines = f.readlines()
 with open(block_path, encoding="utf-8") as f: block = f.readlines()
-h = re.compile(r'^(#{2,6})\s*' + re.escape(section) + r'\s*$')
+exact = re.compile(r'^(#{2,6})\s*' + re.escape(section) + r'\s*$')
+activity = re.compile(r'^(#{2,6})\s*' + re.escape(section) + r'\s*·\s*PR\s*\(\d+\)\s*$')
 start = level = None
 for i, line in enumerate(lines):
-    m = h.match(line.strip())
+    m = exact.match(line.strip())
     if m:
         start, level = i, len(m.group(1)); break
+if start is None:
+    for i, line in enumerate(lines):
+        m = activity.match(line.strip())
+        if m:
+            # 위의 판별과 같은, 가장 최근 활동 표에만 삽입한다.
+            start, level = i, len(m.group(1))
 if start is None:
     print(f"섹션 '{section}' 없음", file=sys.stderr); sys.exit(1)
 end = len(lines)
 for j in range(start + 1, len(lines)):
+    if lines[j].strip() == "<!-- devtrail:activity:end -->":
+        end = j; break
     m2 = re.match(r'^(#{1,6})\s', lines[j].lstrip())
     if m2 and len(m2.group(1)) <= level:
         end = j; break
