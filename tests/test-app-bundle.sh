@@ -607,6 +607,10 @@ t_eq "메뉴바 전용(LSUIElement)" "true" \
   "$(plutil -extract LSUIElement raw "$APP/Contents/Info.plist" 2>/dev/null)"
 t_eq "번들 버전이 VERSION 과 같다" "$(tr -d ' \n' < "$ROOT/VERSION")" \
   "$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist" 2>/dev/null)"
+t_eq "DevTrail 앱 아이콘이 설정된다" "DevTrail" \
+  "$(plutil -extract CFBundleIconFile raw "$APP/Contents/Info.plist" 2>/dev/null)"
+t_eq "DevTrail.icns 가 번들에 있다" "yes" \
+  "$([ -s "$APP/Contents/Resources/DevTrail.icns" ] && echo yes || echo no)"
 
 t_start "서명이 번들 안쪽까지 닿는다"
 # ⚠️ 번들만 서명하면 Contents/Helpers 안의 실행 파일이 서명되지 않은 채
