@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# DevTrail — 기존 웹 링크의 보수적 재분류.
+# webcapture.sh가 URL 안전 검사·분류·인덱스·저널 함수를 준비한 뒤 불러온다.
+
+_cap_web_fm_value() {
+  local file="$1" key="$2"
+  awk -v key="$key" '
+    NR == 1 && $0 == "---" { in_front = 1; next }
+    in_front && $0 == "---" { exit }
+    in_front && index($0, key ":") == 1 {
+      value = substr($0, length(key) + 2)
+      sub(/^[[:space:]]+/, "", value)
+      gsub(/^"|"$/, "", value)
+      print value
+      exit
+    }
+  ' "$file"
+}
+
+_cap_web_rewrite_classification() {
+  local source="$1" target="$2" type="$3" tags="$4" area="$5" topic="$6" kind="$7" stage
+  # DevTrail이 만든 JSON 한 줄 태그만 바꾼다. 사용자가 손으로 복잡하게 바꾼
+  # YAML 태그 목록은 추측하지 않고 건너뛴다.
+  grep -qE '^tags:[[:space:]]*\[' "$source" || return 2
+  stage=$(mktemp "${TMPDIR:-/tmp}/devtrail-web-organize.XXXXXX") || return 1
+  awk -v type="$type" -v tags="$tags" -v area="$area" -v topic="$topic" -v kind="$kind" '
+    NR == 1 && $0 == "---" { in_front = 1; print; next }
+    in_front && $0 == "---" {
+      if (!seen_type) print "type: " type
+      if (!seen_tags) print "tags: " tags
+      if (!seen_area) print "area: " area
+      if (!seen_topic) print "topic: " topic
+      if (!seen_kind) print "source_kind: " kind
+      print; in_front = 0; next
+    }
+    in_front && /^type:[[:space:]]*/ { print "type: " type; seen_type = 1; next }
+    in_front && /^tags:[[:space:]]*/ { print "tags: " tags; seen_tags = 1; next }
+    in_front && /^area:[[:space:]]*/ { print "area: " area; seen_area = 1; next }
+    in_front && /^topic:[[:space:]]*/ { print "topic: " topic; seen_topic = 1; next }
+    in_front && /^source_kind:[[:space:]]*/ { print "source_kind: " kind; seen_kind = 1; next }
+    { print }
+  ' "$source" > "$stage" || { rm -f "$stage"; return 1; }
+  [ -s "$stage" ] || { rm -f "$stage"; return 1; }
+  if [ "$source" = "$target" ]; then
+    jr_backup "$source" >/dev/null || { rm -f "$stage"; return 1; }
+    mv "$stage" "$source" || { rm -f "$stage"; return 1; }
+  else
+    jr_backup "$source" >/dev/null || { rm -f "$stage"; return 1; }
+    jr_created "$target"
+    mv "$stage" "$target" || { rm -f "$stage"; return 1; }
+    rm -f "$source" || return 1
+  fi
+}
+
+_cap_web_organize() {
+  local apply="$1" root inbox_rel library_rel links_rel scan file url title description source area topic folder target_dir target changed=0 planned=0 skipped=0
+  require_config; require_bins jq
+  root=$(vault_root); inbox_rel=$(dt_dir inbox)
+  [ -n "$inbox_rel" ] || die "$(L "자료실 Inbox 폴더가 설정에 없습니다" "The Library Inbox folder is not configured")"
+  library_rel=${inbox_rel%/*}; [ "$library_rel" = "$inbox_rel" ] && library_rel=""
+  links_rel="${library_rel:+$library_rel/}$(L '링크' 'Links')"
+  scan="$root/$links_rel"
+  [ -d "$scan" ] || { info "$(L "정리할 링크 자료실이 없습니다" "No link library to organize")"; return 0; }
+
+  step "$(L "기존 링크 분류" "Organize saved links")"
+  [ "$apply" = 1 ] && jr_begin capture-web-organize
+  while IFS= read -r file; do
+    url=$(_cap_web_fm_value "$file" url)
+    [ -n "$url" ] || continue
+    area=$(_cap_web_fm_value "$file" area)
+    topic=$(_cap_web_fm_value "$file" topic)
+    # 사용자가 이미 고른 카테고리는 자동 변경하지 않는다.
+    if [ -n "$area" ] && { [ "$area" != common ] || [ "$topic" != uncategorized ]; }; then continue; fi
+    _cap_web_safe_url "$url" >/dev/null 2>&1 || { warn "$(L "URL 형식이 달라 건너뜀" "Skipping malformed URL"): $(basename "$file")"; skipped=$((skipped + 1)); continue; }
+    source="$CAP_WEB_HOST"; title=$(_cap_web_fm_value "$file" title); description=$(_cap_web_fm_value "$file" description)
+    _cap_web_classify "$url" "$source" "$title" "$description"
+    # 근거 없는 추측은 하지 않는다.
+    [ "$CAP_WEB_AREA/$CAP_WEB_TOPIC" != common/uncategorized ] || continue
+    folder=$(cap_taxonomy_folder "$CAP_WEB_AREA" "$CAP_WEB_TOPIC")
+    target_dir="$scan/$folder"; target="$target_dir/$(basename "$file")"
+    if [ "$file" != "$target" ] && [ -e "$target" ]; then
+      warn "$(L "같은 이름의 링크가 있어 건너뜀" "Skipping name collision"): $(basename "$file")"; skipped=$((skipped + 1)); continue
+    fi
+    planned=$((planned + 1)); info "  $(L "분류" "Classify"): $(basename "$file") → $CAP_WEB_AREA / $CAP_WEB_TOPIC"
+    [ "$apply" = 1 ] || continue
+    jr_mkdir "$target_dir" || { jr_end; die "$(L "분류 폴더를 만들지 못했습니다" "Could not create a category folder")"; }
+    _cap_web_rewrite_classification "$file" "$target" "$CAP_WEB_TYPE" "$CAP_WEB_TAGS" "$CAP_WEB_AREA" "$CAP_WEB_TOPIC" "$CAP_WEB_SOURCE_KIND" || {
+      rc=$?; [ "$rc" -eq 2 ] && warn "$(L "사용자 태그 형식이라 건너뜀" "Skipping custom tag format"): $(basename "$file")" || { jr_end; die "$(L "링크 분류를 저장하지 못했습니다" "Could not save link classification")"; }
+      skipped=$((skipped + 1)); continue
+    }
+    _cap_web_write_index "$scan" "$links_rel" root "$(L '링크 자료실' 'Link library')" || { jr_end; die "$(L "링크 자료실 허브를 만들지 못했습니다" "Could not create link library index")"; }
+    _cap_web_ensure_root_navigation "$scan/_index.md" "$(vault_rel "$links_rel")" || { jr_end; die "$(L "링크 자료실 허브를 보완하지 못했습니다" "Could not update link library index")"; }
+    _cap_web_write_index "$scan/${folder%%/*}" "$links_rel/${folder%%/*}" area "${folder%%/*}" "$CAP_WEB_AREA" || { jr_end; die "$(L "분야 허브를 만들지 못했습니다" "Could not create area index")"; }
+    _cap_web_write_index "$target_dir" "$links_rel/$folder" topic "${folder##*/}" "$CAP_WEB_AREA" "$CAP_WEB_TOPIC" || { jr_end; die "$(L "세부 분류 허브를 만들지 못했습니다" "Could not create topic index")"; }
+    changed=$((changed + 1))
+  done < <(find "$scan" -type f -name '*.md' ! -name '_index.md' | sort)
+  if [ "$apply" != 1 ]; then
+    info "$(L "정리 예정" "Would organize"): $planned$(L '개 링크' ' links')"
+    [ "$planned" -gt 0 ] && dim "   $(L '적용' 'Apply'): devtrail capture web --organize --apply"
+    return 0
+  fi
+  [ "$changed" -gt 0 ] && ok "$(L "기존 링크를 분야별로 정리했습니다" "Organized saved links by area"): $changed$(L '개' '')" || info "$(L "새로 분류할 링크가 없습니다" "No saved links needed reclassification")"
+  [ "$skipped" -gt 0 ] && warn "$(L "건너뜀" "Skipped"): $skipped"
+  [ "$changed" -gt 0 ] && dim "   $(L "되돌리기" "Undo"): devtrail undo"
+  jr_end
+}

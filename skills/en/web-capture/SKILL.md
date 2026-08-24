@@ -1,6 +1,6 @@
 ---
 name: devtrail-web-capture
-description: Turn a web page into markdown and drop it in the Inbox. Promotion is a separate step.
+description: Save a web URL as a categorized Markdown note in the developer library. No AI is used.
 triggers:
   - "save this page"
   - "capture this"
@@ -8,71 +8,51 @@ triggers:
 user_invocable: true
 ---
 
-# Web → Inbox
+# Web → developer library
 
-Where you put something you read so you can deal with it later.
+General web material leaves the existing Inbox alone and is saved beside it at
+`Links/<area>/<purpose>`. For example, React docs go to
+`Development/Frontend/Official Docs`; Lucide goes to `Design/Icons`.
 
-## 🔑 Path
+## Saving rules
 
-```bash
-devtrail path inbox
-```
+- No AI or external API is used.
+- Read only title, description, and Open Graph metadata from the URL.
+- Categorize only when domain, URL, or title gives a clear signal.
+- Put uncertain material in `Common/Uncategorized`; do not guess.
+- Do not duplicate an existing URL or canonical URL.
 
-## The Inbox is a holding area
-
-**Do not try to finish it here.** Drop it, look again in 2 days, promote or
-discard. Promotion is `/devtrail-promote`.
-
-Once the Inbox passes 20, you are capturing faster than you are processing.
-**At that point, tell them to empty it before capturing more.**
+## Run
 
 ```bash
-ls "$(devtrail path inbox)"/*.md 2>/dev/null | wc -l
+devtrail path inbox --rel                         # inspect the current Library path
+devtrail capture web --url "https://react.dev/"          # preview
+devtrail capture web --url "https://react.dev/" --apply  # save
+devtrail capture web --organize                   # preview organizing old uncategorized links
 ```
 
-## Steps
+Only `--apply` creates a note and missing `_index.md` hubs. Every change can be
+reverted with `devtrail undo`.
 
-### 1. Fetch
+Never guess or hard-code the folder path; query the current vault with
+`devtrail path inbox --rel` first.
 
-If it is a URL, read it. If it is pasted text, use that.
+## Note metadata
 
-### 2. Write it up
-
-| Field | What goes there |
-|---|---|
-| Title | The original title. Derive one if there is none |
-| Source / context | **Why you saved it** — without this, in 2 days you will not know |
-| One-line capture | The single point |
-
-**Do not transcribe the whole thing.** If there is a URL, a link is enough.
-The point of capturing is not storage — it is **leaving yourself a reason to
-come back**.
-
-### 3. Save
-
-Filename: `YYYY-MM-DD HHmm title.md`
-Template: `$(devtrail path templates)/Inbox capture.md`
-
-frontmatter must include:
 ```yaml
-type: inbox-capture
-status: inbox
-source: <URL>
-source_type: web
-review_at: <2 days out>
+type: docs | tool | inspiration | asset | article | reference
+area: frontend | backend | infra | data-ai | design | common
+topic: <purpose>
+source: <domain>
+url: <original URL>
 ```
 
-An empty `review_at` means the hub's "due for review" never catches it.
-
-## Do not
-
-- Copy the full text — a link plus one line is enough
-- Skip the Inbox and go straight to a zettel — it has to pass the gate
-- Leave "why you saved it" blank
+`area` and `topic` power the folders, library `_index.md` hubs, and DevTrail
+Library filters. Preserve the source link and metadata instead of copying an
+entire page.
 
 ## Report
 
 ```
-✅ 2026-08-20 1430 RAG chunking strategies.md → Inbox/
-   ⚠️ Inbox is at 22 — clear it with /devtrail-promote
+✅ React docs.md → Library/Links/Development/Frontend/Official Docs/
 ```

@@ -8,6 +8,7 @@ import SwiftUI
 final class Status: ObservableObject {
 
     enum Health { case ok, warn, bad, unknown }
+    enum CaptureKind: Equatable { case youtube, web }
 
     @Published var health: Health = .unknown
     @Published var headline = "확인 중…"
@@ -49,10 +50,25 @@ final class Status: ObservableObject {
     @Published var captureWarning: String? = nil
     @Published var captureResult: String? = nil
     @Published var captureUndoJob: String? = nil
+    /// 링크가 실제로 저장됐거나 이미 저장돼 있음을 확인한 횟수. 화면이 이
+    /// 신호를 보고 입력칸만 비운다. 실패 때는 URL을 남겨 재시도할 수 있다.
+    @Published private(set) var captureCompletedID = 0
+    /// 현재 링크 처리의 종류. 화면은 이 값으로 "AI 처리 중"과 "링크 저장 중"을
+    /// 구분해, 일반 링크도 Claude가 필요하다고 오해하지 않게 한다.
+    @Published private(set) var captureKind: CaptureKind = .youtube
     @Published var summaryBusy = false
     @Published var summaryError: String? = nil
     @Published var summaryResult: String? = nil
+    /// 오늘의 이슈/PR 삽입은 PR AI 요약과 다른, 빠른 GitHub 동기화다.
+    /// 일반 실행 로그 아래에 묻으면 눌렀는지조차 알 수 없어서 결과를 분리한다.
+    @Published var activityBusy = false
+    @Published var activityError: String? = nil
+    @Published var activityResult: String? = nil
     @Published var backfillDate = ""
+    /// 백필은 과거 일지를 바꾸므로 날짜 확인·진행·결과를 한 덩어리로 보여준다.
+    @Published var backfillBusy = false
+    @Published var backfillError: String? = nil
+    @Published var backfillResult: String? = nil
     /// 실제 Obsidian hotkeys.json에서 읽은 키. 설치 과정은 기존 키 충돌을
     /// 피해 재배정할 수 있으므로, 화면에 배포 기본값을 고정해 두면 거짓말이
     /// 된다. 이 값은 표시와 메뉴바에서 템플릿 명령을 여는 데만 쓴다.
@@ -310,35 +326,6 @@ final class Status: ObservableObject {
         hotkeys[command] ?? "미배정"
     }
 
-    func hotkey(forTemplate names: [String]) -> String {
-        guard let command = templateCommand(names) else { return "미배정" }
-        return hotkey(for: command)
-    }
-
-    /// Templater가 등록한 명령을 Obsidian URI로 실행한다. 템플릿 파일을 그냥
-    /// 여는 것이 아니라, 새 노트를 만드는 실제 Templater 명령을 누른 것과
-    /// 같은 결과가 된다.
-    func createFromTemplate(_ names: [String], label: String) {
-        guard let command = templateCommand(names) else {
-            lastOutput = "\(label) 단축키를 찾지 못했습니다. Obsidian 설정 → 단축키에서 Templater를 확인하세요."
-            return
-        }
-        openObsidianCommand(command)
-    }
-
-    private func templateCommand(_ names: [String]) -> String? {
-        hotkeys.keys.first { id in names.contains(where: id.hasSuffix) }
-    }
-
-    private func openObsidianCommand(_ command: String) {
-        guard let encoded = command.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
-              let url = URL(string: "obsidian://command?commandname=\(encoded)") else {
-            lastOutput = "Obsidian 명령을 열 수 없습니다: \(command)"
-            return
-        }
-        NSWorkspace.shared.open(url)
-    }
-
     static let toggleKeys = ["ai.summary_enabled", "backup.enabled", "linear.enabled"]
 
     /// 토글 값은 설정 파일에서 직접 읽지 않는다.
@@ -491,7 +478,44 @@ final class Status: ObservableObject {
                 return
             }
             let out = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
-            self.summaryResult = out.isEmpty ? "머지된 PR 요약을 개발일지에 반영했습니다." : out
+            if out.contains("요약 삽입 완료") {
+                self.summaryResult = out
+            } else if out.contains("섹션 없음 - 건너뜀") ||
+                      out.contains("AI 요약 실패 - 건너뜀") ||
+                      out.contains("AI 출력 형식이 예상과 다름 - 건너뜀") {
+                self.summaryError = out.isEmpty
+                    ? "PR 요약을 넣을 자리를 찾지 못했습니다."
+                    : out
+            } else if out.contains("머지된 PR 없음") || out.contains("새로 요약할 PR 없음") {
+                self.summaryResult = "오늘 새로 요약할 PR이 없습니다."
+            } else {
+                self.summaryResult = out.isEmpty ? "PR 요약 결과를 확인할 수 없습니다." : out
+            }
+            self.refresh()
+        }
+    }
+
+    /// 오늘 개발일지의 GitHub 이슈/PR만 갱신한다. `summary`와 달리 Claude를
+    /// 부르지 않으며, 같은 이름의 단축키 기능을 메뉴바에서도 그대로 제공한다.
+    func fetchTodayActivity() {
+        guard busy == nil, !activityBusy else { return }
+        busy = "오늘 이슈/PR"
+        activityBusy = true
+        activityError = nil
+        activityResult = nil
+        // 메뉴바 버튼은 "지금 다시 받아오기"다. 자동 삽입 때 만든 오늘
+        // 블록을 그냥 건너뛰면, 조금 뒤 머지된 PR이 화면에 영영 안 온다.
+        CLI.runAsync(["activity", "--refresh"]) { [weak self] r in
+            guard let self else { return }
+            self.busy = nil
+            self.activityBusy = false
+            self.lastOutput = r.text
+            guard r.ok else {
+                self.activityError = self.cliFailure(r)
+                return
+            }
+            let out = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.activityResult = out.isEmpty ? "오늘 GitHub 이슈/PR을 개발일지에 반영했습니다." : out
             self.refresh()
         }
     }
@@ -544,7 +568,31 @@ final class Status: ObservableObject {
             lastOutput = "날짜 형식이 올바르지 않습니다: \(d)  (예: 2026-08-19)"
             return
         }
-        run("백필", ["backfill", d])
+        guard busy == nil, !backfillBusy else { return }
+        busy = "백필"
+        backfillBusy = true
+        backfillError = nil
+        backfillResult = nil
+        CLI.runAsync(["backfill", d]) { [weak self] r in
+            guard let self else { return }
+            self.busy = nil
+            self.backfillBusy = false
+            self.lastOutput = r.text
+            guard r.ok else {
+                self.backfillError = self.cliFailure(r)
+                return
+            }
+            let out = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.backfillResult = out.isEmpty ? "\(d) 기록을 채웠습니다." : out
+            self.refresh()
+        }
+    }
+
+    /// 백필은 날짜 없이는 실행하면 안 된다. 버튼은 임의로 과거 기록을 쓰지 않고,
+    /// 어제 날짜를 채워 사용자가 한 번 확인한 뒤 아래 '채우기'로 실행하게 한다.
+    func prepareBackfill() {
+        backfillDate = yesterday()
+        lastOutput = "백필할 날짜를 어제로 채웠습니다. 아래 ‘채우기’를 눌러 실행하세요."
     }
 
     // ⚠️ 웹 대시보드는 **폐지됐다** (D5, 2026-08-24). 여기 있던 상주
@@ -647,8 +695,23 @@ final class Status: ObservableObject {
     // ⚠️ URL 을 문자열로 이어 붙이지 않는다. 인자 배열로 넘긴다 —
     //    YouTube URL 에는 & 가 흔하고, 셸을 거치면 거기서 잘린다.
     // ⚠️ 노트를 앱이 만들지 않는다. CLI 가 만들고, 저널에 남고, undo 로 사라진다.
+    /// 사용자는 URL 종류를 구분할 필요가 없다. YouTube만 기존 AI 선택 흐름으로
+    /// 보내고, 나머지 http/https URL은 AI 없이 웹 자료실에 저장한다.
+    func captureLink(_ url: String, apply: Bool) {
+        if isYouTubeURL(url) { captureYouTube(url, apply: apply) }
+        else { captureWeb(url, apply: apply) }
+    }
+
+    func isYouTubeURL(_ input: String) -> Bool {
+        guard let host = URLComponents(string: input.trimmingCharacters(in: .whitespacesAndNewlines))?
+            .host?.lowercased() else { return false }
+        return host == "youtu.be" || host.hasSuffix(".youtu.be") ||
+            host == "youtube.com" || host.hasSuffix(".youtube.com")
+    }
+
     func captureYouTube(_ url: String, apply: Bool) {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        captureKind = .youtube
         guard !trimmed.isEmpty else {
             captureError = "링크를 입력하세요"
             return
@@ -679,6 +742,7 @@ final class Status: ObservableObject {
             guard r.ok else {
                 if savedNote != nil {
                     self.captureWarning = "링크 노트는 저장했습니다. 다만 AI가 이 영상의 자막을 읽지 못해 요약은 비어 있습니다. 비공개·삭제·연령 제한 영상은 자동 정리할 수 없습니다."
+                    self.captureCompletedID += 1
                     if apply {
                         self.captureUndoJob = Status.undoJob(from: r.text)
                         self.refreshSnapshot()
@@ -694,8 +758,10 @@ final class Status: ObservableObject {
                 self.captureWarning = "링크 노트는 저장했습니다. 이 영상의 자막을 읽지 못해 AI 요약은 비어 있습니다. 다른 공개 영상은 정상적으로 정리할 수 있습니다."
             } else if r.text.contains("DEVTRAIL_CAPTURE_AI=skipped") {
                 self.captureResult = "링크 노트를 저장했습니다. AI 요약은 현재 꺼져 있습니다."
+            } else if r.text.contains("DEVTRAIL_CAPTURE_AI=partial") {
+                self.captureWarning = "AI 요약은 저장됐지만 분야 분류가 비어 있습니다. 같은 링크를 다시 저장하면 분류를 다시 시도합니다."
             } else if r.text.contains("DEVTRAIL_CAPTURE_AI=complete") {
-                self.captureResult = "링크 노트와 AI 요약을 저장했습니다."
+                self.captureResult = "링크 노트·AI 요약·분야 분류를 저장했습니다."
             } else {
                 self.captureResult = out.isEmpty ? "링크 노트를 저장했습니다." : out
             }
@@ -703,6 +769,45 @@ final class Status: ObservableObject {
                 self.captureUndoJob = Status.undoJob(from: r.text)
                 self.refreshSnapshot()
             }
+            self.captureCompletedID += 1
+        }
+    }
+
+    /// 일반 웹 링크는 `capture web`만 호출한다. 메타데이터를 읽지 못해도 CLI가
+    /// URL 노트를 보존하며, 이 경로에서는 AI·외부 키·유료 호출을 하지 않는다.
+    func captureWeb(_ url: String, apply: Bool) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        captureKind = .web
+        guard !trimmed.isEmpty else {
+            captureError = "링크를 입력하세요"
+            return
+        }
+        guard !captureBusy else { return }
+        captureBusy = true
+        captureError = nil
+        captureWarning = nil
+        captureResult = nil
+
+        var args = ["capture", "web", "--url", trimmed]
+        if apply { args.append("--apply") }
+        CLI.runAsync(args) { [weak self] r in
+            guard let self = self else { return }
+            self.captureBusy = false
+            self.lastOutput = r.text
+            guard r.ok else {
+                self.captureError = self.cliFailure(r)
+                return
+            }
+            if r.text.contains("DEVTRAIL_CAPTURE_DUPLICATE=") {
+                self.captureResult = "이 링크는 이미 자료실에 저장되어 있습니다. 기존 노트를 열어 확인하세요."
+            } else {
+                self.captureResult = "링크를 자료실에 저장했습니다."
+            }
+            if apply {
+                self.captureUndoJob = Status.undoJob(from: r.text)
+                self.refreshSnapshot()
+            }
+            self.captureCompletedID += 1
         }
     }
 

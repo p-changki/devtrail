@@ -51,6 +51,20 @@ git push origin v0.4.0
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-25 · Daily workspace & link library
+
+### Highlights
+
+- 메뉴바에서 오늘 개발일지, GitHub 이슈·PR, PR AI 요약, 백필을 실행하고 진행 결과를 바로 확인한다.
+- 일반 웹 링크를 AI 없이 저장하고, 근거가 충분한 링크는 개발·디자인·데이터 등 분야별 자료실로 정리한다.
+- YouTube 요약과 일반 링크 저장을 하나의 URL 입력 흐름으로 묶고, 성공 후 입력값을 자동으로 비운다.
+- 활동 표의 PR 링크와 AI 요약 완료를 분리해, 같은 PR의 중복 요약과 잘못된 성공 표기를 막았다.
+
+### Compatibility
+
+- 기존 볼트·노트·설정은 보존한다. 새 링크 분류는 명시적으로 `devtrail capture web --organize --apply`를 실행할 때만 기존 링크에 적용된다.
+- macOS 중심 릴리스다. 일반 웹 메타데이터 품질은 사이트마다 다르며, AI 기능은 선택 사항이다.
+
 ## [0.6.0] — 2026-08-25 · First-run & link library
 
 첫 실행부터 기록·자료 수집까지의 흐름을 정리하고, 기존 볼트를 보존한 채

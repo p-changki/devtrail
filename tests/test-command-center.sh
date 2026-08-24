@@ -103,6 +103,17 @@ t_eq "모든 js 가 배포 목록에 있다" "0" \
        jq -e --arg b "$b" '.files | index($b)' "$ROOT/plugin/files.json" >/dev/null 2>&1 || echo x
      done | wc -l | tr -d ' ')"
 
+t_start "자료 탭은 영상과 웹 링크를 분리한다"
+t_contains "자료 탭 문구가 있다" "navLibrary" "$(cat "$ROOT/plugin/i18n.js")"
+t_contains "자료 라우트가 있다" "this.route === 'library'" "$(cat "$ROOT/plugin/view.js")"
+t_contains "웹 링크는 url이 있는 자료만 보여준다" "typeof meta.url === 'string'" "$(cat "$ROOT/plugin/view.js")"
+t_contains "자료 type 필터가 있다" "devtrail-cc-library-filters" "$(cat "$ROOT/plugin/view.js")"
+t_contains "자료 링크에 type을 표시한다" "typeLabel(item.meta.type" "$(cat "$ROOT/plugin/view.js")"
+t_contains "자료 개발 분야 필터가 있다" "libraryAreaFilter" "$(cat "$ROOT/plugin/view.js")"
+t_contains "링크 자료실 허브를 열 수 있다" "library_level === 'root'" "$(cat "$ROOT/plugin/view.js")"
+t_contains "자료 탭에서 유튜브 자료실을 바로 연다" "libraryOpenYoutube" "$(cat "$ROOT/plugin/view.js")"
+t_contains "분야를 고르면 그 분야 링크 자료실도 연다" "library_area === selectedArea" "$(cat "$ROOT/plugin/view.js")"
+
 # 뒤집는 조건 중 하나 — 1500줄. 넘으면 ADR 을 다시 봐야 한다.
 # ⚠️ 나눴다고 총량이 준 것은 아니다. 합계로 본다 — 파일을 쪼개
 #    한도를 피해 가는 일이 없게.
@@ -334,7 +345,7 @@ t_contains "빈 상태 문구가 있다" "empty" "$(cat "$JS" "$RMJS" "$CMDJS" "
 #                      노트 생성 로직을 중복하지 않는다.
 t_start "라우트가 존재한다"
 # ⚠️ 'capture' 는 없앴다 — 빠른 실행 바가 같은 6개를 항상 보여준다.
-for r in home today projects reviews; do
+for r in home today projects reviews library; do
   t_contains "$r" "'$r'" "$(cat "$JS" "$RMJS" "$CMDJS" "$I18NJS" "$VIEWJS")"
 done
 
@@ -1064,7 +1075,7 @@ t_contains "현재 탭에 밑줄" "border-bottom" \
 t_start "기록 탭을 없앤다"
 # ⚠️ 빠른 실행 바가 같은 6개를 항상 보여준다. 같은 일을 두 곳에서 하면
 #    한쪽만 고쳐지고, 사용자는 어느 쪽이 진짜인지 모른다.
-t_eq "탭은 넷이다" "4" "$(sed -n "/const items = \[/,/\];/p" "$VIEWJS" | grep -c "^        \['")"
+t_eq "탭은 다섯이다" "5" "$(sed -n "/const items = \[/,/\];/p" "$VIEWJS" | grep -c "^        \['")"
 t_eq "capture 라우트가 없다" "0" "$(grep -c "route === 'capture'" "$JS")"
 t_eq "viewCapture 가 없다" "0" "$(grep -c 'viewCapture' "$JS")"
 

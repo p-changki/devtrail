@@ -175,6 +175,7 @@ module.exports = function makeView(deps) {
       if (this.route === 'recent')   return this.viewRecent(body, t, model);
       if (this.route === 'projects') return this.viewProjects(body, t, model);
       if (this.route === 'reviews')  return this.viewReviews(body, t, map.data, model);
+      if (this.route === 'library')  return this.viewLibrary(body, t);
 
       // ⚠️ 빈 볼트에 0 을 늘어놓지 않는다. 대시보드가 아니라 안내가 되어야 한다.
       const nothing =
@@ -652,6 +653,7 @@ module.exports = function makeView(deps) {
         ['today', t.navToday, 'sun'],
         ['projects', t.navProjects, 'folder-git-2'],
         ['reviews', t.navReviews, 'history'],
+        ['library', t.navLibrary, 'library'],
       ];
       for (const [key, label] of items) {
         const b = tabs.createEl('button', { cls: 'devtrail-cc-tab', text: label });
@@ -897,6 +899,156 @@ module.exports = function makeView(deps) {
           select.value = currentKey ? STAGE_VALUES[currentKey] : '';
         }
       });
+    }
+
+    /* ── 자료 ────────────────────────────────────────────────────────────
+     * 웹 링크는 CLI가 링크/분야/용도 폴더에 저장하고, 이 화면은 YouTube와
+     * 웹 노트를 한 번 더 같은 area로 찾아 주는 통로다. `url`이 있어야 기존
+     * 프로젝트 문서의 `type: docs`가 자료실에 섞이지 않는다. */
+    viewLibrary(body, t) {
+      const metaOf = (file) => this.app.metadataCache.getFileCache(file)?.frontmatter || {};
+      const webTypes = new Set(['docs', 'tool', 'inspiration', 'asset', 'article', 'reference']);
+      const youtube = [];
+      const links = [];
+
+      for (const file of this.files) {
+        const meta = metaOf(file);
+        if (meta.type === 'youtube') {
+          youtube.push({ file, meta });
+        } else if (webTypes.has(meta.type) && typeof meta.url === 'string' && meta.url.trim()) {
+          links.push({ file, meta });
+        }
+      }
+      const newest = (a, b) => b.file.stat.mtime - a.file.stat.mtime;
+      // 이전 YouTube 노트는 category만 있을 수 있다. 새 노트의 area를 우선
+      // 읽되, 빈 값은 명시적으로 미분류라고 보여 "없음"처럼 숨기지 않는다.
+      const areaOf = (item) => String(item.meta.area || item.meta.category || 'uncategorized').trim() || 'uncategorized';
+      // AI가 채운 한 줄 요약이 있는 영상을 먼저 둔다. 자막을 읽지 못해
+      // 링크만 저장된 영상도 숨기지 않아, 저장 결과가 사라진 것처럼 보이지 않는다.
+      youtube.sort((a, b) => {
+        const aDone = String(a.meta.tl_dr_oneline || '').trim() ? 1 : 0;
+        const bDone = String(b.meta.tl_dr_oneline || '').trim() ? 1 : 0;
+        return bDone - aDone || newest(a, b);
+      });
+      links.sort(newest);
+
+      const head = body.createEl('div', { cls: 'devtrail-cc-section-head' });
+      head.createEl('h2', { text: t.libraryTitle });
+      body.createEl('p', { text: t.libraryHelp, cls: 'devtrail-cc-muted' });
+
+      const linkIndex = this.app.vault.getMarkdownFiles().find((file) => {
+        const meta = metaOf(file);
+        return meta.scope === 'library-links' && meta.library_level === 'root';
+      });
+
+      // 링크의 형태와 개발 분야는 서로 다른 축이다. 예: "백엔드 + 문서"는
+      // "백엔드 + 도구"와 달리 찾아야 하므로 두 필터를 함께 적용한다.
+      // 활성 필터는 뷰 인스턴스에만 둬서 사용자의 볼트나 설정 파일을 건드리지 않는다.
+      const typeLabel = (type) => (t.libraryTypes && t.libraryTypes[type]) || type;
+      const areaLabel = (area) => (t.libraryAreas && t.libraryAreas[area]) || area;
+      const filters = body.createEl('div', { cls: 'devtrail-cc-library-filters' });
+      const typeGroup = filters.createEl('div', { cls: 'devtrail-cc-library-filter-group' });
+      typeGroup.createEl('span', { text: t.libraryTypeFilter, cls: 'devtrail-cc-library-filter-label' });
+      const selectedType = this.libraryTypeFilter || null;
+      const addTypeFilter = (type, label, count) => {
+        const button = typeGroup.createEl('button', {
+          text: `${label} ${count}`,
+          cls: 'devtrail-cc-library-filter',
+        });
+        if (selectedType === type) button.addClass('is-active');
+        button.addEventListener('click', () => {
+          this.libraryTypeFilter = type;
+          this.render();
+        });
+      };
+      addTypeFilter(null, t.libraryAll, links.length);
+      for (const type of webTypes) {
+        const count = links.filter((item) => item.meta.type === type).length;
+        if (count > 0) addTypeFilter(type, typeLabel(type), count);
+      }
+      const areaGroup = filters.createEl('div', { cls: 'devtrail-cc-library-filter-group' });
+      areaGroup.createEl('span', { text: t.libraryAreaFilter, cls: 'devtrail-cc-library-filter-label' });
+      const selectedArea = this.libraryAreaFilter || null;
+      const allResources = youtube.concat(links);
+      const addAreaFilter = (area, label, count) => {
+        const button = areaGroup.createEl('button', {
+          text: `${label} ${count}`,
+          cls: 'devtrail-cc-library-filter',
+        });
+        if (selectedArea === area) button.addClass('is-active');
+        button.addEventListener('click', () => {
+          this.libraryAreaFilter = area;
+          this.render();
+        });
+      };
+      addAreaFilter(null, t.libraryAll, allResources.length);
+      const areas = ['frontend', 'backend', 'infra', 'data-ai', 'design', 'common', 'uncategorized', 'dev', 'ai'];
+      for (const area of areas) {
+        const count = allResources.filter((item) => areaOf(item) === area).length;
+        if (count > 0) addAreaFilter(area, areaLabel(area), count);
+      }
+      const filteredYoutube = selectedArea ? youtube.filter((item) => areaOf(item) === selectedArea) : youtube;
+      const filteredLinks = links.filter((item) =>
+        (!selectedType || item.meta.type === selectedType) && (!selectedArea || areaOf(item) === selectedArea));
+
+      // 필터만 있고 실제 자료실로 갈 길이 없으면 분류가 장식에 그친다.
+      // 모든 버튼은 이미 존재하는 _index만 열며, 화면이 빈 폴더·빈 노트를
+      // 만들지는 않는다. 링크 자료실은 첫 링크를 저장할 때 CLI가 만든다.
+      const shortcuts = body.createEl('div', { cls: 'devtrail-cc-library-shortcuts' });
+      const addOpen = (label, file, missing) => {
+        const button = shortcuts.createEl('button', { text: label, cls: 'devtrail-cc-action' });
+        if (file) {
+          button.addEventListener('click', () => this.app.workspace.getLeaf(false).openFile(file));
+        } else {
+          button.addClass('is-disabled');
+          button.setAttr('disabled', 'true');
+          button.setAttr('title', missing);
+        }
+      };
+      const youtubeIndex = this.paths && this.paths.youtube
+        ? this.app.vault.getAbstractFileByPath(`${this.paths.youtube}/_index.md`) : null;
+      addOpen(t.libraryOpenYoutube, youtubeIndex, t.libraryYoutubeEmpty);
+      addOpen(t.libraryOpenIndex, linkIndex, t.libraryIndexPending);
+      if (selectedArea && linkIndex) {
+        const areaIndex = this.app.vault.getMarkdownFiles().find((file) => {
+          const meta = metaOf(file);
+          return meta.scope === 'library-links' && meta.library_level === 'area'
+            && meta.library_area === selectedArea;
+        });
+        if (areaIndex) addOpen(t.libraryOpenArea(areaLabel(selectedArea)), areaIndex, '');
+      }
+
+      const grid = body.createEl('div', { cls: 'devtrail-cc-library-grid' });
+      this.libraryPanel(grid, t.libraryYoutubeTitle, filteredYoutube, t.libraryYoutubeEmpty,
+        (item) => `${areaLabel(areaOf(item))} · ${item.meta.tl_dr_oneline || item.meta.channel || localDate(item.file.stat.mtime)}`,
+        t.youtubeUntitled);
+      this.libraryPanel(grid, t.libraryWebTitle, filteredLinks, t.libraryWebEmpty,
+        (item) => `${areaLabel(areaOf(item))} · ${typeLabel(item.meta.type || t.linkSaved)} · ${item.meta.description || item.meta.source || localDate(item.file.stat.mtime)}`,
+        t.linkUntitled);
+    }
+
+    libraryPanel(parent, title, entries, empty, detail, untitled) {
+      const card = parent.createEl('section', { cls: 'devtrail-cc-panel' });
+      const head = card.createEl('div', { cls: 'devtrail-cc-panel-head' });
+      head.createEl('span', { text: title, cls: 'devtrail-cc-eyebrow' });
+      head.createEl('span', { text: String(entries.length), cls: 'devtrail-cc-mono devtrail-cc-faint' });
+      const list = card.createEl('div', { cls: 'devtrail-cc-library-list' });
+      if (entries.length === 0) {
+        list.createEl('p', { text: empty, cls: 'devtrail-cc-muted' });
+        return;
+      }
+      for (const item of entries.slice(0, 12)) {
+        const row = list.createEl('div', { cls: 'devtrail-cc-library-row' });
+        const a = row.createEl('a', { text: item.meta.title || item.file.basename || untitled,
+                                      cls: 'devtrail-cc-link' });
+        a.setAttr('role', 'button'); a.setAttr('tabindex', '0');
+        const open = () => this.app.workspace.getLeaf(false).openFile(item.file);
+        a.addEventListener('click', open);
+        a.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+        });
+        row.createEl('span', { text: detail(item), cls: 'devtrail-cc-library-meta' });
+      }
     }
 
     /* ── 리뷰 ────────────────────────────────────────────────────────────

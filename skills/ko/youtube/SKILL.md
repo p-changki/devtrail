@@ -80,6 +80,13 @@ yt-dlp --skip-download --write-auto-sub --sub-lang "ko,en" \
 - 핵심 포인트 5개 이하
 - 타임라인
 - **나에게 적용할 점** (`key_for_me`) — 이게 이 노트의 존재 이유입니다
+- **분야와 세부 주제** (`category`·`area`·`topic`) — 자료실에서 다시 찾는 기준입니다
+
+`category`와 `area`는 같은 값 하나만 사용합니다:
+`frontend`, `backend`, `infra`, `data-ai`, `design`, `common`.
+`topic`은 영상 내용에 맞게 `ui-components`, `api`, `database`,
+`deploy-operations`, `models-tools`, `icons`, `landing-references` 등 하나를
+고릅니다. 자막에 근거가 있으면 `uncategorized`로 두지 마세요.
 
 ### 5. 저장
 

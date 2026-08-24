@@ -82,6 +82,13 @@ video.
 - Five key points or fewer
 - Timeline
 - **What I will apply** (`key_for_me`) — this is why the note exists
+- **Area and topic** (`category` · `area` · `topic`) — how the library is found later
+
+Use one matching `category` and `area`: `frontend`, `backend`, `infra`,
+`data-ai`, `design`, or `common`. Choose one evidence-based `topic` such as
+`ui-components`, `api`, `database`, `deploy-operations`, `models-tools`,
+`icons`, or `landing-references`; do not leave it `uncategorized` when the
+captions provide enough context.
 
 ### 5. Save
 

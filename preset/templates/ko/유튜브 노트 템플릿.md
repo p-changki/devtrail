@@ -10,6 +10,9 @@ url:
 channel:
 duration:
 category:
+area:
+topic:
+source_kind: youtube
 tl_dr_oneline:
 key_for_me:
 review_at:
