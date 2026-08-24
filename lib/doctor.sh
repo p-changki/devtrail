@@ -77,6 +77,7 @@ doctor_run() {
                  || { _d_warn "$(L "루트 폴더 없음" "Root folder missing"): $vr"; }
     _d_plugins "$vp"
     _d_command_center
+    _d_naming "$vp" "$vr"
   fi
 
   local backend; backend=$(cfg '.vault.backend' 'local')
@@ -125,6 +126,77 @@ doctor_run() {
 }
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
+# 파일명 규칙·헤딩이 볼트의 실제와 맞는가.
+#
+# ⚠️ 왜 doctor 가 이걸 보나 (2026-08-24 실물 QA)
+#
+#    기존 볼트를 흡수하면 개발일지 파일명과 헤딩이 DevTrail 기본값과
+#    다르다. 그러면 activity·summary 가 할 일을 못 찾는다. 예전에는 그걸
+#    **누른 다음에야** 알 수 있었고, 그나마도 "건너뜀" 한 줄이었다.
+#
+#    여기서 잡으면 누르기 전에 안다. doctor 는 "왜 안 되지" 일 때 사람이
+#    실제로 여는 곳이다.
+#
+# ⚠️ 경고까지만 한다. 사용자의 파일명이 틀린 게 아니라 **우리 설정이**
+#    그 볼트를 아직 모르는 것이다 — 고칠지는 사용자가 정한다.
+_d_naming() {
+  local vp="$1" vr="$2" dir pat glob n
+  dir="$vr/$(dt_dir devlog)"
+  [ -d "$dir" ] || { dim "   $(L "개발일지 폴더가 아직 없습니다" "No devlog folder yet"): $dir"; return 0; }
+
+  pat=$(cfg '.naming.devlog_file' '{{DATE}} devlog.md')
+  glob="${pat//\{\{DATE\}\}/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]}"
+
+  n=$(find "$dir" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+  [ "${n:-0}" -gt 0 ] || { dim "   $(L "개발일지가 아직 없습니다" "No devlogs yet")"; return 0; }
+
+  # 규칙에 맞는 파일이 하나라도 있는가.
+  #
+  # ⚠️ 개수를 세지 않고 '하나라도' 를 본다. 규칙을 바꾼 직후에는 옛 이름과
+  #    새 이름이 섞여 있는 게 정상이다.
+  local f base match=0 newest=""
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    base="${f##*/}"
+    case "$base" in $glob) match=1; [ -n "$newest" ] || newest="$f" ;; esac
+  done <<EOF
+$(find "$dir" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r)
+EOF
+
+  if [ "$match" = 0 ]; then
+    _d_warn "$(L "개발일지 ${n}개가 있는데 파일명 규칙과 하나도 안 맞습니다" \
+                 "${n} devlogs exist but none match the filename pattern")"
+    dim "   $(L "설정" "Configured"): $pat"
+    dim "   $(L "실제" "Actual"):"
+    find "$dir" -maxdepth 1 -name '*.md' 2>/dev/null | sed 's|.*/|     |' | sort -r | head -3
+    dim "   → devtrail config set naming.devlog_file '<$(L "실제 규칙" "actual pattern")>' --apply"
+    return 0
+  fi
+
+  ok "$(L "개발일지 파일명 규칙" "Devlog filename pattern"): $pat"
+
+  # 규칙에 맞는 가장 최근 일지에 설정된 헤딩이 있는가.
+  [ -n "$newest" ] || return 0
+  local k h miss=""
+  for k in issues_pr worklog; do
+    h=$(cfg ".headings.$k" '')
+    [ -n "$h" ] || continue
+    grep -qF "$h" "$newest" 2>/dev/null || miss="$miss $k"
+  done
+  if [ -n "$miss" ]; then
+    _d_warn "$(L "최근 일지에 없는 헤딩:" "Headings missing from the latest devlog:")$miss"
+    dim "   $(L "본 파일" "Checked"): ${newest##*/}"
+    dim "   $(L "그 일지에 실제로 있는 헤딩:" "Headings actually in it:")"
+    grep -E '^#{1,6} ' "$newest" 2>/dev/null | sed 's/^/     /' | head -5
+    for k in $miss; do
+      dim "   → devtrail config set headings.$k '<$(L "실제 헤딩" "actual heading")>' --apply"
+    done
+  else
+    ok "$(L "헤딩이 최근 일지와 맞습니다" "Headings match the latest devlog")"
+  fi
+}
+
 _d_section() { printf '\n%s%s%s\n' "$C_BOLD" "$1" "$C_RESET"; }
 
 _d_bin() {
