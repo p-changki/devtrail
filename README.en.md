@@ -4,9 +4,17 @@
 
 *[한국어](README.md) · [**English**](README.en.md)*
 
-> Turn your Obsidian vault into a calm daily workspace for developers.
+> A local second brain for developers: capture what you build, learn, and reference today—then use it again every week.
 
-DevTrail combines a macOS CLI, menu bar app, and Obsidian Command Center to connect GitHub activity, devlogs, project docs, and learning material in one local Markdown workflow.
+DevTrail is a **local Markdown workspace for capturing a large personal knowledge base and bringing it back into real work**. Its macOS CLI, menu bar app, and Obsidian Command Center connect GitHub activity, devlogs, project docs, web links, and YouTube learning in one workflow.
+
+It is designed to help developers, job seekers, solo builders, and AI-assisted “vibe coders” get productive in Obsidian without first designing a complex system. Start from today’s devlog; later, find and reuse your own project context, documents, links, and learning notes. Your records stay as local files in your vault.
+
+![DevTrail overview — Obsidian dashboard and menu bar app](docs/assets/devtrail-overview.png)
+
+_See today’s record, projects, and library together in the Obsidian dashboard and menu bar app._
+
+> **macOS beta:** [Download DevTrail 0.7.0 DMG](https://github.com/p-changki/devtrail/releases/tag/v0.7.0). Please share bugs and feedback through [Issues](https://github.com/p-changki/devtrail/issues).
 
 ## Who it is for
 
@@ -16,7 +24,22 @@ DevTrail combines a macOS CLI, menu bar app, and Obsidian Command Center to conn
 
 It is not a general replacement for Raindrop, Readwise, or a web clipper. DevTrail focuses on bringing captured work and learning back into daily logs and weekly reviews.
 
-## Start in five minutes
+## Install the beta and start in five minutes
+
+### Easiest path — macOS app
+
+1. Download `DevTrail-0.7.0.dmg` from the [release page](https://github.com/p-changki/devtrail/releases/tag/v0.7.0).
+2. Open the DMG and drag **DevTrail** to **Applications**.
+3. Control-click DevTrail in Applications and select **Open** once.
+4. Choose your vault from the menu bar app and select **Review safe setup**.
+
+This beta is not notarized by Apple yet. If macOS still refuses to open it, verify the release SHA-256 first, then run this once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/DevTrail.app
+```
+
+### Start with the CLI
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash
@@ -30,6 +53,8 @@ Choose a vault and language, then safely add DevTrail to an existing vault or st
 3. Create today’s devlog
 4. Save one link or quick note
 5. Open the Obsidian dashboard
+
+Existing notes are never moved or overwritten. You can preview changes before applying them, and reverse applied changes with `devtrail undo`.
 
 ## What you can do
 

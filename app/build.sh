@@ -140,6 +140,16 @@ cp "$HELPER_BIN" "$OUT/Contents/Helpers/devtrail-helper"
 cp ../vendor/jq/build/jq "$OUT/Contents/Helpers/jq"
 chmod +x "$OUT/Contents/Helpers/jq"
 
+# 배포 번들에는 빌드 머신의 절대 경로가 남지 않게 한다. Swift release
+# 바이너리에도 DWARF/STABS 디버그 정보가 들어갈 수 있어, 이를 그대로
+# 올리면 개발자 계정명과 작업 경로가 DMG에 노출된다. 서명 전에 제거하고,
+# 아래에서 안쪽부터 다시 ad-hoc 서명한다.
+for _bin in "$OUT/Contents/MacOS/$APP_NAME" \
+            "$OUT/Contents/Helpers/devtrail-helper"; do
+  strip -S "$_bin" 2>&1 \
+    || { echo "❌ 배포용 디버그 정보 제거 실패: ${_bin#\"$OUT\"/}"; exit 1; }
+done
+
 # ── CLI 자산 ────────────────────────────────────────────────────────────────
 #
 # ⚠️ 왜 번들 안에 넣나 (ADR 0006 M4-3)

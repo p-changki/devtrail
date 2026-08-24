@@ -4,15 +4,12 @@
 #   ./scripts/make-dmg.sh            dist/DevTrail-<version>.dmg
 #   ./scripts/make-dmg.sh <경로>     경로를 지정
 #
-# ⚠️ **지금 만든 DMG 는 남에게 줄 수 없다.**
+# ⚠️ **현재 DMG 는 macOS 베타 배포용이다.**
 #
-#    서명이 ad-hoc 이고 공증(notarization)을 받지 않았다. 다른 맥에서 열면
-#    Gatekeeper 가 막는다 — 인터넷으로 받은 파일에는 격리 속성이 붙고,
-#    ad-hoc 서명은 그 검사를 통과하지 못한다.
-#
-#    그럼 왜 지금 만드나: **구조가 맞는지는 지금 굳혀야** 한다. Developer ID
-#    (M7) 가 생겼을 때 바꾸는 것은 서명 한 줄이지 구조가 아니다. 구조를
-#    나중으로 미루면 공증 실패와 구조 결함이 같은 날 한꺼번에 온다.
+#    서명이 ad-hoc 이고 Apple 공증(notarization)을 받지 않았기 때문에 다른
+#    맥에서는 Gatekeeper 경고가 나온다. 릴리즈에는 control-클릭 → 열기와,
+#    꼭 필요할 때만 격리 속성을 지우는 절차를 함께 안내한다. 이를 서명·공증된
+#    정식 배포판처럼 표현해서는 안 된다.
 #
 # ⚠️ 사람이 봐야 하는 것은 자동화가 대신하지 못한다 — DMG 열기, 드래그,
 #    첫 실행, Gatekeeper 대화상자. 확인하지 않은 것을 확인했다고 말하지 않는다.
@@ -76,5 +73,5 @@ printf '✅ %s\n' "$OUT"
 printf '   %s · %s bytes\n' "$VOLNAME" "$SIZE"
 printf '   sha256 %s\n' "$SHA"
 printf '\n'
-printf '⚠️  이 DMG 는 **남에게 줄 수 없습니다.** ad-hoc 서명이고 공증을 받지\n'
-printf '    않아, 받은 사람의 맥에서 Gatekeeper 가 막습니다 (M7 에서 해결).\n'
+printf '⚠️  macOS 베타: ad-hoc 서명이며 Apple 공증 전입니다. 다른 맥에서는\n'
+printf '    Gatekeeper 경고가 날 수 있으므로 릴리즈의 설치 안내를 함께 제공하세요.\n'
