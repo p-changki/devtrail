@@ -35,7 +35,24 @@ extension VaultScan {
         guard let e = fm.enumerator(atPath: vault) else { return out }
         for case let sub as String in e {
             let name = (sub as NSString).lastPathComponent
-            if skipDirs.contains(name) || name.hasPrefix(".") {
+            // ⚠️ 거르는 규칙은 **디렉터리에만** 적용한다.
+            //
+            //    python 은 `dirs[:] = [...]` 로 디렉터리 목록만 걸러낸다 —
+            //    파일 이름이 점으로 시작해도 `.md` 면 센다. 실제 볼트에
+            //    `.env … 공유.md` 같은 노트가 있었고, Swift 만 그것을
+            //    빠뜨려 노트 수가 1 어긋났다 (2026-08-24).
+            let isDir = e.fileAttributes?[.type] as? FileAttributeType == .typeDirectory
+            if isDir, skipDirs.contains(name) || name.hasPrefix(".") {
+                // ⚠️ **디렉터리일 때만** 건너뛴다 (2026-08-24 실물 QA).
+                //
+                //    skipDescendants() 는 "가장 최근에 얻은 **디렉터리**로
+                //    내려가지 않는다" 는 뜻이다. 파일에 부르면 지금 훑고 있던
+                //    디렉터리가 통째로 잘린다 — `.DS_Store` 하나로 그 폴더의
+                //    노트가 전부 사라졌다.
+                //
+                //    사용자의 실제 볼트에서 노트 1,775개 중 **8개만** 보였고,
+                //    그래서 '기존 폴더 매핑' 질문이 뜨지 않아 기존 구조 위에
+                //    평행 트리가 생겼다. python 판(os.walk)은 멀쩡했다.
                 e.skipDescendants()
                 continue
             }
