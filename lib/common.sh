@@ -295,8 +295,11 @@ dt_helper() {
   # 2) .app 번들 안 (DMG 설치본)
   p="$DEVTRAIL_ROOT/../Helpers/devtrail-helper"
   [ -x "$p" ] && { printf '%s' "$p"; return 0; }
-  # 3) 저장소의 빌드 산출물 (개발 중)
-  for p in "$DEVTRAIL_ROOT/app/.build/release/DevTrailHelper" \
+  # 3) 저장소의 universal 빌드 산출물 (개발 중). build.sh는 Apple 플랫폼
+  # 경로에 내므로, 예전 .build/release를 먼저 보면 직전 단일 아키텍처의
+  # 낡은 헬퍼를 집어 소스·번들·테스트 결과가 갈라진다.
+  for p in "$DEVTRAIL_ROOT/app/.build/apple/Products/Release/DevTrailHelper" \
+           "$DEVTRAIL_ROOT/app/.build/release/DevTrailHelper" \
            "$DEVTRAIL_ROOT/app/.build/debug/DevTrailHelper"; do
     [ -x "$p" ] && { printf '%s' "$p"; return 0; }
   done

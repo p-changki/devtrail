@@ -36,6 +36,9 @@ mkdir -p "$N/개발/개발일지" "$N/개발/프로젝트" "$N/템플릿"
 note "$N/개발/프로젝트/alpha/README.md" "type: project-home" "status: active" "stage: planning" "project: alpha" "next_action: API 정리"
 note "$N/개발/프로젝트/beta/README.md"  "type: project-home" "status: active" "stage: in-progress" "project: beta"
 note "$N/개발/프로젝트/gone/README.md"  "type: project-home" "status: archived" "project: gone"
+# 허브가 문서 골격 깊은 곳에 있어도 프로젝트 최상위 폴더를 이름으로 쓴다.
+note "$N/개발/프로젝트/attendpay/docs/00-overview/00-project-charter.md" \
+  "type: project-home" "status: active" "stage: done"
 note "$N/자료실/생각1.md" "type: idea" "status: inbox" "created: 2026-08-01"
 note "$N/자료실/생각2.md" "type: idea" "status: inbox" "created: 2026-08-10"
 note "$N/개발/문제1.md"   "type: trouble" "status: open"
@@ -69,7 +72,7 @@ done
 t_start "세면 안 되는 것을 세지 않는다"
 # ⚠️ 템플릿·_index·밑줄 파일이 섞이면 숫자가 늘 조금씩 크고, 아무도 왜인지
 #    모른다. 이것이 이 프로젝트가 반복해서 밟은 자리다.
-t_eq "활성 프로젝트는 둘" "2" "$(jq '.projects.active_count' "$SNAP")"
+t_eq "프로젝트 허브는 넷" "4" "$(jq '.projects.active_count' "$SNAP")"
 t_eq "Inbox 는 둘" "2" "$(jq '.inbox.count' "$SNAP")"
 t_eq "트러블슈팅은 하나" "1" "$(jq '.notes.trouble' "$SNAP")"
 t_eq "밀린 것은 하나" "1" "$(jq '.notes.overdue' "$SNAP")"
@@ -126,6 +129,7 @@ if (!P || typeof P.collect !== 'function') { console.log('NOHOOK'); process.exit
 
 const root = process.argv[3];
 const templatesRel = process.argv[4];
+const projectsRel = process.argv[5];
 
 function walk(dir, out) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -166,7 +170,7 @@ const app = {
   vault: { getMarkdownFiles: () => files },
   metadataCache: { getFileCache: (f) => ({ frontmatter: frontmatter(f.__full) }) },
 };
-const c = P.collect(app, { templates: templatesRel });
+const c = P.collect(app, { templates: templatesRel, projects: projectsRel });
 console.log(JSON.stringify({
   projects: c.projects.length,
   inbox: c.inbox.length,
@@ -176,13 +180,14 @@ console.log(JSON.stringify({
   this_week: c.thisWeek,
   first_inbox: c.inbox.length ? c.inbox[0].file.basename : null,
   first_project: c.projects.length ? c.projects[0].name : null,
+  nested_project: (c.projects.find((p) => p.file.path.includes('attendpay/')) || {}).name || "",
   // ⚠️ CLI 의 next_actions 는 '다음 행동이 적힌 것' 만 싣는다. 전체 첫 항목과
   //    비교하면 서로 다른 것을 견주게 된다 — 같은 기준으로 뽑아 비교한다.
   first_with_next: (c.projects.find((p) => p.next) || {}).name || "",
 }));
 JSEOF
 if command -v node >/dev/null 2>&1; then
-  PLUG=$(node "$T_TMP/contract.js" "$ROOT/plugin/read-model.js" "$N" "템플릿" 2>&1 | tail -1)
+  PLUG=$(node "$T_TMP/contract.js" "$ROOT/plugin/read-model.js" "$N" "템플릿" "개발/프로젝트" 2>&1 | tail -1)
   printf '%s' "$PLUG" > "$T_TMP/plug.json"
   t_json "플러그인 결과가 JSON" "$T_TMP/plug.json"
   # CLI 쪽 같은 수치
@@ -203,6 +208,8 @@ if command -v node >/dev/null 2>&1; then
                               "$(jq -r '.inbox.preview[0].title' "$SNAP")"
   t_eq "계약: 다음 행동 첫 항목" "$(jq -r '.first_with_next' "$T_TMP/plug.json")" \
                                   "$(jq -r '[.projects.next_actions[].project] + [""] | .[0]' "$SNAP")"
+  t_eq "계약: 중첩 허브의 프로젝트명" "attendpay" \
+                                      "$(jq -r '.nested_project' "$T_TMP/plug.json")"
 else
   dim "   node 없음 — 계약 검사를 건너뜀 (⚠️ 두 구현이 갈려도 모른다)"
 fi

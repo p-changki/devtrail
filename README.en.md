@@ -76,7 +76,7 @@ MyVault/
 │   ├── 10_Sources/        attachments · originals
 │   ├── 20_Zettel/         only what you promoted. MOC included
 │   └── 30_Archive/
-├── Templates/             22 note templates
+├── Templates/             23 note templates
 └── Guides/                getting started · folders and tags · hotkeys · extending
 ```
 
@@ -193,12 +193,35 @@ devtrail skills <sub>      AI skills (install|sync|list|remove)
 ### Record
 
 ```bash
+devtrail capture web --url "https://example.com" [--apply]  save a web link to Library Inbox
 devtrail activity [date]   insert GitHub issues/PRs into the devlog
 devtrail summary  [date]   AI-summarize merged PRs in plain language
 devtrail weekly            draft this week's review
 devtrail backfill [date]   fill in past dates
 devtrail sync              project docs → vault
 ```
+
+### Save web links (no AI required)
+
+Web Link Capture saves an `http`/`https` page into `Library/00_Inbox` as a
+searchable Markdown note. It reads a normal page's title, description, Open
+Graph fields, and canonical URL when available; a fetch failure still saves the
+original link as `reference`. The default is dry-run, and only `--apply` creates
+a note.
+
+```bash
+devtrail capture web --url "https://developer.mozilla.org/"
+devtrail capture web --url "https://developer.mozilla.org/" --apply
+```
+
+Each note has one small rule-based type (`docs`, `tool`, `inspiration`, `asset`,
+`article`, or `reference`) plus a few free tags such as `type/docs` and
+`source/developer.mozilla.org`. Existing URL or canonical URL matches are not
+duplicated, and every creation can be reverted with `devtrail undo`.
+
+For safety, only default-port HTTP/S URLs are fetched; local, private,
+link-local, and redirected internal addresses are rejected. JavaScript-only or
+authenticated pages may be stored with URL-only metadata.
 
 ### Projects
 
@@ -307,11 +330,11 @@ The menu bar app is removed separately with `devtrail app uninstall`.
 ## Current state
 
 **Works** — vault structure · adding to an existing vault · 3 install modes ·
-22 note templates · per-folder hubs · auto-filing · GitHub activity and PR
+23 note templates · per-folder hubs · auto-filing · GitHub activity and PR
 summaries · weekly reviews · 12 AI skills · undo · menu bar app · web dashboard
 
 **English coverage** — complete. Folder names, folder hubs, the dashboard and
-daily check-in, all 22 note templates, the in-vault guides, every CLI message,
+daily check-in, all 23 note templates, the in-vault guides, every CLI message,
 and all 12 AI skills. Tags and frontmatter keys are identical in both
 languages, so auto-filing and Dataview queries do not care which you picked.
 

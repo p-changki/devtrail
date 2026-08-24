@@ -460,11 +460,39 @@ t_eq "스펙 조립을 CLI 에 맡긴다" "yes" \
 # ⚠️ 앱이 스펙 JSON 을 직접 만들면 스펙의 모양이 두 벌이 된다.
 t_eq "앱이 spec_version 을 적지 않는다" "0" \
   "$(printf '%s\n' "$OB" | grep -c 'spec_version' | tr -d ' ')"
-t_eq "앱이 기본값(modules·ai)을 정하지 않는다" "0" \
-  "$(printf '%s\n' "$OB" | grep -cE '"devlog"|"provider"' | tr -d ' ')"
+# 앱은 사용자가 고른 값을 인자로 전달할 수 있지만 JSON 스펙을 만들지는 않는다.
+t_eq "앱이 스펙 JSON을 직접 조립하지 않는다" "0" \
+  "$(printf '%s\n' "$OB" | grep -cE 'jq -n|JSONSerialization.*data|spec_version' | tr -d ' ')"
 # ⚠️ 바꾸기 전에 먼저 보여준다. --apply 는 확인 뒤에만.
 t_eq "미리보기가 --apply 없이 돈다" "1" \
   "$(printf '%s\n' "$OB" | grep -c 'func preview' | tr -d ' ')"
+# ⚠️ 등록된 볼트가 없다는 이유만으로 비개발자를 Terminal 로 밀어내면 안 된다.
+# Finder 에서 고른 폴더도 동일한 quick 경로로 들어간다.
+t_eq "Finder 에서 볼트를 고를 수 있다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c 'func chooseVault' | tr -d ' ')"
+t_eq "Finder 선택은 NSOpenPanel 을 쓴다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c 'NSOpenPanel' | tr -d ' ')"
+# 후보 여러 개에서는 노트가 많은 볼트를 먼저 추천하되, 실제 설치 방식 판단은
+# 계속 CLI 가 한다. 화면이 새로운 판단기를 만들면 안 된다.
+t_eq "볼트 추천에 CLI 가 준 노트 수를 쓴다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c 'notes: (v\[\"notes\"\]' | tr -d ' ')"
+t_eq "추천 후보를 노트 수로 정렬한다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c 'candidates.sort' | tr -d ' ')"
+# 플러그인은 외부 네트워크에서 코드를 받는다. 기본 완료 뒤 별도 화면에서
+# 묻는 대신, 사용자가 명시한 '만들고 권장 플러그인 설치' 버튼에서만 --yes 로
+# 같이 처리한다. 이 동의와 --yes 의 연결이 끊기면 조용한 다운로드가 된다.
+t_eq "통합 버튼이 Obsidian 준비를 명시한다" "1" \
+  "$(grep -c '만들고 Obsidian까지 준비' "$ROOT/app/Sources/DevTrailApp/FirstRunView.swift" | tr -d ' ')"
+t_eq "플러그인 없는 경로도 남긴다" "1" \
+  "$(printf '%s\n' "$MV" | grep -c '플러그인 없이 만들기' | tr -d ' ')"
+t_eq "명시 동의일 때만 plugins install --yes 를 쓴다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c '\[\"plugins\", "install", "--yes"\]' | tr -d ' ')"
+t_eq "모든 셋업 경로에서 Obsidian 설정을 병합한다" "2" \
+  "$(printf '%s\n' "$OB" | grep -c '\[\"obsidian\"\]' | tr -d ' ')"
+t_eq "DevTrail 대시보드를 함께 설치한다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c '\[\"command-center\", "install", "--apply"\]' | tr -d ' ')"
+t_eq "DevTrail 대시보드를 함께 켠다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c '\[\"command-center\", "enable", "--apply"\]' | tr -d ' ')"
 
 t_start "⚠️ 터미널이 안 열려도 길이 있다 (2026-08-24 QA)"
 # ⚠️ Terminal 은 명령을 **타이핑해서** 넣는다. 그 순간 셸 초기화가 입력을

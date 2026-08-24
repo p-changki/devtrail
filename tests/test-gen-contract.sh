@@ -384,7 +384,8 @@ printf -- '# 분류 없는 노트\n' > "$VAULT/notes/자료/무타입.md"
 mkdir -p "$VAULT/notes/개발/프로젝트/proj-b"
 printf -- '---\ntype: project-home\nstatus: active\nstage: "in-progress"\nproject: 이름있는프로젝트\nnext_action: 다음에 할 일\n---\n# proj-b\n' \
   > "$VAULT/notes/개발/프로젝트/proj-b/README.md"
-# 활성이 아닌 프로젝트 — 세면 안 된다.
+# 완료 프로젝트도 보드에서 상태를 바꾸거나 보관 상태를 확인할 수 있어야 한다.
+# project-home 허브는 status와 관계없이 집계하고 stage가 분류를 맡는다.
 mkdir -p "$VAULT/notes/개발/프로젝트/proj-c"
 printf -- '---\ntype: project-home\nstatus: done\nnext_action: 안 세야 한다\n---\n# proj-c\n' \
   > "$VAULT/notes/개발/프로젝트/proj-c/README.md"
@@ -773,23 +774,23 @@ fi
 t_start "snapshot — 메뉴바용 볼트 상태"
 # ⚠️ cfg 를 **JSON 문자열 인자**로 받는다. today 와 now_ms 를 못 박는다.
 SNAPCFG=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
-  '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:5}')
+  '{root:$r, templates_rel:"템플릿", projects_rel:"개발/프로젝트", today:$t, now_ms:$n, limit:5}')
 # ⚠️ devlog_path 세 가지: 지정 안 함(unknown) · 지정했지만 없음(0) · 있음(실제 개수)
 SNAPCFG_DEVLOG=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
   --arg d "$VAULT/notes/개발/개발일지/2026-08-06.md" \
-  '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:5, devlog_path:$d}')
+  '{root:$r, templates_rel:"템플릿", projects_rel:"개발/프로젝트", today:$t, now_ms:$n, limit:5, devlog_path:$d}')
 SNAPCFG_MISSING=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
   --arg d "$VAULT/notes/없는파일.md" \
-  '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:5, devlog_path:$d}')
+  '{root:$r, templates_rel:"템플릿", projects_rel:"개발/프로젝트", today:$t, now_ms:$n, limit:5, devlog_path:$d}')
 # 볼트가 없을 때 — available:false 만 낸다.
 SNAPCFG_NOVAULT=$(jq -nc '{root:"/tmp/devtrail-없는볼트", limit:5}')
 # limit 이 작을 때 — 잘라내기가 실제로 도는가.
 SNAPCFG_LIMIT1=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
-  '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:1}')
+  '{root:$r, templates_rel:"템플릿", projects_rel:"개발/프로젝트", today:$t, now_ms:$n, limit:1}')
 # ⚠️ limit 이 10 보다 커야 recent 의 "10개로 먼저 자른다" 가 보인다.
 #    limit 5 로만 시험하면 그 자르기를 없애도 결과가 같다(변이 생존).
 SNAPCFG_LIMIT20=$(jq -nc --arg r "$VAULT/notes" --arg t "$FIXED_DATE" --argjson n "$FIXED_NOW_MS" \
-  '{root:$r, templates_rel:"템플릿", today:$t, now_ms:$n, limit:20}')
+  '{root:$r, templates_rel:"템플릿", projects_rel:"개발/프로젝트", today:$t, now_ms:$n, limit:20}')
 for lang in ko en; do
   CASES=$((CASES + 1))
   NAME="snapshot-$lang"

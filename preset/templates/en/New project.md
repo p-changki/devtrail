@@ -90,9 +90,8 @@ name = folder.split("/").pop();
 // The point is that you never wonder which document to write next.
 const DOCS = ["00-overview", "01-product", "02-domain", "03-architecture",
               "04-data", "05-infra", "06-compliance", "07-delivery"];
-// ⚠️ worklogs must have the same name in every project.
-//    The original had one project's name baked in (eduops-fe-worklogs),
-//    so every new project inherited someone else's name.
+// ⚠️ worklogs must use the same neutral name in every project.
+//    Baking a project-specific name in here makes every new project inherit it.
 for (const d of [folder, `${folder}/docs`, `${folder}/worklogs`,
                  ...DOCS.map(x => `${folder}/docs/${x}`)]) {
   if (!app.vault.getAbstractFileByPath(d)) await app.vault.createFolder(d);

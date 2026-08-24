@@ -42,6 +42,7 @@ ${C_BOLD}설치${C_RESET}
   devtrail uninstall         자동화 제거 (볼트 데이터는 건드리지 않음)
 
 ${C_BOLD}실행${C_RESET}
+  devtrail capture <대상>    링크·일지 캡처 (youtube|web|devlog, 기본 dry-run)
   devtrail activity [DATE]   GitHub 이슈/PR을 개발일지에 삽입
   devtrail summary  [DATE]   머지된 PR을 AI로 쉬운말 요약해 삽입
   devtrail weekly            이번 주 주간리뷰 초안 생성

@@ -74,7 +74,21 @@ def walk(root, templates_rel):
             yield full, rel
 
 
-def collect(root, templates_rel, today, now_ms, limit=5):
+def project_name(meta, rel, fallback, projects_rel):
+    """명시한 project:가 없으면 projects 아래 첫 폴더를 프로젝트명으로 쓴다."""
+    explicit = str(meta.get('project') or '').strip()
+    if explicit:
+        return explicit
+    base = str(projects_rel or '').strip('/')
+    prefix = base + '/' if base else ''
+    if prefix and rel.startswith(prefix):
+        first = rel[len(prefix):].split('/', 1)[0]
+        if first:
+            return first
+    return os.path.basename(os.path.dirname(rel)) or fallback
+
+
+def collect(root, templates_rel, projects_rel, today, now_ms, limit=5):
     projects, inbox, overdue, trouble, recent = [], [], [], [], []
     week_ago = now_ms - 7 * 24 * 60 * 60 * 1000
     this_week = 0
@@ -97,9 +111,11 @@ def collect(root, templates_rel, today, now_ms, limit=5):
         t = meta.get('type')
         name = os.path.basename(rel)[:-3]
 
-        if t == 'project-home' and meta.get('status') == 'active':
+        # 프로젝트 보드는 관리 화면이다. draft를 숨기면 사용자가 상태를
+        # 바꿀 입구가 사라진다. project-home 허브는 모두 집계한다.
+        if t == 'project-home':
             projects.append({
-                'name': meta.get('project') or os.path.basename(os.path.dirname(rel)) or name,
+                'name': project_name(meta, rel, name, projects_rel),
                 'stage': meta.get('stage') or None,
                 'next_action': meta.get('next_action') or None,
                 'path': rel,
@@ -161,7 +177,8 @@ def main():
         json.dump({'available': False}, sys.stdout, ensure_ascii=False)
         return
 
-    c = collect(root, cfg.get('templates_rel') or '', today, now_ms, limit)
+    c = collect(root, cfg.get('templates_rel') or '', cfg.get('projects_rel') or '',
+                today, now_ms, limit)
     devlog = cfg.get('devlog_path') or ''
     exists = bool(devlog) and os.path.isfile(devlog)
 

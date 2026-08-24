@@ -161,6 +161,11 @@ else
   CC_OVERRIDE="$SRC"
 fi
 
+# 저장소가 이미 변경된 릴리즈 후보일 수 있다. QA가 지켜야 할 계약은
+# "검사 전후가 같다"이지 "검사 전에 깨끗하다"가 아니다. 그렇지 않으면
+# 아직 커밋하지 않은 정상 변경을 QA 하니스가 자기 손상으로 오인한다.
+REPO_PLUGIN_BEFORE=$(git -C "$ROOT" status --short plugin/ | LC_ALL=C sort)
+
 run() {
   if [ -n "$CC_OVERRIDE" ]; then
     DEVTRAIL_HOME="$QHOME" DEVTRAIL_CONFIG="$CFG" \
@@ -325,8 +330,9 @@ chk "undo 가 core-plugins.json 을 망가뜨리지 않았다" "$BEFORE_CORE" "$
 chk "사용자 노트는 여전히 그대로다" "$NOTE_BEFORE" "$(shasum -a 256 "$VAULT/notes/mine.md" | cut -d' ' -f1)"
 
 # ⚠️ 저장소를 건드리지 않았음을 **확인한다**. 안 건드렸다고 믿지 않는다.
-chk "저장소 plugin/ 을 건드리지 않았다" "" \
-  "$(git -C "$ROOT" status --short plugin/ | tr '\n' ' ' | sed 's/ *$//')"
+# 릴리즈 후보는 원래 dirty일 수 있으므로, 시작 상태와 비교한다.
+chk "저장소 plugin/ 상태를 바꾸지 않았다" "$REPO_PLUGIN_BEFORE" \
+  "$(git -C "$ROOT" status --short plugin/ | LC_ALL=C sort)"
 echo
 
 # ── ⑤ Obsidian 이 떠 있으면 안내만 한다 ──────────────────────────────────────

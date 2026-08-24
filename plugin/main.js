@@ -83,7 +83,7 @@ const MODEL_KEYS = ['DAY_MS', 'STALE_DAYS', 'FLOW_WEEKS', 'RECENT_PAGE', 'DOC_TY
  * ⚠️ 호출부를 RM.collect(...) 로 바꾸지 않는 이유: 호출부가 40곳이 넘고,
  *    한 곳만 놓쳐도 화면이 조용히 깨진다. 묶는 자리를 하나 두는 편이
  *    실수할 자리가 적다. */
-let DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, DOC_TYPES, BOARD_COLUMNS, STAGE_ALIASES, isUserNote, fm, localDate, dayStart, bearsTasks, openTasks, openTasksInVault, buildFlow, weeklyBars, parseDue, daysBetween, isStale, relativeDays, normalizeStage, todayDevlog, collect, userNotes, noteTimesByDir;
+let DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, DOC_TYPES, BOARD_COLUMNS, STAGE_ALIASES, isUserNote, fm, localDate, dayStart, bearsTasks, openTasks, openTasksInVault, buildFlow, recordedAt, weeklyBars, parseDue, daysBetween, isStale, relativeDays, normalizeStage, todayDevlog, collect, userNotes, noteTimesByDir;
 
 let CAPTURES, SEARCH_PLUGINS, CORE_SEARCH, SEARCH_VERBS, SEARCH_TARGETS, SEARCH_EXCLUDE, templaterCommandId, captureFile, commandExists, findSearchCommand, searchRunner, hotkeyLabel, isSubmitKey;
 
@@ -127,6 +127,7 @@ function bindModules(m) {
   openTasks = m.model.openTasks;
   openTasksInVault = m.model.openTasksInVault;
   buildFlow = m.model.buildFlow;
+  recordedAt = m.model.recordedAt;
   weeklyBars = m.model.weeklyBars;
   parseDue = m.model.parseDue;
   daysBetween = m.model.daysBetween;
@@ -145,7 +146,7 @@ function bindModules(m) {
     //    플러그인 진입점에서만 풀리는 이름이다.
     obsidian,
     DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, BOARD_COLUMNS,
-    localDate, openTasks, openTasksInVault, buildFlow, weeklyBars,
+    localDate, openTasks, openTasksInVault, buildFlow, recordedAt, weeklyBars,
     parseDue, isStale, relativeDays, daysBetween, normalizeStage, todayDevlog, collect,
   userNotes, noteTimesByDir,
     CAPTURES, CORE_SEARCH, templaterCommandId, captureFile, commandExists,
@@ -302,6 +303,16 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
       name: 'Open DevTrail Command Center',
       callback: () => this.activate(),
     });
+    this.addCommand({
+      id: 'toggle-open-on-startup',
+      name: 'DevTrail: Toggle opening dashboard on startup',
+      callback: async () => {
+        const data = (await this.loadData()) || {};
+        const openOnStartup = data.openOnStartup === false;
+        await this.saveData(Object.assign({}, data, { openOnStartup }));
+        new obsidian.Notice(`DevTrail: 시작 대시보드 ${openOnStartup ? '켜짐' : '꺼짐'}`);
+      },
+    });
 
     // ⚠️ 빠른 기록에도 명령을 준다. 그래야 사용자가 설정에서 단축키를 배정할
     //    수 있고, 화면이 **실제 배정된 것**을 읽어 보여줄 수 있다.
@@ -322,7 +333,33 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
     //    activate() 를 거치지 않고 사이드에 그대로 되살아난다.
     //    실측: workspace.json 의 right 에 뷰가 1개 있었다(2026-08-22).
     //    레이아웃이 준비되는 시점에 스스로 옮긴다.
-    this.app.workspace.onLayoutReady(() => this.relocateIfSide());
+    // 플러그인이 layout-ready 뒤에 로드되는 Obsidian 버전/플러그인 조합도 있다.
+    // 그때 onLayoutReady만 등록하면 콜백이 다시 오지 않아 시작 화면이 마지막 탭
+    // (예: Surfing 새 탭)으로 남는다. 즉시 예약과 layout-ready 양쪽에서 같은
+    // 멱등 동작을 요청한다. openDashboardOnStartup은 이미 열린 탭을 재사용한다.
+    const openAtStartup = () => { void this.openDashboardOnStartup(); };
+    this.app.workspace.onLayoutReady(openAtStartup);
+    // HomePage처럼 시작 화면을 늦게 여는 플러그인이 있으면 700ms 뒤에도
+    // 마지막 탭을 다시 덮는다. DevTrail을 사용자가 고른 시작 화면으로
+    // 확정하기 위해 그 초기화가 끝난 뒤 한 번 더 앞으로 가져온다.
+    window.setTimeout(openAtStartup, 2500);
+  }
+
+  /* 마지막으로 열었던 노트를 지우거나 workspace.json을 재작성하지 않는다.
+   * 시작할 때 이미 있는 DevTrail 탭만 앞으로 가져온다. 기본은 켜짐이고,
+   * 명령 팔레트의 Toggle 명령으로 사용자가 언제든 끌 수 있다. */
+  async openDashboardOnStartup() {
+    await this.relocateIfSide();
+    const data = (await this.loadData()) || {};
+    if (data.openOnStartup === false) return;
+    const { workspace } = this.app;
+    const main = workspace.getLeavesOfType(VIEW_TYPE)
+      .find((l) => isMainLeaf(l, workspace.rootSplit));
+    // revealLeaf는 숨은 패널을 보이게만 할 수 있고 현재 탭을 바꾸지는 않는다.
+    // workspace.json에 DevTrail 탭은 있는데 currentTab이 다른 노트인 경우,
+    // 대시보드가 "열려 있지만 안 보이는" 상태가 바로 그 결과였다.
+    if (main) { workspace.setActiveLeaf(main, { focus: false }); return; }
+    await this.activate();
   }
 
   /* 사이드독에 복원된 뷰를 메인 탭으로 옮긴다.
@@ -342,7 +379,7 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
     const leaf = workspace.getLeaf('tab');
     if (leaf) {
       await leaf.setViewState({ type: VIEW_TYPE, active: true });
-      workspace.revealLeaf(leaf);
+      workspace.setActiveLeaf(leaf, { focus: false });
     }
     await this.saveData(Object.assign({}, data, { relocated: true }));
   }
@@ -358,7 +395,7 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
 
     // 메인에 이미 있으면 그걸 보여준다.
     const main = open.find((l) => isMainLeaf(l, workspace.rootSplit));
-    if (main) { workspace.revealLeaf(main); return; }
+    if (main) { workspace.setActiveLeaf(main, { focus: false }); return; }
 
     // ⚠️ 사이드에 남아 있는 것은 재사용하지 않고 닫는다. 예전 버전이 거기에
     //    열어둔 것이라, 그대로 두면 같은 화면이 둘이 된다.
@@ -371,7 +408,7 @@ module.exports = class DevTrailCommandCenter extends obsidian.Plugin {
     const leaf = workspace.getLeaf('tab');
     if (!leaf) return;
     await leaf.setViewState({ type: VIEW_TYPE, active: true });
-    workspace.revealLeaf(leaf);
+    workspace.setActiveLeaf(leaf, { focus: false });
   }
 };
 

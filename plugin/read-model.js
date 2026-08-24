@@ -43,6 +43,22 @@ function fm(app, file) {
   return (c && c.frontmatter) || {};
 }
 
+/* 프로젝트 허브는 README 하나여야 한다는 전제를 두지 않는다. 기존 볼트에는
+ * docs/00-overview/ 같은 깊은 곳에 허브를 둔 프로젝트가 있다. 그때 바로 위
+ * 폴더명을 쓰면 "00-overview"가 프로젝트명으로 새어 나온다. projects 루트
+ * 아래의 첫 폴더가 실제 프로젝트명이며, 명시한 project: 값은 항상 우선한다. */
+function projectName(meta, file, paths) {
+  const explicit = String(meta.project || '').trim();
+  if (explicit) return explicit;
+  const root = String((paths && paths.projects) || '').replace(/^\/+|\/+$/g, '');
+  const prefix = root ? root + '/' : '';
+  if (prefix && file.path.startsWith(prefix)) {
+    const first = file.path.slice(prefix.length).split('/')[0];
+    if (first) return first;
+  }
+  return file.parent?.name || file.basename;
+}
+
 /* ⚠️ files 를 넘기면 볼트를 다시 훑지 않는다. 한 번의 렌더가 같은 목록을
  *    세 번 만들던 것을 한 번으로 줄이기 위한 통로다 — 넘기지 않으면
  *    예전처럼 스스로 훑으므로 이 함수만 따로 부르는 곳은 그대로 산다. */
@@ -84,10 +100,12 @@ function collect(app, paths, files) {
     const meta = fm(app, f);
     const type = meta.type;
 
-    if (type === 'project-home' && meta.status === 'active') {
+    // 프로젝트 보드는 관리 화면이다. draft 상태를 숨기면 사용자가 상태를
+    // 바꿀 카드 자체를 볼 수 없다. type: project-home인 허브는 모두 보인다.
+    if (type === 'project-home') {
       projects.push({
         file: f,
-        name: meta.project || f.parent?.name || f.basename,
+        name: projectName(meta, f, paths),
         stage: meta.stage || null,
         next: meta.next_action || null,
         mtime: f.stat.mtime,
@@ -232,6 +250,22 @@ function dayStart(ms) {
   return d.getTime();
 }
 
+/* 기존 볼트에서는 파일 생성일이 가져온 날일 수 있다. 기록 흐름은 노트가
+ * 말하는 날짜(date·created·파일명)를 먼저 써야 과거 개발일지가 0으로
+ * 보이지 않는다. 날짜가 없는 일반 노트만 파일 생성일로 떨어진다. */
+function recordedAt(app, file) {
+  const meta = fm(app, file);
+  const candidates = [meta.date, meta.created, file.basename];
+  for (const raw of candidates) {
+    const m = String(raw || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) continue;
+    const at = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
+    if (at.getFullYear() === Number(m[1]) && at.getMonth() === Number(m[2]) - 1 &&
+        at.getDate() === Number(m[3])) return at.getTime();
+  }
+  return file.stat.ctime;
+}
+
 /* 히트맵·연속 기록·요일별 평균을 한 번에 만든다.
  *
  * files: [{ ctime }] — 생성 시각만 있으면 된다.
@@ -350,8 +384,9 @@ function isStale(mtime, nowMs, days) {
  * 같은 일을 두 곳에 적으면 어느 쪽도 믿을 수 없게 된다. 오늘 할 일은 개발일지가,
  * 프로젝트 상태는 이 보드가 맡는다.
  *
- * ⚠️ 읽기 전용이다. 카드를 끌어 frontmatter 를 고치는 것은 다음 Phase다 —
- *    노트를 고치는 순간 이 플러그인은 '두 번째 쓰기 출처' 가 된다.
+ * ⚠️ 모델 자체는 읽기 전용이다. 화면은 사용자가 명시적으로 고른 경우에만
+ *    프로젝트 노트의 `stage` 한 필드를 바꾼다. 자동 분류·드래그앤드롭으로
+ *    상태를 추측해 쓰지는 않는다.
  *
  * [키, 아이콘, 상태색 이름]
  */
@@ -403,9 +438,9 @@ function normalizeStage(raw) {
 module.exports = {
   DAY_MS, STALE_DAYS, FLOW_WEEKS, RECENT_PAGE, DOC_TYPES,
   BOARD_COLUMNS, STAGE_ALIASES,
-  isUserNote, fm, localDate, dayStart,
+  isUserNote, fm, projectName, localDate, dayStart,
   bearsTasks, openTasks, openTasksInVault,
-  buildFlow, weeklyBars, parseDue, daysBetween, isStale,
+  buildFlow, weeklyBars, parseDue, daysBetween, isStale, recordedAt,
   relativeDays, normalizeStage, todayDevlog, collect,
   userNotes, noteTimesByDir,
 };

@@ -251,17 +251,24 @@ _setup_suggest_mode() {
 # ⚠️ 기본은 **dry-run** 이다. --apply 가 있어야 실제로 바꾼다.
 _setup_quick_cmd() {
   require_bins jq
-  local vault="" lang="" mode="auto" apply=0 want_json=0
+  local vault="" lang="" mode="auto" root="" modules="devlog" gh_user="" ai="none" src_root="" repos="" projects="" apply=0 want_json=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --vault) shift; vault="${1:-}" ;;
       --lang)  shift; lang="${1:-}" ;;
       --mode)  shift; mode="${1:-auto}" ;;
+      --root) shift; root="${1:-}" ;;
+      --modules) shift; modules="$(printf '%s' "${1:-}" | tr ',' '\n')" ;;
+      --github-user) shift; gh_user="${1:-}" ;;
+      --ai) shift; ai="${1:-none}" ;;
+      --src-root) shift; src_root="${1:-}" ;;
+      --sync-repos) shift; repos="$(printf '%s' "${1:-}" | tr ',' '\n')" ;;
+      --projects) shift; projects="$(printf '%s' "${1:-}" | tr ',' '\n')" ;;
       --apply) apply=1 ;;
       --dry-run) apply=0 ;;
       --json)  want_json=1 ;;
       -h|--help)
-        info "$(L "사용법" "Usage"): devtrail setup quick --vault <경로> [--lang ko|en] [--mode auto|new|existing|isolated] [--apply]"
+        info "$(L "사용법" "Usage"): devtrail setup quick --vault <경로> [--lang ko|en] [--mode auto|new|existing|isolated] [--root 폴더] [--modules a,b] [--github-user 사용자] [--ai none|claude|codex|gemini] [--src-root 경로] [--sync-repos a,b] [--projects a,b] [--apply]"
         return 0 ;;
       *) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
     esac
@@ -284,8 +291,11 @@ _setup_quick_cmd() {
     *) die "$(L "모르는 설치 방식" "Unknown install mode"): $mode  (auto|new|existing|isolated)" ;;
   esac
 
+  case "$ai" in none|claude|codex|gemini) ;; *) die "$(L "모르는 AI provider" "Unknown AI provider"): $ai" ;; esac
+  [ -z "$src_root" ] || case "$src_root" in /*) ;; *) die "$(L "프로젝트 폴더는 절대경로여야 합니다" "The projects folder must be absolute"): $src_root" ;; esac
+
   local tmp; tmp=$(mktemp) || die "$(L "임시 파일을 만들지 못했습니다" "Could not create a temp file")"
-  sp_from_quick "$lang" "$vault" "$mode" > "$tmp" \
+  sp_from_quick "$lang" "$vault" "$mode" "$root" "$modules" "$gh_user" "$ai" "$src_root" "$repos" "$projects" > "$tmp" \
     || { rm -f "$tmp"; die "$(L "스펙을 만들지 못했습니다" "Could not build the spec")"; }
 
   # ⚠️ 앱이 "무엇이 될지" 를 먼저 보여줄 수 있게, 정규화된 스펙을 낸다.

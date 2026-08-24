@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DevTrail — `devtrail project <add|list>`
+# DevTrail — `devtrail project <add|stage|list>`
 #
 # 프로젝트를 '등록'하는 유일한 쓰기 경로다.
 #
@@ -23,7 +23,7 @@ project_cmd() {
     add)   shift; _pj_add "$@" ;;
     stage) shift; _pj_stage "$@" ;;
     list)  shift; _pj_list "$@" ;;
-    *)    die "$(L "사용법" "Usage"): devtrail project <add|list>" ;;
+    *)    die "$(L "사용법" "Usage"): devtrail project <add|stage|list>" ;;
   esac
 }
 

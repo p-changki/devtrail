@@ -158,11 +158,6 @@ updated: <% tp.date.now("YYYY-MM-DD") %>
 - [ ] 
 - [ ] 
 
-## Issues / PRs
-
-<!-- DevTrail inserts GitHub/Linear activity directly under this heading.
-     If you rename it, change headings.issues_pr in devtrail.config.json too. -->
-
 ## Work log
 
 <!-- Merged-PR summaries go inside the '#### <repo>' sections below.
@@ -174,6 +169,11 @@ updated: <% tp.date.now("YYYY-MM-DD") %>
 ### Afternoon
 
 - 
+
+## Issues / PRs
+
+<!-- DevTrail inserts GitHub/Linear activity directly under this heading.
+     If you rename it, change headings.issues_pr in devtrail.config.json too. -->
 
 ## 📺 Watched today (auto — delete the section if empty)
 

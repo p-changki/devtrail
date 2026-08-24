@@ -45,6 +45,16 @@ t_eq "볼트 경로가 반영된다" "$V1" "$(printf '%s' "$SPEC" | jq -r '.vaul
 t_eq "기본 모듈이 채워진다" "devlog" "$(printf '%s' "$SPEC" | jq -r '.modules | join(",")')"
 t_eq "AI 는 기본이 none" "none" "$(printf '%s' "$SPEC" | jq -r '.ai.provider')"
 
+t_start "선택한 전체 설정을 같은 스펙 경로로 받는다"
+FULL=$(q "$V1" --lang ko --mode existing --root 창기 --modules devlog,review,personal \
+  --github-user qa-user --ai claude --src-root "$TMP" --sync-repos app-a,app-b \
+  --projects app-a --json)
+t_eq "루트가 반영된다" "창기" "$(printf '%s' "$FULL" | jq -r '.vault.root')"
+t_eq "모듈이 반영된다" "devlog,personal,review" "$(printf '%s' "$FULL" | jq -r '.modules | sort | join(",")')"
+t_eq "GitHub 사용자가 반영된다" "qa-user" "$(printf '%s' "$FULL" | jq -r '.github.user')"
+t_eq "동기화 레포가 반영된다" "app-a,app-b" "$(printf '%s' "$FULL" | jq -r '.github.repos | join(",")')"
+t_eq "AI가 반영된다" "claude" "$(printf '%s' "$FULL" | jq -r '.ai.provider')"
+
 t_start "⚠️ 플러그인을 받지 않는다"
 # ⚠️ 플러그인 설치는 GitHub 에서 내려받는다. **사용자 승인 없는 네트워크
 #    요청을 하지 않는다** 는 약속이 있다. 그리고 대화형 경로는 여기서
