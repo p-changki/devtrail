@@ -15,19 +15,48 @@ struct MenuView: View {
     private let panelWidth: CGFloat = 274
 
     @State private var captureURL = ""
+    @StateObject private var onboard = Onboarding()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
 
-            if status.cliMissing {
+            // ⚠️ DMG 에서 그대로 돌면 **설치된 줄 안다** — 잘 돌기 때문이다.
+            //    그런데 볼륨을 빼는 순간 앱이 사라진다. 2026-08-24 실물 QA 에서
+            //    실제로 이 상태로 셋업까지 진행됐다.
+            //
+            //    판정은 CLI 가 한다. 여기서는 그리기만.
+            if status.runningFromVolume {
+                Divider().padding(.vertical, 8)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "externaldrive.badge.exclamationmark")
+                            .font(.system(size: 11)).foregroundStyle(Color.dtWarning)
+                        Text("아직 설치되지 않았습니다")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    Text("디스크 이미지에서 실행 중입니다. DevTrail 을 응용 프로그램 폴더로 끌어다 놓고, 거기서 다시 여세요.")
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("이대로 두면 이미지를 꺼내는 순간 앱이 사라집니다.")
+                        .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            // ⚠️ **설정이 먼저다.** 예전에는 needsSetup 이 먼저 걸려서,
+            //    셋업 전에는 톱니를 눌러도 헤더만 "설정" 으로 바뀌고 몸통은
+            //    셋업 화면 그대로였다 — 화면이 거짓말을 했고, **종료 버튼에
+            //    도달할 방법이 없었다.** 메뉴바 앱은 ⌘Q 도 안 먹으므로
+            //    강제 종료 말고는 끌 수가 없었다 (2026-08-24 실물 QA).
+            if showSettings {
+                settingsBody
+            } else if status.cliMissing {
                 Divider().padding(.vertical, 8)
                 missing
             } else if status.needsSetup {
                 Divider().padding(.vertical, 8)
                 setup
-            } else if showSettings {
-                settingsBody
             } else {
                 homeBody
             }
@@ -231,6 +260,17 @@ struct MenuView: View {
 
     private var settingsBody: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // ⚠️ 셋업 전에는 설정 파일이 없다. 토글을 보여주면 켜고 끌 대상이
+            //    없는 스위치를 주는 셈이고, 누르면 조용히 아무 일도 안 난다.
+            //    **나가는 길(종료)만 남긴다** — 그게 이 화면에서 필요한 전부다.
+            if status.needsSetup {
+                Text("아직 셋업하지 않았습니다")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .padding(.top, 8)
+                Text("설정은 셋업을 마친 뒤에 쓸 수 있습니다.")
+                    .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                    .padding(.top, 2)
+            } else {
             group("자동화") {
                 // 자동 실행은 설정값이 아니라 launchd 등록 여부다.
                 toggleRow("자동 실행", isOn: Binding(
@@ -253,22 +293,16 @@ struct MenuView: View {
 
             group("도구") {
                 textRow("진단 실행", "stethoscope") { status.run("진단", ["doctor"]) }
-                // 서버는 끝나지 않는다. run()으로 부르면 busy에 갇혀 패널이 잠긴다.
-                textRow(status.dashboardRunning ? "웹 대시보드 다시 열기" : "웹 대시보드 열기",
-                        "safari") { status.openDashboard() }
-                if status.dashboardRunning {
-                    textRow("웹 대시보드 종료", "stop.circle") { status.stopDashboard() }
-                }
+            }
             }
 
             Divider().padding(.vertical, 7)
             HStack {
-                Text(status.vaultLabel)
+                Text(status.needsSetup ? "" : status.vaultLabel)
                     .font(.system(size: 9.5)).foregroundStyle(.tertiary)
                     .lineLimit(1).truncationMode(.head)
                 Spacer()
                 Button("종료") {
-                    status.stopDashboard()
                     NSApplication.shared.terminate(nil)
                 }
                     .buttonStyle(.plain).font(.system(size: 11))
@@ -393,23 +427,203 @@ struct MenuView: View {
     ///    하는지 알 수 없는 막다른 길이었다.
     private var setup: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("아직 셋업하지 않았습니다")
+            switch onboard.phase {
+            case .picking:   onboardPicking
+            case .preview(let text): onboardPreview(text)
+            case .applying:  onboardApplying
+            case .done(let text):    onboardDone(text)
+            case .failed(let text):  onboardFailed(text)
+            }
+            terminalLink
+        }
+        .onAppear { onboard.load() }
+    }
+
+    // MARK: - 온보딩 (ADR 0006 M4-4c)
+    //
+    // ⚠️ 여기서 묻는 것은 **언어와 볼트 두 가지뿐**이다. 나머지는 CLI 의
+    //    기본값이 채운다 — 앱이 기본값을 갖기 시작하면 대화형과 갈린다.
+
+    private var onboardPicking: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("시작할 준비를 합니다")
                 .font(.system(size: 12, weight: .medium))
-            Text("볼트 · Obsidian 플러그인 · 노트 템플릿을 한 번에 준비합니다.")
+            Text("볼트와 노트 템플릿을 만듭니다. 두 가지만 고르면 됩니다.")
                 .font(.system(size: 10.5)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(action: { status.startSetup() }) {
+
+            group("언어") {
+                Picker("", selection: $onboard.lang) {
+                    Text("한국어").tag("ko")
+                    Text("English").tag("en")
+                }
+                .pickerStyle(.segmented).labelsHidden()
+            }
+
+            group("볼트") {
+                if onboard.candidates.isEmpty {
+                    // ⚠️ 없는 것을 있는 척하지 않는다. 이 경우는 터미널로 보낸다.
+                    Text("Obsidian 볼트를 찾지 못했습니다.")
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    Text("Obsidian 에서 볼트를 한 번 연 뒤 새로고침하거나, 아래 '터미널로 설정' 을 쓰세요.")
+                        .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Picker("", selection: $onboard.selected) {
+                        ForEach(onboard.candidates) { c in
+                            Text(c.name).tag(c.path)
+                        }
+                    }
+                    .labelsHidden()
+                    Text(onboard.selected)
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundStyle(.tertiary).lineLimit(1).truncationMode(.head)
+                }
+            }
+
+            if !onboard.candidates.isEmpty {
+                Button(action: { onboard.preview() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "eye").font(.system(size: 11))
+                        Text("무엇이 만들어지는지 보기").font(.system(size: 12, weight: .medium))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(Hover(radius: 6))
+                // ⚠️ 누르면 바뀌는 것이 아니라는 사실을 먼저 말한다.
+                Text("아직 아무것도 바꾸지 않습니다.")
+                    .font(.system(size: 9.5)).foregroundStyle(.tertiary)
+            }
+
+            advancedSetup
+        }
+    }
+
+    private func onboardPreview(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("이렇게 만듭니다")
+                .font(.system(size: 12, weight: .medium))
+            if !onboard.modeLabel.isEmpty {
+                Text(onboard.modeLabel)
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ScrollView {
+                Text(text)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.secondary).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 170)
+
+            Button(action: { onboard.apply() }) {
                 HStack(spacing: 6) {
-                    Image(systemName: "wand.and.stars").font(.system(size: 11))
-                    Text("셋업 시작").font(.system(size: 12, weight: .medium))
+                    Image(systemName: "checkmark.circle").font(.system(size: 11))
+                    Text("이대로 만들기").font(.system(size: 12, weight: .medium))
                     Spacer()
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(Hover(radius: 6))
-            Text("터미널이 열리고 질문에 답하면 끝납니다.")
+            // ⚠️ 되돌릴 수 있다는 사실을 누르기 **전에** 말한다.
+            Text("되돌릴 수 있습니다 — 만든 뒤 '되돌리기' 가 나옵니다.")
                 .font(.system(size: 9.5)).foregroundStyle(.tertiary)
-            terminalLink
+            textRow("다시 고르기", "chevron.backward") { onboard.phase = .picking }
+        }
+    }
+
+    private var onboardApplying: some View {
+        HStack(spacing: 6) {
+            ProgressView().controlSize(.small)
+            Text("만드는 중…").font(.system(size: 11.5)).foregroundStyle(.secondary)
+        }
+    }
+
+    private func onboardDone(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 11)).foregroundStyle(Color.dtSuccess)
+                Text("만들었습니다").font(.system(size: 12, weight: .medium))
+            }
+            // ⚠️ 플러그인은 받지 않았다. 그 사실과 다음 걸음을 함께 말한다.
+            Text("Obsidian 플러그인은 아직 받지 않았습니다 — 인터넷에서 내려받는 일이라 따로 물어봅니다.")
+                .font(.system(size: 10)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            textRow("플러그인 설치", "square.and.arrow.down") {
+                status.run("플러그인", ["plugins", "install"])
+            }
+            ScrollView {
+                Text(text)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.tertiary).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 120)
+            textRow("새로고침", "arrow.clockwise") { status.refresh() }
+        }
+    }
+
+    private func onboardFailed(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 11)).foregroundStyle(Color.dtDanger)
+                Text("만들지 못했습니다").font(.system(size: 12, weight: .medium))
+            }
+            ScrollView {
+                Text(text)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(.secondary).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 140)
+            textRow("다시 고르기", "chevron.backward") { onboard.phase = .picking }
+            advancedSetup
+        }
+    }
+
+    /// ⚠️ 터미널 대화를 **없애지 않는다.** 앱이 못 하는 것(기존 폴더 채택 ·
+    ///    GitHub · 동기화 · AI)을 정하려면 그 길이 필요하다. 다만 기본이
+    ///    아니라 **고급**으로 내린다.
+    private var advancedSetup: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            textRow("터미널로 설정 (고급)", "terminal") { status.startSetup() }
+            Text("GitHub · 동기화 · AI 까지 한 번에 정합니다.")
+                .font(.system(size: 9)).foregroundStyle(.tertiary)
+
+            // ⚠️ **항상 통하는 길을 하나 둔다** (2026-08-24 실물 QA).
+            //
+            //    Terminal 은 명령을 타이핑해서 넣는다. 그 순간 셸 초기화가
+            //    입력을 기다리고 있으면 글자를 먹는다 — oh-my-zsh 의
+            //    "Would you like to update? [Y/n]" 가 경로 첫 글자를 삼켜
+            //    터미널이 열리기만 하고 아무것도 안 됐다.
+            //
+            //    사용자의 .zshrc 를 우리가 통제할 수 없다. 근본은 못 고치므로
+            //    붙여넣을 명령을 **늘** 함께 보여준다.
+            Text("터미널이 열리지 않으면 아래를 복사해 붙여넣으세요.")
+                .font(.system(size: 9)).foregroundStyle(.tertiary)
+                .padding(.top, 3)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(status.setupCommand)
+                .font(.system(size: 8.5, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+                .lineLimit(2).truncationMode(.middle)
+            Button(action: {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(status.setupCommand, forType: .string)
+                status.lastOutput = "명령을 복사했습니다. 터미널에 붙여넣으세요."
+            }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "doc.on.doc").font(.system(size: 9.5))
+                    Text("명령 복사").font(.system(size: 10.5))
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(Hover(radius: 5))
         }
     }
 
@@ -421,6 +635,11 @@ struct MenuView: View {
     /// ⚠️ 여기에 **판정이 없다.** CLI 가 낸 상태를 그대로 그린다.
     @ViewBuilder
     private var terminalLink: some View {
+        // ⚠️ 떼어낼 수 있는 볼륨에서는 연결을 권하지 않는다. 만들어도
+        //    볼륨을 빼는 순간 죽고, 죽은 링크는 고치기 어렵다.
+        if status.runningFromVolume {
+            EmptyView()
+        } else {
         switch status.linkState {
         case "absent":
             VStack(alignment: .leading, spacing: 4) {
@@ -446,6 +665,23 @@ struct MenuView: View {
                      "\(status.linkTarget) — 그대로 두었습니다. 앱은 번들 것을 씁니다.",
                      .dtWarning)
 
+        case "broken":
+            // ⚠️ 끊어진 링크는 "남의 것" 이 아니라 고쳐야 할 것이다.
+            VStack(alignment: .leading, spacing: 4) {
+                Button(action: { status.linkTerminal() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 10.5))
+                        Text("터미널 연결 고치기").font(.system(size: 11.5))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(Hover(radius: 5))
+                Text("\(status.linkPath) 가 끊어져 있습니다.")
+                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
+
         case "occupied":
             linkNote("exclamationmark.triangle", "이미 파일이 있습니다",
                      "\(status.linkPath) — 심볼릭 링크가 아니라 손대지 않았습니다.",
@@ -453,6 +689,7 @@ struct MenuView: View {
 
         default:
             EmptyView()   // ⚠️ 모르면 아무 말도 하지 않는다.
+        }
         }
     }
 
@@ -470,7 +707,7 @@ struct MenuView: View {
             if !status.linkOnPath {
                 // ⚠️ 연결해도 PATH 에 없으면 소용이 없다. 감추지 않는다.
                 Text("PATH 에 없습니다 — ~/.zshrc 에 추가해야 터미널이 찾습니다.")
-                    .font(.system(size: 9)).foregroundStyle(.dtWarning)
+                    .font(.system(size: 9)).foregroundStyle(Color.dtWarning)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

@@ -23,7 +23,6 @@ final class Status: ObservableObject {
     @Published var toggles: [String: Bool] = [:]
     /// 토글 값을 읽지 못한 상태. '전부 꺼짐'과 구분해야 한다.
     @Published var togglesUnavailable = false
-    @Published var dashboardURL = ""
     @Published var busy: String? = nil          // 실행 중인 작업 이름
     @Published var lastOutput = ""
     @Published var cliMissing = false
@@ -60,6 +59,13 @@ final class Status: ObservableObject {
     @Published var linkTarget = ""
     @Published var linkOnPath = true
 
+    /// 떼어낼 수 있는 읽기전용 볼륨(마운트된 DMG)에서 실행 중인가.
+    ///
+    /// ⚠️ 판정은 CLI 가 한다 (`link status --json` 의 `self_readonly`).
+    ///    앱이 자기 경로를 보고 스스로 정하지 않는다 — 같은 판정을 두 벌 두면
+    ///    반드시 어긋난다.
+    @Published var runningFromVolume = false
+
     var scheduleOn: Bool { scheduleLoaded > 0 }
 
     private var config: [String: Any] = [:]
@@ -90,9 +96,11 @@ final class Status: ObservableObject {
             linkPath = l["path"] as? String ?? ""
             linkTarget = l["target"] as? String ?? ""
             linkOnPath = (l["on_path"] as? Bool) ?? true
+            runningFromVolume = (l["self_readonly"] as? Bool) ?? false
         } else {
             // ⚠️ 못 읽었으면 **모른다** 고 둔다. 안다고 꾸미지 않는다.
             linkState = ""
+            runningFromVolume = false
         }
 
         // ⚠️ '셋업했는가' 를 파일 존재로 판정하지 않는다. 설정 파일이 있어도
@@ -130,6 +138,26 @@ final class Status: ObservableObject {
     ///
     /// AppleScript 대신 실행 파일을 Terminal 로 여는 방식을 쓴다 —
     /// 자동화 권한 대화상자를 띄우지 않는다.
+    /// 사용자가 직접 붙여넣을 수 있는 셋업 명령.
+    ///
+    /// ⚠️ 왜 필요한가 (2026-08-24 실물 QA)
+    ///
+    ///    Terminal 은 명령을 **타이핑해서** 넣는다. 그 순간 셸 초기화가
+    ///    입력을 기다리고 있으면 글자를 먹는다 — oh-my-zsh 의
+    ///    "Would you like to update? [Y/n]" 가 경로의 첫 글자 `/` 를 삼켜
+    ///    `var/folders/…: no such file or directory` 로 죽었다.
+    ///
+    ///    사용자의 `.zshrc` 를 우리가 통제할 수 없으므로 근본은 못 고친다.
+    ///    **항상 통하는 길을 하나 둔다** — 복사해서 붙여넣기.
+    var setupCommand: String {
+        "\(Self.shellQuoted(CLI.binary)) init"
+    }
+
+    /// 경로에 공백·따옴표가 있어도 안전하게.
+    static func shellQuoted(_ p: String) -> String {
+        "'" + p.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     func startSetup() {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("devtrail-setup", isDirectory: true)
@@ -138,7 +166,7 @@ final class Status: ObservableObject {
 
         // 경로에 공백·따옴표가 있어도 안전하도록 작은따옴표로 감싸고,
         // 안의 작은따옴표는 이스케이프한다.
-        let quoted = "'" + CLI.binary.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        let quoted = Self.shellQuoted(CLI.binary)
         let body = """
         #!/bin/sh
         clear
@@ -413,47 +441,11 @@ final class Status: ObservableObject {
         run("백필", ["backfill", d])
     }
 
-    // MARK: - 웹 대시보드
+    // ⚠️ 웹 대시보드는 **폐지됐다** (D5, 2026-08-24). 여기 있던 상주
+    //    프로세스 관리 코드도 함께 지웠다 — 화면에서만 지우고 모델에
+    //    남겨두면, 다음 사람이 "아직 있는 기능" 으로 읽는다.
     //
-    // 대시보드 서버는 스스로 끝나지 않는다. `run` 으로 부르면 완료를 기다리다
-    // busy 상태에 갇혀 패널의 모든 버튼이 잠긴다. 반드시 상주 프로세스로 다룬다.
-
-    private var dashboardProcess: Process?
-
-    var dashboardRunning: Bool { dashboardProcess?.isRunning == true }
-
-    func openDashboard() {
-        // 이미 떠 있으면 새로 띄우지 않는다 — 포트가 하나뿐이라 두 번째는 실패한다.
-        if dashboardRunning {
-            if let url = URL(string: dashboardURL) {
-                NSWorkspace.shared.open(url)
-            } else {
-                lastOutput = "대시보드가 이미 실행 중입니다."
-            }
-            return
-        }
-
-        dashboardURL = ""
-        lastOutput = "대시보드를 시작합니다…"
-        // 서버가 스스로 브라우저를 연다. 여기서는 주소(토큰 포함)만 받아 둔다.
-        dashboardProcess = CLI.start(["dashboard"]) { [weak self] line in
-            guard let self else { return }
-            if self.dashboardURL.isEmpty,
-               let r = line.range(of: "https?://[^ ]+", options: .regularExpression) {
-                self.dashboardURL = String(line[r])
-            }
-            self.lastOutput = line
-        }
-        if dashboardProcess == nil { lastOutput = "대시보드를 시작하지 못했습니다." }
-    }
-
-    /// 앱이 띄운 서버는 앱이 정리한다 — 남겨두면 포트를 잡은 채 주소만 사라진다.
-    func stopDashboard() {
-        guard let p = dashboardProcess else { return }
-        if p.isRunning { p.terminate() }
-        dashboardProcess = nil
-        dashboardURL = ""
-    }
+    //    같은 일은 이 앱이 직접 한다: 같은 4가지 동작 · 같은 3개 토글.
 
     /// 노트를 Obsidian으로 연다.
     /// obsidian:// 스킴이 실패할 수 있으므로 파일 열기로 폴백한다.

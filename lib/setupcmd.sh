@@ -118,6 +118,7 @@ setup_cmd() {
     env)    _setup_env_cmd "$@" ;;
     plan)   _setup_plan_cmd "$@" ;;
     apply)  _setup_apply_cmd "$@" ;;
+    quick)  _setup_quick_cmd "$@" ;;
     status) setup_status "$@" ;;
     *) die "$(L "알 수 없는 하위 명령" "Unknown subcommand"): $sub  (env|plan|apply|status)" ;;
   esac
@@ -222,6 +223,86 @@ _setup_plan_cmd() {
   done
   sp_validate "$input"
   setup_plan "$(sp_normalize "$input")" "$json"
+}
+
+# 노트 수로 설치 방식을 제안한다.
+#
+# ⚠️ 대화형 _init_mode 와 **같은 기준**(노트 10개)을 쓴다. 기준이 갈리면
+#    "앱으로 하면 다르게 잡힌다" 가 된다.
+_setup_suggest_mode() {
+  local vault="$1" n=0 scan
+  scan=$(dt_gen gen-scan "$vault" 2>/dev/null) || scan=""
+  [ -n "$scan" ] && n=$(printf '%s' "$scan" | jq -r '.scale.notes // 0' 2>/dev/null)
+  case "$n" in ''|*[!0-9]*) n=0 ;; esac
+  [ "$n" -ge 10 ] && printf 'existing' || printf 'new'
+}
+
+# devtrail setup quick — 최소 입력으로 셋업 (ADR 0006 M4-4c)
+#
+# ⚠️ 왜 있나
+#
+#    DMG 로 받은 비개발자에게 터미널 대화(13단계)를 시키는 것이 지금 남은
+#    가장 큰 벽이다. 앱이 언어·볼트만 받아 여기로 넘긴다.
+#
+# ⚠️ **적용 경로를 새로 만들지 않는다.** 스펙을 만들어 setup apply 에
+#    넘긴다 — 대화형 init 이 타는 길과 정확히 같다. 두 벌이면 언젠가 한쪽만
+#    고쳐지고, 사용자는 "앱으로 하면 다르다" 를 만난다.
+#
+# ⚠️ 기본은 **dry-run** 이다. --apply 가 있어야 실제로 바꾼다.
+_setup_quick_cmd() {
+  require_bins jq
+  local vault="" lang="" mode="auto" apply=0 want_json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --vault) shift; vault="${1:-}" ;;
+      --lang)  shift; lang="${1:-}" ;;
+      --mode)  shift; mode="${1:-auto}" ;;
+      --apply) apply=1 ;;
+      --dry-run) apply=0 ;;
+      --json)  want_json=1 ;;
+      -h|--help)
+        info "$(L "사용법" "Usage"): devtrail setup quick --vault <경로> [--lang ko|en] [--mode auto|new|existing|isolated] [--apply]"
+        return 0 ;;
+      *) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
+    esac
+    shift
+  done
+
+  [ -n "$vault" ] || die "$(L "볼트 경로가 필요합니다" "A vault path is required"): --vault <경로>"
+  # ⚠️ 먼저 친절히 막는다. sp_validate 도 잡지만 그때는 메시지가 멀다.
+  case "$vault" in
+    /*) ;;
+    *) die "$(L "볼트 경로는 절대경로여야 합니다" "The vault path must be absolute"): $vault" ;;
+  esac
+
+  [ -n "$lang" ] || lang=$(dt_lang)
+  case "$lang" in ko|en) ;; *) die "$(L "모르는 언어" "Unknown language"): $lang  (ko|en)" ;; esac
+
+  case "$mode" in
+    auto) mode=$(_setup_suggest_mode "$vault") ;;
+    new|existing|isolated) ;;
+    *) die "$(L "모르는 설치 방식" "Unknown install mode"): $mode  (auto|new|existing|isolated)" ;;
+  esac
+
+  local tmp; tmp=$(mktemp) || die "$(L "임시 파일을 만들지 못했습니다" "Could not create a temp file")"
+  sp_from_quick "$lang" "$vault" "$mode" > "$tmp" \
+    || { rm -f "$tmp"; die "$(L "스펙을 만들지 못했습니다" "Could not build the spec")"; }
+
+  # ⚠️ 앱이 "무엇이 될지" 를 먼저 보여줄 수 있게, 정규화된 스펙을 낸다.
+  if [ "$want_json" = 1 ]; then
+    sp_normalize "$tmp"
+    rm -f "$tmp"
+    return 0
+  fi
+
+  if [ "$apply" = 1 ]; then
+    _setup_apply_cmd --input "$tmp" --apply
+  else
+    _setup_apply_cmd --input "$tmp"
+  fi
+  local rc=$?
+  rm -f "$tmp"
+  return $rc
 }
 
 _setup_apply_cmd() {

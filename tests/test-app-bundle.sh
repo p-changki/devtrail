@@ -363,11 +363,207 @@ t_eq "Status 가 link status --json 을 읽는다" "1" \
 t_eq "연결은 CLI 에 맡긴다" "1" \
   "$(printf '%s\n' "$ST" | grep -c '"link", "create"' | tr -d ' ')"
 
+t_start "⚠️ 소스가 실제로 바이너리에 들어갔다"
+# ⚠️ 2026-08-24 에 이걸로 크게 데였다.
+#
+#    build.sh 가 `swift build … | grep … || true` 로 **컴파일 실패를 삼키고**
+#    있었다. 파이프의 종료코드는 grep 의 것이고 `|| true` 가 그마저 덮었다.
+#    그래서 컴파일이 깨져도 성공으로 끝났고, 직전에 성공했던 **낡은
+#    바이너리**로 .app 을 조립한 뒤 ✅ 를 찍었다.
+#
+#    기존 게이트는 전부 통과했다 — 낡은 바이너리도 universal 이고 서명이
+#    유효하고 실행되기 때문이다. **"지금 소스가 들어갔는가" 를 아무도 안
+#    봤다.** M4-4b 온보딩 UI 가 통째로 빠진 채 DMG 가 나갔다.
+#
+# ⚠️ 확인할 문자열을 여기 적지 않는다 — 적으면 곧 낡는다. **소스에서
+#    뽑는다**: MenuView 의 가장 긴 한글 Text 리터럴이 바이너리에 있는가.
+APPBIN="$APP/Contents/MacOS/DevTrail"
+NEEDLES=$(mktemp)
+grep -ohE 'Text\("[^"\\]{12,}"\)' "$ROOT/app/Sources/DevTrailApp"/*.swift \
+  | sed -E 's/^Text\("//; s/"\)$//' | LC_ALL=C sort -u > "$NEEDLES"
+NCOUNT=$(wc -l < "$NEEDLES" | tr -d ' ')
+# ⚠️ 하나도 못 뽑았으면 이 게이트는 아무것도 안 지킨다.
+t_eq "소스에서 확인용 문구를 뽑았다" "yes" \
+  "$([ "$NCOUNT" -ge 5 ] && echo yes || echo "no ($NCOUNT)")"
+if [ -f "$APPBIN" ] && [ "$NCOUNT" -gt 0 ]; then
+  MISSING=""
+  while IFS= read -r nd; do
+    [ -n "$nd" ] || continue
+    LC_ALL=C grep -a -q -F "$nd" "$APPBIN" || MISSING="$MISSING
+  $nd"
+  done < "$NEEDLES"
+  # ⚠️ **하나라도** 없으면 산출물이 지금 소스가 아니다.
+  t_eq "화면 문구 ${NCOUNT}개가 전부 바이너리에 있다" "" "$MISSING"
+fi
+rm -f "$NEEDLES"
+
+t_start "⚠️ 폐지한 것이 바이너리에 남아 있지 않다"
+# ⚠️ 소스에서 지웠는데 바이너리에 남아 있으면, 그것이 곧 "낡은 산출물" 의
+#    증거다. 화면 문자열은 소스와 바이너리를 잇는 가장 싼 다리다.
+t_eq "웹 대시보드 문구가 없다" "no" \
+  "$(LC_ALL=C grep -a -q -F '웹 대시보드' "$APPBIN" 2>/dev/null && echo yes || echo no)"
+
+t_start "⚠️ DMG 에서 도는 것을 화면이 말한다"
+# ⚠️ 2026-08-24 실물 QA. DMG 에서 앱이 **그대로 잘 돌아서** 설치된 줄 알고
+#    셋업까지 진행됐다. 볼륨을 빼면 앱이 사라지는데 아무도 안 알려줬다.
+t_eq "화면이 알린다" "yes" \
+  "$([ "$(printf '%s\n' "$MV" | grep -c 'status.runningFromVolume' | tr -d ' ')" != 0 ] \
+     && echo yes || echo no)"
+# ⚠️ 판정은 CLI 가 한다 — 화면이 자기 경로를 보고 스스로 정하면 두 벌이 된다.
+t_eq "판정을 CLI 에서 읽는다" "1" \
+  "$(printf '%s\n' "$ST" | grep -c 'self_readonly' | tr -d ' ')"
+t_eq "화면이 /Volumes 를 직접 보지 않는다" "0" \
+  "$(printf '%s\n' "$MV" | grep -c '/Volumes' | tr -d ' ')"
+
+t_start "⚠️ 셋업 전에도 앱을 끌 수 있다"
+# ⚠️ 2026-08-24 실물 QA 에서 잡힌 결함이다.
+#
+#    화면 분기가 `needsSetup` 을 `showSettings` 보다 **먼저** 보고 있었다.
+#    그래서 셋업 전에는 톱니를 눌러도 헤더만 "설정" 으로 바뀌고 몸통은 셋업
+#    화면 그대로였다 — **종료 버튼에 도달할 방법이 없었다.**
+#
+#    메뉴바 앱은 ⌘Q 도 안 먹는다. 강제 종료 말고는 끌 수가 없었고,
+#    화면은 "설정" 이라고 **거짓말까지** 하고 있었다.
+#
+#    ⚠️ 이건 소스 단언이다. 메뉴바 GUI 를 이 스위트에서 띄울 수 없다.
+t_eq "종료 버튼이 있다" "1" \
+  "$(printf '%s\n' "$MV" | grep -c 'NSApplication.shared.terminate' | tr -d ' ')"
+t_eq "설정이 셋업 화면보다 먼저 걸린다" "yes" \
+  "$(printf '%s\n' "$MV" | awk '
+      /if showSettings \{/ && !a { a = NR }
+      /else if status\.needsSetup \{/ && !b { b = NR }
+      END { print (a && b && a < b) ? "yes" : "no" }')"
+
+t_start "⚠️ 폐지된 기능이 화면에 남아 있지 않다"
+# ⚠️ 웹 대시보드는 D5 에서 폐지됐다(2026-08-24). 그런데 앱에는 버튼이 남아
+#    있었고, 누르면 CLI 가 "폐지됐습니다" 를 낼 뿐 **아무 일도 안 났다.**
+#    폐지할 때 화면 쪽 잔재를 지우지 않은 것이다.
+for _f in MenuView Status; do
+  t_eq "$_f 에 대시보드 잔재가 없다" "0" \
+    "$(grep -c 'dashboard' "$ROOT/app/Sources/DevTrailApp/$_f.swift" | tr -d ' ')"
+done
+# ⚠️ CLI 가 실제로 폐지를 말하는지도 본다 — 조용히 사라지면 안 된다.
+t_eq "CLI 가 폐지를 말한다" "1" \
+  "$(printf '%s' "$("$ROOT/bin/devtrail" dashboard 2>&1)" | grep -c '폐지' | tr -d ' ')"
+
+t_start "간단 셋업 — 판정도 적용도 CLI 가 한다 (M4-4c)"
+OB=$(grep -vE '^\s*//' "$ROOT/app/Sources/DevTrailApp/Onboarding.swift" 2>/dev/null)
+t_eq "Onboarding 이 있다" "yes" \
+  "$([ -n "$OB" ] && echo yes || echo no)"
+# ⚠️ 볼트 후보를 앱이 직접 뒤지지 않는다 — 두 벌이 되면 앱과 CLI 가 다른
+#    볼트를 가리킨다.
+t_eq "볼트 후보를 CLI 에서 받는다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c '"setup", "env", "--json"' | tr -d ' ')"
+t_eq "스펙 조립을 CLI 에 맡긴다" "yes" \
+  "$([ "$(printf '%s\n' "$OB" | grep -c '"setup", "quick", "--vault"' | tr -d ' ')" != 0 ] \
+     && echo yes || echo no)"
+# ⚠️ 앱이 스펙 JSON 을 직접 만들면 스펙의 모양이 두 벌이 된다.
+t_eq "앱이 spec_version 을 적지 않는다" "0" \
+  "$(printf '%s\n' "$OB" | grep -c 'spec_version' | tr -d ' ')"
+t_eq "앱이 기본값(modules·ai)을 정하지 않는다" "0" \
+  "$(printf '%s\n' "$OB" | grep -cE '"devlog"|"provider"' | tr -d ' ')"
+# ⚠️ 바꾸기 전에 먼저 보여준다. --apply 는 확인 뒤에만.
+t_eq "미리보기가 --apply 없이 돈다" "1" \
+  "$(printf '%s\n' "$OB" | grep -c 'func preview' | tr -d ' ')"
+
+t_start "⚠️ 터미널이 안 열려도 길이 있다 (2026-08-24 QA)"
+# ⚠️ Terminal 은 명령을 **타이핑해서** 넣는다. 그 순간 셸 초기화가 입력을
+#    기다리고 있으면 글자를 먹는다 — oh-my-zsh 의 "Would you like to
+#    update? [Y/n]" 가 경로 첫 글자 `/` 를 삼켜, 터미널이 열리기만 하고
+#    `var/folders/…: no such file or directory` 로 죽었다.
+#
+#    사용자의 .zshrc 를 우리가 통제할 수 없으므로 근본은 못 고친다.
+#    **붙여넣을 명령을 늘 함께 보여준다** — 이 길은 셸 설정과 무관하다.
+t_eq "붙여넣을 명령을 화면에 그린다" "1" \
+  "$(printf '%s\n' "$MV" | grep -cF 'Text(status.setupCommand)' | tr -d ' ')"
+t_eq "복사 버튼이 그 명령을 넣는다" "1" \
+  "$(printf '%s\n' "$MV" | grep -cF 'setString(status.setupCommand' | tr -d ' ')"
+t_eq "쓰기 전에 clearContents 를 부른다 (짝이 맞는다)" "yes" \
+  "$([ "$(printf '%s\n' "$MV" | grep -cF 'NSPasteboard.general.clearContents()' | tr -d ' ')" \
+      = "$(printf '%s\n' "$MV" | grep -cF 'NSPasteboard.general.setString' | tr -d ' ')" ] \
+     && echo yes || echo no)"
+# ⚠️ 명령을 만드는 규칙은 CLI 경로와 같은 곳에서 온다 — 화면이 직접 조립하면
+#    실제로 실행되는 것과 갈린다.
+t_eq "명령을 Status 가 만든다" "1" \
+  "$(printf '%s\n' "$ST" | grep -c 'var setupCommand' | tr -d ' ')"
+# ⚠️ 인용 규칙이 두 벌이면 공백 있는 경로에서 한쪽만 깨진다.
+t_eq "인용 규칙이 한 곳이다" "1" \
+  "$(printf '%s\n' "$ST" | grep -c 'static func shellQuoted' | tr -d ' ')"
+t_eq "직접 따옴표를 조립하지 않는다" "0" \
+  "$(printf '%s\n' "$ST" | grep -c 'replacingOccurrences(of: "'"'"'", with:' | tr -d ' ' \
+     | awk '{ print ($1 > 1) ? 1 : 0 }')"
+
+t_start "간단 셋업 — 터미널 경로를 없애지 않았다"
+# ⚠️ 앱이 못 하는 것(기존 폴더 채택 · GitHub · 동기화 · AI)을 정하려면
+#    대화형 경로가 필요하다. 기본에서 내렸을 뿐 없애지 않는다.
+t_eq "고급으로 남아 있다" "1" \
+  "$(printf '%s\n' "$MV" | grep -c 'status.startSetup()' | tr -d ' ')"
+
 t_start "온보딩 — 번들에서 거짓 안내를 하지 않는다"
 # ⚠️ 앱 안에 CLI 가 실려 나가므로(M4-3), 번들인데 CLI 가 없다면 그건
 #    **번들이 손상된** 것이다. 그때 "curl | bash 로 설치하세요" 는 거짓말이다.
 t_eq "curl 안내는 번들이 아닐 때만" "1" \
   "$(printf '%s\n' "$MV" | grep -c 'if CLI.bundled == nil' | tr -d ' ')"
+
+t_start "⚠️ 이름 정규화로 서명이 깨지지 않는다 (M4-5)"
+# ⚠️ 2026-08-24 실물 QA 에서 **배포를 막던** 결함이다.
+#
+#    Finder 로 앱을 드래그하면 한글 파일 이름이 NFC → NFD 로 정규화된다.
+#    코드 서명은 NFC 이름을 봉인했으므로 그 순간 "손상되었습니다" 가 뜬다.
+#    cp·ditto·rsync 는 NFC 를 보존해서 **개발 중에는 재현되지 않았다.**
+#
+#    "NFD 로 바뀌어도 되게" 가 아니라 **"정규화될 이름이 아예 없게"** 고쳤다.
+t_eq "번들에 비ASCII 이름이 없다" "0" \
+  "$(find "$APP" -depth 1 -o -true 2>/dev/null >/dev/null; \
+     python3 -c '
+import os, sys
+n = 0
+for r, d, f in os.walk(sys.argv[1]):
+    for x in f + d:
+        if any(ord(c) > 127 for c in x):
+            n += 1
+print(n)' "$APP")"
+
+# ⚠️ 그리고 **실제로 정규화해 보고** 서명이 버티는지 본다. 위 검사가
+#    "없다" 를 말한다면, 이 검사는 "없어서 안전하다" 를 보인다.
+NTMP=$(mktemp -d)
+ditto "$APP" "$NTMP/DevTrail.app" 2>/dev/null
+python3 -c '
+import os, sys, unicodedata
+for r, d, f in os.walk(sys.argv[1], topdown=False):
+    for name in f + d:
+        nd = unicodedata.normalize("NFD", name)
+        if nd != name:
+            os.rename(os.path.join(r, name), os.path.join(r, nd))' "$NTMP/DevTrail.app" 2>/dev/null
+t_eq "NFD 로 정규화해도 서명이 유효하다" "0" \
+  "$(codesign --verify --deep --strict "$NTMP/DevTrail.app" >/dev/null 2>&1; echo $?)"
+rm -rf "$NTMP"
+
+t_start "⚠️ preset 이 압축돼 실리고 풀린다"
+t_eq "preset.zip 이 있다" "yes" \
+  "$([ -f "$APP/Contents/Resources/preset.zip" ] && echo yes || echo no)"
+t_eq "preset/ 디렉터리는 없다" "no" \
+  "$([ -d "$APP/Contents/Resources/preset" ] && echo yes || echo no)"
+# ⚠️ 압축했다는 것과 쓸 수 있다는 것은 다르다. 번들 CLI 로 실제로 풀어 본다.
+PH=$(mktemp -d)
+PDIR=$(DEVTRAIL_ROOT="$APP/Contents/Resources" DEVTRAIL_HOME="$PH" \
+       bash -c '. "$1/lib/common.sh" >/dev/null 2>&1; echo "$DT_PRESET"' \
+       _ "$APP/Contents/Resources" 2>/dev/null)
+t_eq "번들에서 preset 이 풀린다" "yes" \
+  "$([ -d "$PDIR/templates" ] && echo yes || echo no)"
+t_eq "노트 수가 저장소와 같다" "$(find "$ROOT/preset" -name '*.md' | wc -l | tr -d ' ')" \
+  "$(find "$PDIR" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+# ⚠️ **NFC 로 풀려야** 한다. tar 는 여기서 NFD 로 분해한다 — 그러면 서명은
+#    지켜져도 사용자 볼트에 들어가는 노트 이름이 바뀐다.
+t_eq "한글 이름이 NFC 로 풀린다" "0" \
+  "$(python3 -c '
+import os, sys, unicodedata
+d = os.path.join(sys.argv[1], "guides", "ko")
+if not os.path.isdir(d):
+    print(1); raise SystemExit
+bad = [n for n in os.listdir(d) if unicodedata.normalize("NFC", n) != n]
+print(len(bad))' "$PDIR" 2>/dev/null)"
+rm -rf "$PH"
 
 t_start "번들 CLI 자산이 코드와 어긋나지 않는다"
 # ⚠️ 목록을 손으로 관리하지 않는다. 코드의 $DEVTRAIL_ROOT/<무엇> 참조에서
@@ -400,6 +596,24 @@ t_eq "번들 jq 서명 확인" "0" \
 #    바꿔 넣는 변이가 전부 무효가 된다 — 2026-08-24 에 실제로 그랬다.
 #    (산출물 변이 4건이 "생존" 으로 보였는데, 게이트가 약한 게 아니라
 #     시험이 스스로 변이를 지우고 있었다.)
+
+t_start "⚠️ 컴파일이 깨지면 빌드가 실패한다"
+# ⚠️ 문자열로는 확인할 수 없다 — `|| true` 를 지워도 다른 줄이 grep 을 속인다.
+#    **실제로 깨뜨려 본다.**
+SRCF="$ROOT/app/Sources/DevTrailApp/Tokens.swift"
+if [ -f "$SRCF" ]; then
+  CBAK=$(mktemp -d)
+  cp "$SRCF" "$CBAK/Tokens.swift"
+  printf '\nthis is not swift {{{\n' >> "$SRCF"
+  t_eq "컴파일이 깨지면 build.sh 가 실패한다" "no" \
+    "$( (cd "$ROOT" && ./app/build.sh >/dev/null 2>&1) && echo yes || echo no)"
+  cp "$CBAK/Tokens.swift" "$SRCF"
+  rm -rf "$CBAK"
+  # ⚠️ 되돌린 뒤 실제로 다시 빌드된다는 것까지 본다. 되돌림을 단언하지
+  #    않으면 깨진 상태로 다음 작업에 들어간다 (DMG 시험에서 겪었다).
+  t_eq "되돌리면 다시 빌드된다" "yes" \
+    "$( (cd "$ROOT" && ./app/build.sh >/dev/null 2>&1) && echo yes || echo no)"
+fi
 
 t_start "⚠️ 서명이 실패하면 빌드가 선다"
 # ⚠️ 문서와 아래 단언은 "안쪽부터 서명한다" 를 **배포 계약**으로 말한다.

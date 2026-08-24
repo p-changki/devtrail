@@ -30,13 +30,6 @@ struct DevTrailApp: App {
         status.refreshSnapshot()
         guard timer == nil else { return }
 
-        // 앱이 띄운 대시보드 서버는 앱과 함께 정리한다.
-        // 남겨두면 포트를 잡은 채 살아 있는데 토큰 주소는 사라져 손댈 수 없다.
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
-        ) { _ in
-            MainActor.assumeIsolated { status.stopDashboard() }
-        }
         // 패널이 열려 있지 않아도 아이콘 색은 최신이어야 한다.
         let t = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
             Task { @MainActor in

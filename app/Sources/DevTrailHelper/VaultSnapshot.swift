@@ -202,7 +202,19 @@ enum VaultSnapshot {
         guard let e = fm.enumerator(atPath: root) else { return out }
         for case let sub as String in e {
             let name = (sub as NSString).lastPathComponent
-            if name.hasPrefix(".") {
+            // ⚠️ **디렉터리만** 거른다 (2026-08-24 실물 QA).
+            //
+            //    python 도 `dirs[:] = [d for d in dirs if not d.startswith('.')]`
+            //    로 디렉터리 목록만 걸러낸다.
+            //
+            //    그리고 skipDescendants() 를 파일에 부르면 지금 훑고 있던
+            //    디렉터리가 통째로 잘린다 — `.DS_Store` 하나로 그 폴더의
+            //    노트가 전부 사라졌다. ScanCore 와 같은 결함이었다.
+            var isDirEntry: ObjCBool = false
+            let entryPath = (root as NSString).appendingPathComponent(sub)
+            let entryIsDir = fm.fileExists(atPath: entryPath, isDirectory: &isDirEntry)
+                && isDirEntry.boolValue
+            if entryIsDir, name.hasPrefix(".") {
                 e.skipDescendants()
                 continue
             }

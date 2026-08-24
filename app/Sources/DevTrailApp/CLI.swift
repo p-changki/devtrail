@@ -89,7 +89,7 @@ enum CLI {
 
     /// 끝나는 명령을 실행하고 결과를 기다린다.
     ///
-    /// ⚠️ 상주하는 명령(`dashboard` 등)에는 쓰지 않는다 — `start(_:onLine:)` 를 쓴다.
+    /// ⚠️ 끝나지 않는 명령에는 쓰지 않는다 — `start(_:onLine:)` 를 쓴다.
     @discardableResult
     static func run(_ args: [String], timeout: TimeInterval = 900) -> Result {
         let p = Process()
@@ -140,7 +140,7 @@ enum CLI {
                       out: out, err: err)
     }
 
-    /// 끝나지 않는 명령(예: `dashboard` 서버)을 띄우고 기다리지 않는다.
+    /// 끝나지 않는 명령을 띄우고 기다리지 않는다.
     ///
     /// 출력은 줄 단위로 흘려보낸다 — 시작에 성공했는지(주소)와 실패 사유를
     /// UI가 알 수 있어야 하기 때문이다. 반환한 Process는 호출자가 종료시킨다.

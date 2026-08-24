@@ -29,11 +29,34 @@ MARKER_END="<!-- devtrail:activity:end -->"
 # ⚠️ 인자가 아니라 환경변수인 이유: $1 은 이미 날짜다(devtrail activity [DATE]).
 EVENT_FILE="${DEVTRAIL_EVENT_FILE:-}"
 if [ -n "$EVENT_FILE" ] && [ "$EVENT_FILE" != "$TARGET_FILE" ]; then
+  # ⚠️ 개발일지 **폴더 안**에 생긴 노트인데 설정된 파일명 규칙에 아예 맞지
+  #    않는다면, 그건 '남의 노트'가 아니라 규칙이 실제와 다른 것이다.
+  #    예전에는 이 경우도 조용히 exit 0 해서, 정확히 고쳐야 할 사람에게만
+  #    아무 말도 하지 않았다(2026-08-24).
+  #
+  # ⚠️ 날짜만 다른 경우(지난 일지를 새로 만드는 등)는 규칙에 맞으므로
+  #    경고하지 않는다 — 날짜 자리를 와일드카드로 두고 비교한다.
+  case "$EVENT_FILE" in
+    "$DEVLOG_DIR"/*)
+      _pat="$(cfg '.naming.devlog_file' '{{DATE}} devlog.md')"
+      _glob="${_pat//\{\{DATE\}\}/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]}"
+      case "${EVENT_FILE##*/}" in
+        $_glob) ;;   # 규칙에는 맞다 — 날짜가 다를 뿐이다
+        *)
+          printf '이 노트는 개발일지 폴더에 있지만 설정된 파일명 규칙과 다릅니다.\n' >&2
+          printf '  만들어진 노트: %s\n' "${EVENT_FILE##*/}" >&2
+          printf '  기대한 이름:   %s\n' "${TARGET_FILE##*/}" >&2
+          hint_fix '.naming.devlog_file'
+          ;;
+      esac
+      unset _pat _glob
+      ;;
+  esac
   exit 0
 fi
 
 if [ ! -f "$TARGET_FILE" ]; then
-  echo "개발일지 없음 - 건너뜀: $TARGET_FILE"; exit 0
+  hint_devlog_missing "$TARGET_FILE"; exit 0
 fi
 
 # 파일은 있는데 헤딩이 아직 없으면 템플릿 엔진이 아직 본문을 쓰지 않은 것이다.
@@ -53,7 +76,8 @@ if [ -n "$EVENT_FILE" ]; then
     _waited=$((_waited + 1))
   done
 fi
-grep -qF "$HEADING" "$TARGET_FILE" || { echo "헤딩 없음 - 건너뜀: $HEADING"; exit 0; }
+grep -qF "$HEADING" "$TARGET_FILE" \
+  || { hint_heading_missing '.headings.issues_pr' "$HEADING" "$TARGET_FILE"; exit 0; }
 
 if [ "${FORCE_REFRESH:-0}" != "1" ] && grep -qF "$MARKER_START" "$TARGET_FILE"; then
   if sed -n "/$MARKER_START/,/$MARKER_END/p" "$TARGET_FILE" | grep -qF "($TODAY)"; then

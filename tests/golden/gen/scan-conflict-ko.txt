@@ -1,35 +1,35 @@
 {
   "vault": "<VAULT>",
   "scale": {
-    "notes": 70,
-    "folders": 15,
-    "frontmatter_notes": 69,
+    "notes": 73,
+    "folders": 16,
+    "frontmatter_notes": 72,
     "frontmatter_pct": 98.6
   },
   "fields": {
     "type": {
-      "with_key": 67,
-      "with_value": 66,
-      "key_pct": 95.7,
-      "value_pct": 94.3
+      "with_key": 70,
+      "with_value": 69,
+      "key_pct": 95.9,
+      "value_pct": 94.5
     },
     "status": {
       "with_key": 8,
       "with_value": 7,
-      "key_pct": 11.4,
-      "value_pct": 10.0
+      "key_pct": 11.0,
+      "value_pct": 9.6
     },
     "tags": {
       "with_key": 3,
       "with_value": 3,
-      "key_pct": 4.3,
-      "value_pct": 4.3
+      "key_pct": 4.1,
+      "value_pct": 4.1
     },
     "created": {
       "with_key": 7,
       "with_value": 7,
-      "key_pct": 10.0,
-      "value_pct": 10.0
+      "key_pct": 9.6,
+      "value_pct": 9.6
     },
     "updated": {
       "with_key": 0,
@@ -40,14 +40,14 @@
     "project": {
       "with_key": 2,
       "with_value": 1,
-      "key_pct": 2.9,
+      "key_pct": 2.7,
       "value_pct": 1.4
     },
     "review_at": {
       "with_key": 2,
       "with_value": 2,
-      "key_pct": 2.9,
-      "value_pct": 2.9
+      "key_pct": 2.7,
+      "value_pct": 2.7
     },
     "category": {
       "with_key": 1,
@@ -224,9 +224,18 @@
     },
     {
       "path": "notes/자료",
-      "notes": 10,
-      "subfolders": 0,
+      "notes": 11,
+      "subfolders": 1,
       "depth": 2,
+      "dated_ratio": 0.0,
+      "last_modified": 1785542400,
+      "role_candidates": {}
+    },
+    {
+      "path": "notes/자료/깊은폴더",
+      "notes": 2,
+      "subfolders": 0,
+      "depth": 3,
       "dated_ratio": 0.0,
       "last_modified": 1785542400,
       "role_candidates": {}

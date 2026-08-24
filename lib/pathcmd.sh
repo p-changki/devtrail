@@ -18,7 +18,7 @@
 #   devtrail path --rel devlog       볼트 기준 상대경로 (Dataview FROM 용)
 #   devtrail path --json             전체를 JSON 으로
 
-DT_TREE="${DEVTRAIL_TREE:-$DEVTRAIL_ROOT/preset/tree.json}"
+DT_TREE="${DEVTRAIL_TREE:-$DT_PRESET/tree.json}"
 
 path_cmd() {
   require_config

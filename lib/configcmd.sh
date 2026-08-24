@@ -12,6 +12,26 @@ DT_SETTABLE_NUM="schedule.daily_hour schedule.repodocs_interval_sec"
 # 값이 정해진 문자열 키. "키:값1,값2" 형식.
 DT_SETTABLE_ENUM="lang:ko,en"
 
+# 자유 문자열 키 — 값을 우리가 정할 수 없는 것들 (ADR 0006 · 2026-08-24 실물 QA).
+#
+# ⚠️ 왜 열었나
+#
+#    기존 볼트에 얹은 사용자는 파일명과 헤딩이 우리 기본값과 다르다.
+#    실제로 이렇게 갈렸다:
+#
+#      기본값               사용자 볼트
+#      {{DATE}} devlog.md   2026-08-24 개발일지.md   (81개)
+#      ## Issues / PRs      ## 🔗 오늘의 이슈 / PR
+#
+#    그런데 셋업이 묻지도 않고, `config set` 도 거부했다. **사용자가 스스로
+#    고칠 방법이 없었다** — 스크립트는 "헤딩 없음 - 건너뜀" 을 내고 exit 0 로
+#    끝나서, 화면에는 "눌렀는데 아무 일도 안 난다" 로만 보였다.
+#
+# ⚠️ 자유 문자열이라고 아무 값이나 받지 않는다. 아래 _config_free_guard 가
+#    이 키들이 지켜야 할 모양을 본다 — 모양이 깨지면 다시 조용히 안 맞는다.
+DT_SETTABLE_FREE="naming.devlog_file naming.weekly_file
+headings.issues_pr headings.worklog headings.morning headings.youtube"
+
 # 🔑 기본값의 단일 출처.
 #
 # 설정에 키가 없을 때 어떻게 동작하는지는 '한 곳'에만 적혀 있어야 한다.
@@ -54,7 +74,9 @@ config_cmd() {
     keys)
       echo "boolean: $DT_SETTABLE_BOOL"
       echo "number:  $DT_SETTABLE_NUM"
-      echo "enum:    $DT_SETTABLE_ENUM" ;;
+      echo "enum:    $DT_SETTABLE_ENUM"
+      # ⚠️ 줄바꿈이 섞여 있으므로 공백으로 눌러 한 줄로 낸다.
+      echo "text:    $(printf '%s' "$DT_SETTABLE_FREE" | tr '\n' ' ')" ;;
     migrate)
       # 스키마만 따로 올린다. devtrail update 도 같은 함수를 부른다.
       . "$DEVTRAIL_ROOT/lib/migrate.sh"
@@ -86,6 +108,10 @@ _config_set() {
    $(L "가능한 값" "Allowed"): $(printf '%s' "$allowed" | tr ',' ' ')" ;;
     esac
     [ "$key" = "lang" ] && { _config_lang_guard "$val" || return 1; }
+  elif _dt_in_list "$key" "$DT_SETTABLE_FREE"; then
+    _config_free_guard "$key" "$val" || return 1
+    # ⚠️ jq 로 문자열을 만든다. 손으로 따옴표를 붙이면 값 안의 " 나 \ 에서 깨진다.
+    typed=$(jq -n --arg v "$val" '$v')
   else
     die "$(L "변경할 수 없는 키입니다" "That key cannot be changed here"): $key
    $(L "변경 가능" "Changeable"): devtrail config keys
@@ -108,6 +134,60 @@ _config_set() {
 
   mv "$tmp" "$CONFIG_FILE"
   printf '%s=%s\n' "$key" "$typed"
+}
+
+# 자유 문자열 키가 지켜야 할 모양.
+#
+# ⚠️ "무엇이든 받는다" 와 "말이 되는 것만 받는다" 는 다르다. 모양이 깨진 값을
+#    받아주면, 다시 조용히 안 맞는 상태로 돌아간다 — 고치라고 열어준 문이
+#    같은 함정이 된다.
+_config_free_guard() {
+  local key="$1" val="$2"
+
+  [ -n "$val" ] || die "$(L "빈 값은 쓸 수 없습니다" "An empty value is not allowed"): $key"
+
+  case "$key" in
+    naming.devlog_file)
+      # ⚠️ 날짜가 안 들어가면 모든 일지가 같은 파일이 된다.
+      case "$val" in
+        *'{{DATE}}'*) ;;
+        *) die "$(L "파일명에 {{DATE}} 가 있어야 합니다 — 없으면 모든 일지가 한 파일이 됩니다" \
+                   "The filename needs {{DATE}} — without it every devlog is one file"): $val" ;;
+      esac ;;
+    naming.weekly_file)
+      case "$val" in
+        *'{{ISOWEEK}}'*) ;;
+        *) die "$(L "파일명에 {{ISOWEEK}} 가 있어야 합니다" \
+                   "The filename needs {{ISOWEEK}}"): $val" ;;
+      esac ;;
+  esac
+
+  case "$key" in
+    naming.*)
+      # ⚠️ 경로 구분자가 들어오면 다른 폴더에 쓰게 된다. 폴더는 dirs 가 정한다.
+      case "$val" in
+        */*) die "$(L "파일명에 / 를 쓸 수 없습니다 — 폴더는 dirs 가 정합니다" \
+                     "No / in a filename — folders come from dirs"): $val" ;;
+      esac
+      case "$val" in
+        *.md) ;;
+        *) die "$(L "파일명은 .md 로 끝나야 합니다" "The filename must end with .md"): $val" ;;
+      esac ;;
+    headings.*)
+      # ⚠️ 헤딩은 # 로 시작해야 찾을 수 있다. 스크립트가 줄 앞에서 정확히 맞춘다.
+      case "$val" in
+        '#'*) ;;
+        *) die "$(L "헤딩은 # 으로 시작해야 합니다" "A heading must start with #"): $val" ;;
+      esac
+      # ⚠️ 여러 줄은 한 줄로 맞추는 검색을 깨뜨린다.
+      #
+      # ⚠️ `case "$val" in *"$(printf '\n')"*` 로 쓰면 안 된다. 명령 치환이
+      #    끝의 개행을 지워 **빈 문자열**이 되고, `*""*` 는 모든 값에 매치해
+      #    전부 거부된다. 줄 수를 센다.
+      [ "$(printf '%s' "$val" | wc -l | tr -d ' ')" = 0 ] \
+        || die "$(L "헤딩은 한 줄이어야 합니다" "A heading must be a single line"): $val" ;;
+  esac
+  return 0
 }
 
 _dt_in_list() {

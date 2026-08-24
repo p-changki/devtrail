@@ -21,7 +21,7 @@ _ob_automove() {
   local dot="$1"
   local data="$dot/plugins/auto-note-mover/data.json"
   local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
+  local profile="$DT_PRESET/profiles/${mode}.json"
 
   step "$(L "노트 라우팅" "Note routing") (Auto Note Mover)"
   [ -f "$profile" ] || { warn "$(L "프로파일 없음" "Profile missing"): $profile"; return 0; }
@@ -36,7 +36,7 @@ _ob_automove() {
   local out; out=$(mktemp)
   DT_FOREIGN_FOLDERS="$(_ob_foreign_folders)" \
   dt_gen gen-anm \
-    "$DEVTRAIL_ROOT/preset/tree.json" "$CONFIG_FILE" "$profile" \
+    "$DT_PRESET/tree.json" "$CONFIG_FILE" "$profile" \
     "$([ -f "$data" ] && printf '%s' "$data")" > "$out" || {
       rm -f "$out"; warn "$(L "규칙 생성 실패 — 건드리지 않습니다" "Could not build rules — leaving them alone")"; return 0; }
 
@@ -69,7 +69,7 @@ _ob_foreign_folders() {
   #    보면, 정작 사용자의 Dev/ 를 남의 폴더로 취급해 규칙에서 빼버린다.
   ours=$(jq -r --argjson en "$([ "$(dt_lang)" = en ] && echo true || echo false)" '
     .folders[] | (if $en then (.path_en // .path) else .path end) | split("/")[0]
-  ' "$DEVTRAIL_ROOT/preset/tree.json" | sort -u)
+  ' "$DT_PRESET/tree.json" | sort -u)
   find "$vault" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | while read -r d; do
     local b; b=$(basename "$d")
     case "$b" in .*) continue ;; esac

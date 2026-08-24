@@ -14,8 +14,8 @@ _init_scan() {
   echo
   printf '%s\n' "${C_BOLD}$(L "볼트 진단" "Scanning the vault")${C_RESET}"
   if ! dt_gen gen-scan "$vault" \
-        "$DEVTRAIL_ROOT/preset/tree.json" \
-        "$DEVTRAIL_ROOT/preset/obsidian/hotkeys.tmpl.json" > "$DT_SCAN" 2>/dev/null; then
+        "$DT_PRESET/tree.json" \
+        "$DT_PRESET/obsidian/hotkeys.tmpl.json" > "$DT_SCAN" 2>/dev/null; then
     warn "$(L "진단에 실패했습니다 — 빈 볼트로 간주합니다" \
             "Diagnosis failed — treating it as an empty vault")"
     echo '{}' > "$DT_SCAN"
@@ -77,7 +77,7 @@ _init_mode() {
 }
 
 
-_dt_profile() { printf '%s' "$DEVTRAIL_ROOT/preset/profiles/${DT_MODE:-existing}.json"; }
+_dt_profile() { printf '%s' "$DT_PRESET/profiles/${DT_MODE:-existing}.json"; }
 
 # ── 루트 폴더 ────────────────────────────────────────────────────────────────
 # 기존 볼트면 가장 노트가 많은 최상위 폴더를 기본값으로 제안한다.

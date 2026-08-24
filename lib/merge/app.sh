@@ -22,8 +22,8 @@ _ob_app() {
   local dot="$1"
   local app="$dot/app.json"
   local mode; mode=$(cfg '.install.mode' 'existing')
-  local profile="$DEVTRAIL_ROOT/preset/profiles/${mode}.json"
-  local src="$DEVTRAIL_ROOT/preset/obsidian/app.json"
+  local profile="$DT_PRESET/profiles/${mode}.json"
+  local src="$DT_PRESET/obsidian/app.json"
 
   step "$(L "에디터 설정" "Editor settings")"
   local how; how=$(jq -r '.merge.app // "false"' "$profile" 2>/dev/null)

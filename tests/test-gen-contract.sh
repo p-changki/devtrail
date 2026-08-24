@@ -435,6 +435,23 @@ printf -- '---\ntype: template\n---\n<%% tp.file.title %%>\n' > "$VAULT/notes/�
 mkdir -p "$VAULT/notes/node_modules"
 printf -- '---\ntype: note\n---\n# 세면 안 됨\n' > "$VAULT/notes/node_modules/skip.md"
 
+# ①-b ⚠️ **하위 폴더 안의 숨은 파일** — 2026-08-24 실물 QA 에서 배포를 막던 것.
+#
+#    Swift 판이 skipDescendants() 를 파일에도 불러서, 숨은 파일이 있는 폴더의
+#    노트가 **통째로** 사라졌다. 사용자 볼트에서 노트 1,775개 중 8개만 보였고,
+#    그래서 '기존 폴더 매핑' 질문이 뜨지 않아 평행 트리가 생겼다.
+#
+#    골든 58개가 전부 통과했는데도 못 잡았다 — **픽스처가 얕았기** 때문이다.
+#    숨은 파일은 루트에만 있었고, 하위 폴더 안에는 없었다.
+mkdir -p "$VAULT/notes/자료/깊은폴더"
+printf -- '---\ntype: note\n---\n# 숨은 파일 옆 노트\n' > "$VAULT/notes/자료/깊은폴더/이웃.md"
+printf -- '---\ntype: note\n---\n# 더 깊은 노트\n' > "$VAULT/notes/자료/깊은폴더/둘째.md"
+printf 'x\n' > "$VAULT/notes/자료/깊은폴더/.DS_Store"
+
+# ①-c ⚠️ **이름이 점으로 시작하는 노트.** python 은 디렉터리만 걸러내므로
+#    이런 파일도 센다. Swift 는 파일에도 같은 규칙을 적용해 1개를 빠뜨렸다.
+printf -- '---\ntype: note\n---\n# 점으로 시작하는 노트\n' > "$VAULT/notes/자료/.env 설정 공유.md"
+
 # ② 값이 '비어 있는' 표기들 — field_has_value 의 목록이 여기서 시험된다.
 printf -- '---\ntype: ""\nstatus: null\ncategory: ~\nscope: -\nproject: []\ncreated: 2026-01-01\n---\n# 빈값\n' \
   > "$VAULT/notes/자료/빈값.md"
