@@ -29,6 +29,8 @@ command -v swift >/dev/null 2>&1 || { echo "❌ swift 없음 — Xcode 또는 Co
 command -v jq >/dev/null 2>&1 || { echo "❌ jq 없음 — 번들 jq 락 파일을 읽어야 합니다"; exit 1; }
 # ⚠️ 서명은 선택이 아니다 (아래 참조). 없으면 여기서 세운다.
 command -v codesign >/dev/null 2>&1 || { echo "❌ codesign 없음 — Xcode Command Line Tools 필요"; exit 1; }
+command -v sips >/dev/null 2>&1 || { echo "❌ sips 없음 — macOS 기본 이미지 도구가 필요합니다"; exit 1; }
+command -v iconutil >/dev/null 2>&1 || { echo "❌ iconutil 없음 — macOS 아이콘 도구가 필요합니다"; exit 1; }
 
 # ── 번들 jq 관문 ─────────────────────────────────────────────────────────────
 #
@@ -196,6 +198,34 @@ ditto -c -k --sequesterRsrc ../preset "$OUT/Contents/Resources/preset.zip" \
 mkdir -p "$OUT/Contents/Resources/licenses"
 cp ../vendor/jq/build/COPYING "$OUT/Contents/Resources/licenses/jq-COPYING.txt"
 
+# Finder·Applications·DMG에 기본 아이콘이 보이지 않도록 원본 PNG 하나에서
+# macOS용 모든 해상도의 .icns를 빌드한다. 파생 .icns는 산출물이다.
+ICON_SRC="Assets/DevTrail-icon.png"
+[ -f "$ICON_SRC" ] || { echo "❌ 앱 아이콘 원본 없음: $ICON_SRC"; exit 1; }
+ICON_TMP=$(mktemp -d) || { echo "❌ 아이콘 임시 폴더 생성 실패"; exit 1; }
+ICONSET="$ICON_TMP/DevTrail.iconset"
+mkdir -p "$ICONSET"
+make_icon() {
+  local px="$1" name="$2"
+  sips -z "$px" "$px" "$ICON_SRC" --out "$ICONSET/$name" >/dev/null \
+    || { rm -rf "$ICON_TMP"; echo "❌ 아이콘 크기 생성 실패: $name"; exit 1; }
+}
+make_icon 16 icon_16x16.png
+make_icon 32 icon_16x16@2x.png
+make_icon 32 icon_32x32.png
+make_icon 64 icon_32x32@2x.png
+make_icon 128 icon_128x128.png
+make_icon 256 icon_128x128@2x.png
+make_icon 256 icon_256x256.png
+make_icon 512 icon_256x256@2x.png
+make_icon 512 icon_512x512.png
+make_icon 1024 icon_512x512@2x.png
+iconutil -c icns "$ICONSET" -o "$OUT/Contents/Resources/DevTrail.icns" \
+  || { rm -rf "$ICON_TMP"; echo "❌ .icns 생성 실패"; exit 1; }
+rm -rf "$ICON_TMP"
+[ -s "$OUT/Contents/Resources/DevTrail.icns" ] \
+  || { echo "❌ .icns 가 생성되지 않았습니다"; exit 1; }
+
 
 cat > "$OUT/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -209,6 +239,7 @@ cat > "$OUT/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>$APP_NAME</string>
+  <key>CFBundleIconFile</key><string>DevTrail</string>
   <key>LSMinimumSystemVersion</key><string>${MIN_MACOS}.0</string>
   <!-- 메뉴바 전용 앱: Dock 아이콘과 ⌘Tab 에 나타나지 않는다 -->
   <key>LSUIElement</key><true/>
