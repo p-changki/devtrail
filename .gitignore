@@ -18,16 +18,17 @@ secrets/
 *.plist
 !templates/launchd/*.plist.tmpl
 
-# 로컬 문서 — 구현계획·리서치는 추적하지 않는다
-# (장기 확정 결정만 docs/decisions/ 에 두고 예외 처리)
+# 로컬 문서 — 구현계획·ADR·리서치·릴리즈 초안은 공개 저장소에 올리지 않는다.
 # ⚠️ docs/ 로 쓰면 git이 하위로 내려가지 않아 아래 예외가 무효가 된다.
 #    디렉터리째 제외하면 재포함이 불가능하므로 docs/* 로 쓴다.
 docs/*
-!docs/decisions/
-!docs/design-tokens.md
+# 공개 제품 문서만 예외로 둔다.
 !docs/ARCHITECTURE.md
 # 사용 가이드는 제품과 함께 나간다 — 구현계획이 아니다.
 !docs/command-center-usage.md
+# 공개 README 데모 이미지만 제품 자산으로 추적한다.
+!docs/assets/
+!docs/assets/devtrail-overview.png
 
 # 저장소 루트의 로컬 학습·메모 — 결정 기록이 아니므로 추적하지 않는다.
 # 오래 갈 결정은 docs/decisions/ 에 ADR 로 쓴다.

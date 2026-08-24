@@ -4,9 +4,17 @@
 
 *[**한국어**](README.md) · [English](README.en.md)*
 
-> 개발한 것, 배운 것, 참고한 것을 오늘 기록하고 매주 다시 꺼내 쓰는 Obsidian 작업 공간
+> 개발한 것, 배운 것, 참고한 것을 오늘 기록하고 매주 다시 꺼내 쓰는, 개발자를 위한 로컬 제2의 뇌
 
-DevTrail은 macOS용 CLI·메뉴바 앱·Obsidian Command Center를 묶어, 개발자의 GitHub 활동·개발일지·프로젝트·학습 자료를 하나의 로컬 Markdown 흐름으로 연결합니다.
+DevTrail은 **방대한 개인 자료를 빠르게 모으고, 다시 꺼내 적용할 수 있게 만드는 로컬 Markdown 작업 환경**입니다. macOS용 CLI·메뉴바 앱·Obsidian Command Center를 묶어 GitHub 활동, 개발일지, 프로젝트 문서, 웹·YouTube 자료를 하나의 흐름으로 연결합니다.
+
+Obsidian이 처음인 개발자·취준생·1인 개발자부터, AI와 Markdown으로 바이브코딩하는 사람까지 바로 시작할 수 있습니다. 복잡한 폴더 규칙을 외우기보다 오늘의 개발일지에서 작업을 시작하고, 자료실에 쌓인 나만의 문서·링크·학습 기록을 필요할 때 검색해 적용합니다. 모든 기록은 사용자의 볼트에 로컬 파일로 남습니다.
+
+![DevTrail 개요 — Obsidian 대시보드와 메뉴바 앱](docs/assets/devtrail-overview.png)
+
+_오늘의 기록, 프로젝트, 자료실을 Obsidian 대시보드와 메뉴바 앱에서 함께 봅니다._
+
+> **현재 macOS 베타입니다.** [DevTrail 0.7.0 베타 DMG 다운로드](https://github.com/p-changki/devtrail/releases/tag/v0.7.0) · 사용 후기와 버그는 [Issues](https://github.com/p-changki/devtrail/issues)로 알려 주세요.
 
 ## 누구를 위한 도구인가
 
@@ -16,7 +24,22 @@ DevTrail은 macOS용 CLI·메뉴바 앱·Obsidian Command Center를 묶어, 개�
 
 Raindrop·Readwise·Web Clipper를 대체하는 범용 서비스는 아닙니다. 링크를 모으는 입구보다, 모은 자료를 개발일지와 주간 회고에서 다시 쓰는 흐름에 집중합니다.
 
-## 5분 시작
+## 베타 설치와 5분 시작
+
+### 가장 쉬운 방법 — macOS 앱
+
+1. [릴리즈 페이지](https://github.com/p-changki/devtrail/releases/tag/v0.7.0)에서 `DevTrail-0.7.0.dmg`를 내려받습니다.
+2. DMG를 열어 **DevTrail**을 **Applications**로 드래그합니다.
+3. Applications에서 DevTrail을 **control-클릭 → 열기**로 처음 한 번 실행합니다.
+4. 메뉴바의 DevTrail에서 볼트를 고르고 **안전한 설정 확인**을 누릅니다.
+
+이 베타는 아직 Apple 공증 전입니다. macOS가 앱을 열지 못한다고 하면, 릴리즈의 SHA-256을 확인한 뒤에만 아래 명령을 한 번 실행하세요.
+
+```bash
+xattr -dr com.apple.quarantine /Applications/DevTrail.app
+```
+
+### CLI로 시작
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/p-changki/devtrail/main/install.sh | bash
@@ -30,6 +53,8 @@ devtrail init
 3. 오늘 개발일지 만들기
 4. 링크 또는 빠른 메모 저장
 5. Obsidian 대시보드 열기
+
+기존 노트는 이동하거나 덮어쓰지 않습니다. 적용 전에는 변경 내용을 미리 볼 수 있고, 적용한 변경은 `devtrail undo`로 되돌릴 수 있습니다.
 
 ## 핵심 흐름
 
