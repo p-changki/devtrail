@@ -106,6 +106,17 @@ devtrail undo
 
 Please report bugs or ideas in [Issues](https://github.com/p-changki/devtrail/issues). Include `devtrail doctor` output and steps to reproduce when possible.
 
+## Removing DevTrail
+
+```bash
+devtrail app uninstall             # remove the menu bar app (dry-run by default)
+devtrail app uninstall --apply     # actually remove it
+devtrail command-center uninstall  # remove the Obsidian plugin
+devtrail uninstall                 # remove the launchd automation
+```
+
+None of these touch your vault or config. Your notes stay where they are.
+
 ## Development
 
 ```bash

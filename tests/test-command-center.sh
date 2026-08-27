@@ -125,8 +125,10 @@ n=$(cat "$ROOT/plugin"/*.js | wc -l | tr -d ' ')
 if [ "$n" -lt 1500 ]; then
   t_eq "1500줄 아래" "true" "true"
 else
+  # ⚠️ 추적하지 않는 문서를 읽으면 이 검사는 조용히 죽는다 —
+  #    실제로 ADR 을 저장소에서 뺐을 때 그렇게 됐다. 추적되는 곳만 본다.
   t_contains "1500을 넘었으면 재검토가 기록돼 있다" "재검토 1" \
-    "$(cat "$ROOT/docs/decisions/0002-command-center.md")"
+    "$(cat "$ROOT/docs/ARCHITECTURE.md")"
 fi
 
 # ── 명령 표면 ────────────────────────────────────────────────────────────────

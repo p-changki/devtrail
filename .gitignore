@@ -31,7 +31,7 @@ docs/*
 !docs/assets/devtrail-overview.png
 
 # 저장소 루트의 로컬 학습·메모 — 결정 기록이 아니므로 추적하지 않는다.
-# 오래 갈 결정은 docs/decisions/ 에 ADR 로 쓴다.
+# 게이트가 읽어야 하는 결정은 docs/ARCHITECTURE.md 에 남긴다.
 /programming-principles-study.md
 
 # 로그·백업

@@ -106,6 +106,17 @@ devtrail undo                      # 되돌릴 수 있는 변경 목록
 
 문제나 제안은 [Issues](https://github.com/p-changki/devtrail/issues)에 남겨 주세요. 가능하면 `devtrail doctor` 결과와 재현 순서를 함께 적어 주세요.
 
+## 제거
+
+```bash
+devtrail app uninstall             # 메뉴바 앱 제거 (기본 dry-run)
+devtrail app uninstall --apply     # 실제로 지웁니다
+devtrail command-center uninstall  # Obsidian 플러그인 제거
+devtrail uninstall                 # 자동화(launchd) 제거
+```
+
+어느 것도 **볼트와 설정은 건드리지 않습니다.** 노트는 그대로 남습니다.
+
 ## 개발
 
 ```bash
