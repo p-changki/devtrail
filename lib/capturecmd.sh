@@ -23,18 +23,22 @@ cap_existing() {
 
 # ── 템플릿 ───────────────────────────────────────────────────────────────────
 _cap_render() {
-  local tpl="$1" title="$2" url="$3" channel="$4" today="$5" now="$6"
+  local tpl="$1" title="$2" url="$3" channel="$4" today="$5" now="$6" purpose="${7:-}"
   # 기존 볼트는 템플릿을 사용자가 이미 고쳐 두었을 수 있다. 새 분류 필드가
   # 없는 옛 YouTube 템플릿도 캡처 자체가 미분류가 되지 않도록, 빈 필드만
   # category 바로 뒤에 보수적으로 덧붙인다. 템플릿의 다른 내용은 바꾸지 않는다.
-  local add_area=0 add_topic=0 add_source_kind=0
+  local add_area=0 add_topic=0 add_source_kind=0 add_learning_goal=0 purpose_yaml
   grep -qE '^area:' "$tpl" || add_area=1
   grep -qE '^topic:' "$tpl" || add_topic=1
   grep -qE '^source_kind:' "$tpl" || add_source_kind=1
+  grep -qE '^learning_goal:' "$tpl" || add_learning_goal=1
+  # 입력 목적은 YAML 한 줄 문자열로만 저장한다. 줄바꿈·따옴표가 frontmatter를
+  # 깨거나 새 속성을 만들지 못하게 한다.
+  purpose_yaml=$(printf '%s' "$purpose" | tr '\r\n\t' '   ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//; s/\\/\\\\/g; s/"/\\"/g')
   # 값은 정규식 치환이 아닌 splice로 문자 그대로 넣고, 남은 Templater
   # 문법은 아래 검사에서 실패시킨다.
-  DT_T="$title" DT_U="$url" DT_C="$channel" DT_D="$today" DT_N="$now" \
-  DT_Y_ADD_AREA="$add_area" DT_Y_ADD_TOPIC="$add_topic" DT_Y_ADD_SOURCE_KIND="$add_source_kind" \
+  DT_T="$title" DT_U="$url" DT_C="$channel" DT_D="$today" DT_N="$now" DT_Y_GOAL="$purpose_yaml" \
+  DT_Y_ADD_AREA="$add_area" DT_Y_ADD_TOPIC="$add_topic" DT_Y_ADD_SOURCE_KIND="$add_source_kind" DT_Y_ADD_LEARNING_GOAL="$add_learning_goal" \
   awk '
     function splice(s, val,   out) {
       # RSTART/RLENGTH 자리를 val 로 바꿔 이어 붙인다 (문자 그대로).
@@ -72,6 +76,7 @@ _cap_render() {
         if (ENVIRON["DT_Y_ADD_AREA"] == "1") buf[n++] = "area:"
         if (ENVIRON["DT_Y_ADD_TOPIC"] == "1") buf[n++] = "topic:"
         if (ENVIRON["DT_Y_ADD_SOURCE_KIND"] == "1") buf[n++] = "source_kind: youtube"
+        if (ENVIRON["DT_Y_ADD_LEARNING_GOAL"] == "1") buf[n++] = "learning_goal:"
         classification_added = 1
       }
     }
@@ -79,10 +84,11 @@ _cap_render() {
       # 캡처가 아는 것만 채운다. 모르는 것은 비워 둔다 —
       # 빈 칸은 "아직 없다" 는 사실이고, 지어낸 값은 거짓이다.
       # ⚠️ 각 키의 **첫 줄만** 채운다 (python 의 count=1 과 같다).
-      split("url channel", keys, " ")
+      split("url channel learning_goal", keys, " ")
       vals["url"] = ENVIRON["DT_U"]
       vals["channel"] = ENVIRON["DT_C"]
-      for (k = 1; k <= 2; k++) {
+      vals["learning_goal"] = ENVIRON["DT_Y_GOAL"]
+      for (k = 1; k <= 3; k++) {
         key = keys[k]
         if (vals[key] == "") continue
         for (i = 0; i < n; i++) {
@@ -334,116 +340,15 @@ EOF
 }
 
 # ── 유튜브 캡처 ──────────────────────────────────────────────────────────────
-# Claude가 /tmp의 자막을 Read 하게 하면 로컬 보안 훅이 경로를 막을 수 있다.
-# 그래서 자막 수집은 DevTrail이 맡고, 필요한 텍스트만 프롬프트에 직접 넣는다.
-_cap_youtube_transcript() {
-  local url="$1" tmp sub text
-  [ -n "${DT_CAPTURE_TRANSCRIPT:-}" ] && { printf '%s' "$DT_CAPTURE_TRANSCRIPT"; return 0; }
-  has yt-dlp || return 1
-  tmp=$(mktemp -d "${TMPDIR:-/tmp}/devtrail-youtube.XXXXXX") || return 1
-  # 와일드카드(ko.*)는 번역 자막 조합을 수십 개까지 요청해 YouTube 429를
-  # 부른다. 대표 언어 하나씩만 요청하고, SRT 변환 실패에도 원본 VTT를 읽는다.
-  yt-dlp --skip-download --write-subs --write-auto-subs \
-    --sub-langs 'ko,ja,en' \
-    -o "$tmp/%(id)s.%(ext)s" -- "$url" >/dev/null 2>&1 || true
-  sub=$(find "$tmp" -type f \( -name '*.ko*.srt' -o -name '*.ko*.vtt' -o -name '*.ja*.srt' -o -name '*.ja*.vtt' -o -name '*.en*.srt' -o -name '*.en*.vtt' -o -name '*.srt' -o -name '*.vtt' \) \
-    -print 2>/dev/null | head -1)
-  if [ -n "$sub" ] && [ -s "$sub" ]; then
-    text=$(sed -E '/^[0-9]+$/d; /^[0-9]{2}:[0-9]{2}:/d; s/<[^>]*>//g; /^[[:space:]]*$/d' "$sub" | head -c 72000)
-  else
-    text=""
-  fi
-  rm -rf "$tmp"
-  [ -n "$text" ] || return 1
-  printf '%s' "$text"
-}
-
-_cap_youtube_ai() {
-  # AI 실패는 링크 저장 실패가 아니다. 사용자는 URL을 잃지 않고 나중에 다시
-  # 정리할 수 있어야 한다.
-  local url="$1" file="$2" root="$3" provider prompt out transcript note_dir
-  [ "$(cfg '.ai.summary_enabled' 'true')" = "true" ] || {
-    dim "   $(L "AI 요약이 꺼져 있어 링크만 저장했습니다." "AI summaries are off; saved the link only.")"
-    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=skipped'
-    return 0
-  }
-  provider=$(cfg '.ai.provider' 'claude')
-  if [ "$provider" != "claude" ] || ! has claude; then
-    warn "$(L "Claude를 찾지 못해 링크만 저장했습니다" "Claude was not found; saved the link only")"
-    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
-    return 0
-  fi
-  if [ ! -d "$HOME/.claude/skills/devtrail-youtube" ]; then
-    warn "$(L "유튜브 스킬이 없어 링크만 저장했습니다 — devtrail skills sync" "The YouTube skill is missing; saved the link only — run devtrail skills sync")"
-    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
-    return 0
-  fi
-
-  transcript=$(_cap_youtube_transcript "$url") || {
-    warn "$(L "자막을 읽지 못해 링크만 저장했습니다" "Could not read captions; saved the link only")"
-    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
-    return 0
-  }
-  # 자막은 이미 DevTrail이 확보했다. Claude에는 노트가 있는 폴더만 열어
-  # 읽기·쓰기 범위를 그 파일 하나로 실질적으로 제한한다.
-  note_dir=$(dirname "$file")
-  prompt="아래 자막을 근거로 **지정한 노트 한 파일만** 완성하세요.
-URL: $url
-노트: $file
-
-frontmatter의 tl_dr_oneline·key_for_me·channel·duration·title과 본문의 메타, TL;DR, 핵심 포인트, 타임라인, 인사이트를 채우세요. 자막에 없는 내용은 만들지 마세요. 다른 파일·설정·프로젝트는 수정하지 마세요. 작업을 끝낸 뒤에는 이 노트를 실제로 저장해야 합니다.
-
-분류는 반드시 채우세요. `category`와 `area`에는 같은 값 하나를 넣습니다:
-frontend | backend | infra | data-ai | design | common
-
-`topic`은 영상 내용에 가장 가까운 하나만 넣습니다:
-official-docs | ui-components | css-animation | accessibility | api | database |
-auth-payments | deploy-operations | monitoring | models-tools | prompts-examples |
-icons | images-illustrations | landing-references | design-tools | developer-tools |
-github-open-source | productivity-career | security | documentation | articles | uncategorized
-
-자막에 근거가 있으면 `uncategorized`를 쓰지 마세요. 예: React 컴포넌트 영상은
-frontend / ui-components, Figma 플러그인은 design / design-tools, 배포 자동화는
-infra / deploy-operations입니다. `tags`에는 기존 type/youtube를 유지하며
-area/<area>와 topic/<topic>도 추가하세요.
-
---- 자막 시작 ---
-$transcript
---- 자막 끝 ---"
-  info "  $(L "Claude로 자막을 분석하는 중…" "Analyzing transcript with Claude…")"
-  out=$(claude -p "$prompt" --add-dir "$note_dir" --allowedTools 'Read,Edit,Write' \
-    --permission-mode acceptEdits --max-budget-usd 1 2>&1) || {
-      warn "$(L "AI 정리에 실패했습니다 — 링크 노트는 저장됐습니다" "AI analysis failed — the link note was saved")"
-      printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
-      return 0
-    }
-  # 종료 코드만 0이라고 완료로 말하지 않는다. 실제 노트가 비어 있으면
-  # 사용자에게는 실패다. 이 검증이 없어서 기존에는 '완료'처럼 보였다.
-  if ! grep -qE '^tl_dr_oneline: *[^[:space:]]' "$file"; then
-    warn "$(L "AI가 노트를 채우지 못했습니다 — 링크 노트는 저장됐습니다" "AI did not populate the note — the link note was saved")"
-    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=unavailable'
-    return 0
-  fi
-  local category area topic
-  category=$(sed -n 's/^category:[[:space:]]*//p' "$file" | head -1)
-  area=$(sed -n 's/^area:[[:space:]]*//p' "$file" | head -1)
-  topic=$(sed -n 's/^topic:[[:space:]]*//p' "$file" | head -1)
-  case "$area" in frontend|backend|infra|data-ai|design|common) ;; *) area="" ;; esac
-  if [ -z "$area" ] || [ "$category" != "$area" ] || [ -z "$topic" ] || [ "$topic" = "uncategorized" ]; then
-    warn "$(L "AI 요약은 저장됐지만 자료 분류를 채우지 못했습니다 — 같은 링크를 다시 정리해 보세요" "The AI summary was saved but its library category is missing — retry this link")"
-    printf '%s\n' 'DEVTRAIL_CAPTURE_AI=partial'
-    return 0
-  fi
-  ok "$(L "AI 정리 완료" "AI analysis complete")"
-  printf '%s\n' 'DEVTRAIL_CAPTURE_AI=complete'
-  [ -n "$out" ] && dim "   $(printf '%s' "$out" | tail -1)"
-}
+# 자막 확보와 AI 정리는 captureai.sh 가 맡는다 — 이 파일은 노트 생성 흐름만 본다.
+. "$DEVTRAIL_ROOT/lib/captureai.sh"
 
 _cap_youtube() {
-  local url="" apply=0 ai=0
+  local url="" purpose="" apply=0 ai=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --url) shift; url="${1:-}" ;;
+      --purpose) shift; purpose="${1:-}" ;;
       --apply) apply=1 ;;
       --ai) ai=1 ;;
       --dry-run) apply=0 ;;
@@ -486,7 +391,7 @@ _cap_youtube() {
       jr_begin capture-youtube-ai-retry
       jr_backup "$dup" >/dev/null || { jr_end; die "$(L "AI 정리 전 백업에 실패했습니다" "Could not back up before AI analysis")"; }
       printf 'DEVTRAIL_CAPTURE_PATH=%s\n' "$dup"
-      _cap_youtube_ai "$url" "$dup" "$root"
+      _cap_youtube_ai "$url" "$dup" "$root" "$purpose"
       ok "$(L "기존 유튜브 노트를 다시 정리했습니다" "Retried the existing YouTube note")"
       dim "   $(basename "$dup")"
       jr_end
@@ -539,7 +444,7 @@ _cap_youtube() {
   if [ -n "${DT_CAPTURE_FAIL:-}" ]; then
     rm -f "$stage"; die "$(L "테스트용 실패" "Simulated failure")"
   fi
-  _cap_render "$tpl" "$title" "$url" "$channel" "$today" "$now" > "$stage" || {
+  _cap_render "$tpl" "$title" "$url" "$channel" "$today" "$now" "$purpose" > "$stage" || {
     rm -f "$stage"
     die "$(L "노트를 만들지 못했습니다 — 볼트는 그대로입니다" \
              "Could not build the note — the vault is unchanged")"
@@ -559,7 +464,7 @@ _cap_youtube() {
   # undo 하면 링크를 지우거나(생성 저널) 분석 전 상태로 되돌릴 수 있다.
   if [ "$ai" = 1 ]; then
     jr_backup "$file" >/dev/null || { jr_end; die "$(L "AI 정리 전 백업에 실패했습니다" "Could not back up before AI analysis")"; }
-    _cap_youtube_ai "$url" "$file" "$root"
+    _cap_youtube_ai "$url" "$file" "$root" "$purpose"
   fi
 
   ok "$(basename "$file")"

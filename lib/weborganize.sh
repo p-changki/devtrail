@@ -64,6 +64,13 @@ _cap_web_organize() {
 
   step "$(L "기존 링크 분류" "Organize saved links")"
   [ "$apply" = 1 ] && jr_begin capture-web-organize
+  # 기존 자료실도 이 명령 한 번으로 분야별 탐색 표를 최신 형식으로 고친다.
+  # 링크를 재분류하지 못해도 `_index` 표기가 남아 사용자를 헷갈리게 하면 안 된다.
+  if [ "$apply" = 1 ]; then
+    _cap_web_ensure_root_navigation "$scan/_index.md" "$(vault_rel "$links_rel")" || {
+      jr_end; die "$(L "링크 자료실 허브를 갱신하지 못했습니다" "Could not update link library index")"
+    }
+  fi
   while IFS= read -r file; do
     url=$(_cap_web_fm_value "$file" url)
     [ -n "$url" ] || continue

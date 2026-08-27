@@ -109,7 +109,7 @@ t_start "AI 작업은 메뉴바에서 바로 시작한다"
 # 설치된 스킬 이름을 나열하지 않는다. 누르면 결과가 생기는 두 작업만 앞에 둔다.
 t_contains "AI 작업 구역이 있다" "private var aiActions" "$ALL"
 t_contains "유튜브 정리를 바로 연다" "유튜브 정리" "$ALL"
-t_contains "유튜브 정리가 캡처 입력을 연다" "showCaptureComposer.toggle()" \
+t_contains "유튜브 정리가 전용 입력을 연다" "openCapture(.youtube)" \
   "$(sed -n '/private var aiActions/,/^    }/p' "$SRC/MenuView.swift")"
 t_not_contains "AI 영역에 PR 요약을 중복하지 않는다" "summarizePullRequests" \
   "$(sed -n '/private var aiActions/,/^    }/p' "$SRC/MenuView.swift")"
@@ -151,13 +151,19 @@ t_contains "유튜브 분류 누락을 완료로 오해하지 않는다" "DEVTRA
   "$(sed -n '/func captureYouTube/,/^    }/p' "$SRC/Status.swift")"
 t_contains "AI 요약이 켜진 경우에만 자동 정리를 요청한다" 'args.append("--ai")' \
   "$(sed -n '/func captureYouTube/,/^    }/p' "$SRC/Status.swift")"
+t_contains "학습 목적을 유튜브 캡처 인자로 전달한다" 'args += ["--purpose", trimmedPurpose]' \
+  "$(sed -n '/func captureYouTube/,/^    }/p' "$SRC/Status.swift")"
 
 t_start "일반 웹 링크도 메뉴바에서 저장한다"
 t_contains "URL 종류를 자동 구분한다" "func captureLink" "$ALL"
 t_contains "YouTube가 아닌 링크는 웹 캡처로 보낸다" "captureWeb(url, apply: apply)" "$ALL"
 t_contains "일반 웹 링크는 CLI 인자로 안전하게 보낸다" '["capture", "web", "--url", trimmed]' "$ALL"
 t_contains "웹 링크는 AI 없이 저장한다고 안내한다" "일반 웹 링크는 AI 없이 자료실에 안전하게 저장합니다" "$ALL"
-t_contains "링크 저장 입력을 바로 연다" "tool(\"link.badge.plus\", \"링크 저장\")" "$ALL"
+t_contains "유튜브와 웹 링크 저장 버튼을 구분한다" "tool(\"link.badge.plus\", \"웹 링크 저장\")" "$ALL"
+t_contains "유튜브 정리는 전용 입력창을 연다" "openCapture(.youtube)" "$ALL"
+t_contains "웹 링크 저장은 전용 입력창을 연다" "openCapture(.web)" "$ALL"
+t_contains "유튜브 학습 목적 입력칸이 있다" "이 영상에서 얻고 싶은 것 (선택)" "$ALL"
+t_contains "웹 링크에 유튜브를 넣으면 올바른 작업을 안내한다" "YouTube 링크는 ‘유튜브 정리’에서 저장하세요" "$ALL"
 t_contains "성공한 링크 입력은 다음 저장을 위해 비운다" "captureCompletedID" "$ALL"
 t_contains "실패한 URL은 화면이 지우지 않는다" ".onChange(of: status.captureCompletedID)" "$ALL"
 

@@ -63,24 +63,96 @@ If a note for that URL exists, skip it and say why.
 grep -rl "$URL" "$(devtrail path youtube)" 2>/dev/null
 ```
 
+### 2.5 Determine the learning goal and video genre
+
+If the input includes `Goal:` or `What I want to learn:`, use it as the learning goal.
+Otherwise infer a one-sentence goal from the title and captions, and label it in the
+note as `Inferred learning goal`. Do not reduce the goal to a generic "video summary";
+state what the user can later decide, do, or verify with this note.
+
+Choose one genre below. Use `general` when it is ambiguous.
+
+- `design-critique` — design reviews and portfolio feedback
+- `tutorial` — technical, implementation, or tool lessons
+- `tool-review` — tool, service, or product reviews/comparisons
+- `career-interview` — career advice, interviews, or experience reports
+- `news-trend` — news, industry trends, or market commentary
+- `strategy` — business, product, or marketing strategy
+- `general` — other informational videos
+
 ### 3. Get the captions
 
 ```bash
-yt-dlp --skip-download --write-auto-sub --sub-lang "en,ko" \
+yt-dlp --skip-download --write-sub --write-auto-sub --sub-langs "en.*,ko.*" \
        --convert-subs srt -o "/tmp/dt-yt-%(id)s.%(ext)s" "$URL"
 ```
 
-If there are no captions, record the failure and **move to the next URL.**
+Try both creator-provided and auto-generated captions. Inspect the command output and
+the generated `.srt` files, record the outcome as below, and **move to the next URL.**
 One failure does not stop the rest.
+
+| Condition | Record as |
+|---|---|
+| `Video unavailable`, `Private video`, or sign-in/age/region restriction errors | Video inaccessible |
+| The command succeeds but no `.srt` file is generated | No captions |
+| Any other yt-dlp error | Caption extraction failed — summarized error |
+
+If the video plays in a browser but is inaccessible here, the account permission or
+browser session may differ. Only then, a user-provided, one-time Netscape `cookies.txt`
+path may be used as follows. Never save or print the cookie file path or its contents in
+notes, configuration, or logs.
+
+```bash
+yt-dlp --cookies "$YTDLP_COOKIES_FILE" --skip-download --write-sub --write-auto-sub \
+       --sub-langs "en.*,ko.*" --convert-subs srt \
+       -o "/tmp/dt-yt-%(id)s.%(ext)s" "$URL"
+```
+
+If the cookie retry still reports inaccessible, report that status; do not promise a
+bypass.
 
 ### 4. Analyze
 
-Read the captions and fill these in. Do not add anything that is not in the
-video.
+Read the captions and extract **information for decisions first**. This is not merely a
+plot summary. Do not add anything that is not in the video.
+
+#### Common output for every genre
+
+Place `## Reusable decision criteria` immediately after the TL;DR at the top of the
+note. Write 3–7 concise decision cards, each containing:
+
+- **Judgment/claim** — a reusable criterion the speaker endorses or rejects
+- **Context** — when the judgment applies
+- **Reason or signal** — the speaker's rationale or an observable warning sign
+- **My application** — one action or check for the user's next project
+- **Classification** — `principle` / `conditional advice` / `personal preference` / `factual claim`
+- **Evidence** — a short quote and timestamp when available; explicitly state when no timestamp exists
+
+Do not turn a screen-specific instruction such as `64 → 48` into a universal rule.
+Separate the principle (for example, reducing type when it dominates visual hierarchy)
+from the local prescription. Keep the speaker's opinion, caption-supported facts, and
+AI inference separate; label AI inference as `Interpretation`.
+
+#### Genre-specific output
+
+Add only the section for the selected genre.
+
+| Genre | Also extract |
+|---|---|
+| `design-critique` | Problem signals · revision direction · exceptions/brand context · reusable checklist |
+| `tutorial` | Prerequisites · steps · failure points · adoption order |
+| `tool-review` | Suitable users · strengths/constraints · alternatives · adoption decision |
+| `career-interview` | Speaker experience · generalizable advice · case-specific advice |
+| `news-trend` | Verified facts · speaker interpretation · affected groups · required response |
+| `strategy` | Claim · customer/market premise · success conditions · risks · experiment to validate |
+
+Keep only items directly tied to the learning goal in `## Insights & applications`.
+Put detailed summaries, sequence/timeline, and full captions after it as supporting
+material for later verification.
 
 - One-line summary (`tl_dr_oneline`)
-- Five key points or fewer
-- Timeline
+- Learning goal and genre
+- 3–7 reusable decision criteria
 - **What I will apply** (`key_for_me`) — this is why the note exists
 - **Area and topic** (`category` · `area` · `topic`) — how the library is found later
 
@@ -99,7 +171,7 @@ Filename is `YYYY-MM-DD-kebab-slug.md`.
 
 ```
 ✅ [title] → path
-❌ [URL] → reason (no captions / analysis failed)
+❌ [URL] → reason (video inaccessible / no captions / caption extraction failed / analysis failed)
 ```
 
 ## Do not
