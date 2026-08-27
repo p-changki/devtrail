@@ -129,15 +129,18 @@ _cap_slug() {
 }
 
 . "$DEVTRAIL_ROOT/lib/taxonomy.sh"
+. "$DEVTRAIL_ROOT/lib/projectkeys.sh"
 . "$DEVTRAIL_ROOT/lib/webcapture.sh"
 
 # ── 개발일지 ─────────────────────────────────────────────────────────────────
 #
 # 메뉴바용 생성기는 CLI가 해석한 파일명·헤딩으로 즉시 쓸 기본 일지를 만든다.
 _cap_devlog() {
-  local apply=0 repair_empty=0 repair_template=0 repair_order=0
+  local apply=0 repair_empty=0 repair_template=0 repair_order=0 proj_raw=""
   while [ $# -gt 0 ]; do
     case "$1" in
+      --project) shift; proj_raw="$proj_raw${1:-}
+" ;;
       --apply) apply=1 ;;
       --dry-run) apply=0 ;;
       --repair-empty) repair_empty=1 ;;
@@ -147,6 +150,43 @@ _cap_devlog() {
     esac
     shift
   done
+
+  # ⚠️ 모르는 키를 그대로 쓰면 태그와 폴더가 어긋난 일지가 남는다. 노트를
+  #    만들기 **전에** 거절한다 — 만든 뒤 고치라고 하면 아무도 안 고친다.
+  local plist="[]" ptags="" pacc="" pk pfirst=1
+  if [ -n "$proj_raw" ]; then
+    while IFS= read -r pk; do
+      [ -n "$pk" ] || continue
+      dt_project_known "$pk" || die "$(L "모르는 프로젝트" "Unknown project"): $pk
+   $(L "쓸 수 있는 값" "Available"): $(dt_project_keys | jq -r 'join(", ")')"
+      [ "$pfirst" = 1 ] || pacc="$pacc, "
+      pacc="$pacc$pk"; pfirst=0
+      ptags="$ptags  - project/$pk
+"
+    done <<PROJEOF
+$proj_raw
+PROJEOF
+    [ -z "$pacc" ] || plist="[$pacc]"
+  fi
+
+  # ⚠️ frontmatter 만 채우면 본문에 쓸 자리가 없다. Templater 템플릿과 같은
+  #    형태로 프로젝트별 소제목을 만든다 — `devtrail summary` 가 PR 요약을
+  #    넣는 자리가 바로 이 `#### <섹션>` 이고, 없으면 조용히 건너뛴다.
+  #    제목은 섹션, 링크는 키다. 여러 레포가 한 섹션을 공유하면 제목은 하나다.
+  local pblock
+  pblock="####
+-
+"
+  if [ -n "$pacc" ]; then
+    pblock=$(printf '%s' "$proj_raw" | jq -Rsc 'split("\n") | map(select(length > 0)) | unique' \
+      | jq -r --argjson sections "$(dt_project_sections)" '
+          map({ k: ., s: ($sections[.] // .) })
+          | group_by(.s)
+          | map("#### " + .[0].s + "\n- \n")
+          | join("")') || pblock="####
+-
+"
+  fi
   require_config; require_bins jq
 
   local root rel dir today file issues worklog morning youtube_rel root_rel
@@ -208,8 +248,8 @@ _cap_devlog() {
 ---
 tags:
   - type/devlog
-type: devlog
-projects: []
+${ptags}type: devlog
+projects: $plist
 date: $today
 created: $today
 updated: $today
@@ -227,9 +267,7 @@ $worklog
 
 $morning
 
-####
--
-
+$pblock
 ### 오후
 
 -

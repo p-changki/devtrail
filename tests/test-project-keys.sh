@@ -158,6 +158,84 @@ json3=$(sed -n '/```json/,/```/p' "$pm" | sed '1d;$d')
 t_eq "폴더가 있어도 설정의 섹션이 이긴다" "acme" \
   "$(printf '%s' "$json3" | jq -r '.project_sections["acme-fe"]')"
 
+# ── 이미 있는 일지에 프로젝트를 붙인다 ──────────────────────────────────────
+#
+# ⚠️ 생성 시점에만 물으면, 아침에 일지를 먼저 만드는 사람은 프로젝트를 붙일
+#    방법이 없다. 무엇을 했는지는 대개 나중에 정해진다.
+t_start "project link — 일지가 없으면 거절한다"
+out=$("$DT" project link --project folder-only --apply 2>&1)
+t_ne "실패로 끝난다" "0" "$?"
+t_contains "무엇이 없는지 말한다" "개발일지" "$out"
+
+t_start "project link — 오늘 일지에 붙인다"
+"$DT" capture devlog --apply >/dev/null 2>&1
+dlog="$T_VAULT/MyVault/$("$DT" path devlog 2>/dev/null | sed 's#^.*MyVault/##')/$(date +%F) devlog.md"
+t_file "일지가 생겼다" "$dlog"
+"$DT" project link --project folder-only --project myapp --apply >/dev/null 2>&1
+t_contains "projects 에 든다" "projects: [folder-only, myapp]" "$(cat "$dlog")"
+t_contains "folder-only 태그" "  - project/folder-only" "$(cat "$dlog")"
+t_contains "myapp 태그" "  - project/myapp" "$(cat "$dlog")"
+t_contains "본문은 그대로다" "type: devlog" "$(cat "$dlog")"
+# ⚠️ frontmatter 만 채우면 쓸 자리가 없다. 빈 #### 자리를 프로젝트 섹션으로
+#    바꾼다 — devtrail summary 가 PR 요약을 넣는 자리다.
+t_contains "본문에 folder-only 소제목" "#### folder-only" "$(cat "$dlog")"
+t_contains "본문에 myapp 소제목" "#### myapp" "$(cat "$dlog")"
+t_not_contains "README 링크는 넣지 않는다" "/README|" "$(cat "$dlog")"
+t_eq "빈 소제목 자리는 사라진다" "0" "$(grep -c '^####$' "$dlog" | tr -d ' ')"
+# ⚠️ 존재만 보면 줄이 둘로 늘어나도 통과한다. frontmatter 에 같은 키가
+#    둘이면 Obsidian 이 하나만 읽고, 사용자는 "고쳤는데 안 바뀐다" 를 만난다.
+t_eq "projects 줄은 하나뿐이다" "1" "$(grep -c '^projects:' "$dlog" | tr -d ' ')"
+t_eq "tags 줄도 하나뿐이다" "1" "$(grep -c '^tags:' "$dlog" | tr -d ' ')"
+
+t_start "project link — 두 번 붙여도 늘지 않는다"
+"$DT" project link --project myapp --apply >/dev/null 2>&1
+t_eq "태그가 하나뿐이다" "1" "$(grep -c '^  - project/myapp$' "$dlog" | tr -d ' ')"
+t_contains "목록도 그대로" "projects: [folder-only, myapp]" "$(cat "$dlog")"
+t_eq "소제목도 늘지 않는다" "1" "$(grep -c '^#### myapp$' "$dlog" | tr -d ' ')"
+
+t_start "project link — 모르는 키는 거절한다"
+before=$(cat "$dlog")
+out=$("$DT" project link --project nope --apply 2>&1)
+t_ne "실패로 끝난다" "0" "$?"
+t_eq "일지를 건드리지 않는다" "$before" "$(cat "$dlog")"
+
+t_start "project link — undo 로 되돌린다"
+# ⚠️ ls | tail -1 로 잡을 고르지 않는다. 잡 이름이 <시각>-<PID> 라 같은 초에
+#    둘이 생기면 PID 자릿수 차이로 문자순이 시간순과 어긋난다. 출력이 알려
+#    주는 ID 를 그대로 쓴다.
+linkout=$("$DT" project link --project acme-fe --apply 2>&1)
+job=$(printf '%s' "$linkout" | sed -n 's/.*devtrail undo \([0-9-]*\).*/\1/p' | tail -1)
+t_ne "잡 ID 를 안내한다" "" "$job"
+t_contains "붙었다" "acme-fe" "$(cat "$dlog")"
+"$DT" undo "$job" --apply >/dev/null 2>&1
+t_not_contains "되돌리면 사라진다" "acme-fe" "$(cat "$dlog")"
+
+# ── 앱이 읽을 목록 — project list --json ────────────────────────────────────
+#
+# ⚠️ 앱이 폴더를 직접 스캔하면 출처가 또 갈린다. UI 는 로직을 갖지 않는다 —
+#    CLI 가 해석한 목록 하나만 읽는다.
+t_start "project list --json"
+lj=$("$DT" project list --json 2>/dev/null)
+lj2="$lj"
+t_eq "JSON 배열이다" "array" "$(printf '%s' "$lj" | jq -r 'type')"
+t_eq "폴더만 있는 프로젝트도 든다" "true" \
+  "$(printf '%s' "$lj" | jq -c '[.[].key] | index("folder-only") != null')"
+t_eq "설정에만 있는 것도 든다" "true" \
+  "$(printf '%s' "$lj" | jq -c '[.[].key] | index("myapp") != null')"
+t_eq "wildcard 는 없다" "false" \
+  "$(printf '%s' "$lj" | jq -c '[.[].key] | index("acme-*") != null')"
+t_eq "섹션을 함께 준다" "acme" \
+  "$(printf '%s' "$lj" | jq -r '.[] | select(.key == "acme-fe") | .section')"
+# ⚠️ 이미 붙은 것을 표시하지 않으면, 사용자는 붙어 있는 프로젝트를 다시 골라
+#    "아무 일도 안 일어났다" 를 만난다. 실제로 그랬다.
+t_eq "오늘 일지에 붙은 것을 표시한다" "true" \
+  "$(printf '%s' "$lj2" | jq -c '.[] | select(.key == "folder-only") | .linked')"
+t_eq "안 붙은 것은 false" "false" \
+  "$(printf '%s' "$lj2" | jq -c '.[] | select(.key == "acme-be") | .linked')"
+# ⚠️ 경로 맵과 같은 목록이어야 한다. 갈리면 화면과 템플릿이 다른 것을 보여 준다.
+t_eq "경로 맵의 projects 와 같다" "true" \
+  "$(printf '%s' "$lj" | jq -c --argjson m "$(printf '%s' "$json3" | jq -c '.projects')" '([.[].key] | sort) == ($m | sort)')"
+
 # ── 옛 템플릿이 새 경로 맵을 봐도 깨지지 않는다 ─────────────────────────────
 #
 # 이게 D7 의 핵심이다. 옛 dtProjects 는 DT.projects 만 읽는다.

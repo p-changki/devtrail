@@ -623,11 +623,85 @@ final class Status: ObservableObject {
     /// `activity` 는 이미 있는 일지에 GitHub 활동을 넣는 명령이다. URI로 만든
     /// 빈 파일은 Templater 훅이 보장되지 않아 활동 삽입도 실패했다. CLI가
     /// 설정된 파일명·헤딩을 가진 완성된 기본 본문을 원자적으로 만든다.
-    func createTodayDevlog() {
+    /// 개발일지에 붙일 수 있는 프로젝트.
+    ///
+    /// ⚠️ 앱이 폴더를 직접 스캔하지 않는다. CLI 가 해석한 목록 하나만 읽는다 —
+    ///    각자 스캔하면 출처가 갈리고, 실제로 경로 맵 1개 · 플러그인 7개인
+    ///    볼트가 나왔다. UI 는 로직을 갖지 않는다.
+    struct Project: Identifiable, Hashable {
+        let key: String
+        let section: String
+        /// 오늘 일지에 이미 붙어 있는가. 표시하지 않으면 사용자는 붙어 있는
+        /// 것을 다시 골라 "아무 일도 안 일어났다" 를 만난다 — 명령은 멱등이라
+        /// 정상인데도 고장으로 보인다.
+        let linked: Bool
+        var id: String { key }
+    }
+    @Published var projects: [Project] = []
+    /// 아직 안 불러온 상태와 "정말 없음" 은 다르다. 구분하지 않으면 화면이
+    /// 로딩 중에 "프로젝트가 없습니다" 라고 거짓을 말한다.
+    @Published var projectsLoading = false
+    @Published var projectsError: String?
+
+    func loadProjects() {
+        projectsLoading = true
+        projectsError = nil
+        CLI.runAsync(["project", "list", "--json"]) { [weak self] r in
+            guard let self else { return }
+            self.projectsLoading = false
+            // ⚠️ 실패를 조용히 삼키지 않는다. 빈 목록만 보여 주면 사용자는
+            //    "프로젝트가 없다" 고 믿고, 우리는 무엇이 깨졌는지 모른다.
+            guard r.ok else {
+                self.projects = []
+                self.projectsError = self.cliFailure(r)
+                return
+            }
+            // ⚠️ out 만 읽는다. text 는 stderr 가 섞여 JSON 파싱이 깨진다.
+            guard let data = r.out.data(using: .utf8),
+                  let parsed = try? JSONSerialization.jsonObject(with: data),
+                  let rows = parsed as? [[String: Any]]
+            else {
+                self.projects = []
+                let head = r.out.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120)
+                self.projectsError = head.isEmpty
+                    ? "프로젝트 목록이 비어 있습니다 (CLI 가 아무것도 내지 않았습니다)"
+                    : "프로젝트 목록을 읽지 못했습니다: \(head)"
+                return
+            }
+            self.projects = rows.compactMap { row in
+                guard let key = row["key"] as? String, !key.isEmpty else { return nil }
+                return Project(key: key,
+                               section: row["section"] as? String ?? key,
+                               linked: row["linked"] as? Bool ?? false)
+            }
+        }
+    }
+
+    /// 이미 있는 오늘 일지에 프로젝트를 붙인다.
+    ///
+    /// ⚠️ 아침에 일지를 먼저 만드는 사람은 생성 시점에 무엇을 할지 모른다.
+    ///    생성 때만 물으면 그 사람은 프로젝트를 영영 못 붙인다.
+    func linkProjects(_ picked: [String]) {
+        guard busy == nil, !picked.isEmpty else { return }
+        busy = "프로젝트 붙이기"
+        var args = ["project", "link"]
+        for k in picked { args += ["--project", k] }
+        args.append("--apply")
+        CLI.runAsync(args) { [weak self] r in
+            guard let self else { return }
+            self.lastOutput = r.text
+            self.busy = nil
+            self.refresh()
+        }
+    }
+
+    func createTodayDevlog(projects picked: [String] = []) {
         guard busy == nil else { return }
         let target = devlogFile
         busy = "오늘 개발일지"
-        CLI.runAsync(["capture", "devlog", "--apply", "--repair-empty"]) { [weak self] r in
+        var args = ["capture", "devlog", "--apply", "--repair-empty"]
+        for k in picked { args += ["--project", k] }
+        CLI.runAsync(args) { [weak self] r in
             guard let self else { return }
             self.lastOutput = r.text
             self.busy = nil

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DevTrail — `devtrail project <add|stage|list>`
+# DevTrail — `devtrail project <add|stage|list|link>`
 #
 # 프로젝트를 '등록'하는 유일한 쓰기 경로다.
 #
@@ -22,8 +22,9 @@ project_cmd() {
   case "${1:-list}" in
     add)   shift; _pj_add "$@" ;;
     stage) shift; _pj_stage "$@" ;;
+    link)  shift; _pj_link "$@" ;;
     list)  shift; _pj_list "$@" ;;
-    *)    die "$(L "사용법" "Usage"): devtrail project <add|stage|list>" ;;
+    *)    die "$(L "사용법" "Usage"): devtrail project <add|stage|list|link>" ;;
   esac
 }
 
@@ -36,10 +37,154 @@ _pj_valid_key() {
   [ "${#1}" -le 64 ]
 }
 
+# devtrail project link --project <키> [--project <키>] [--apply]
+#
+# ⚠️ 생성 시점에만 물으면, 아침에 일지를 먼저 만드는 사람은 프로젝트를 붙일
+#    방법이 없다. 무엇을 했는지는 대개 나중에 정해진다.
+# ⚠️ 본문을 다시 쓰지 않는다. frontmatter 의 projects 줄과 태그만 손댄다 —
+#    사용자가 적어 둔 작업 로그가 섞여 있다.
+_pj_link() {
+  local apply=0 raw="" k
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --project) shift; raw="$raw${1:-}
+" ;;
+      --apply)   apply=1 ;;
+      --dry-run) apply=0 ;;
+      *) die "$(L "알 수 없는 옵션" "Unknown option"): $1" ;;
+    esac
+    shift
+  done
+  [ -n "$raw" ] || die "$(L "사용법" "Usage"): devtrail project link --project <키> [--apply]"
+
+  local file; file="$(vault_root)/$(dt_dir devlog)/$(dt_devlog_name "$(date +%F)")"
+  [ -f "$file" ] || die "$(L "오늘 개발일지가 없습니다" "No devlog for today"): $(basename "$file")
+   $(L "먼저 만드세요" "Create it first"): devtrail capture devlog --apply"
+
+  # 모르는 키는 파일을 건드리기 전에 거절한다.
+  while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    dt_project_known "$k" || die "$(L "모르는 프로젝트" "Unknown project"): $k
+   $(L "쓸 수 있는 값" "Available"): $(dt_project_keys | jq -r 'join(", ")')"
+  done <<LINKEOF
+$raw
+LINKEOF
+
+  # 이미 있는 것 + 새로 붙일 것 = 정렬된 합집합
+  local have merged
+  have=$(sed -n '/^---$/,/^---$/p' "$file" | sed -n 's/^  - project\///p')
+  merged=$(printf '%s\n%s\n' "$have" "$raw" | sed '/^$/d' | LC_ALL=C sort -u)
+  [ -n "$merged" ] || die "$(L "붙일 프로젝트가 없습니다" "Nothing to link")"
+
+  local list tags added
+  list=$(printf '%s' "$merged" | paste -sd, - | sed 's/,/, /g')
+  # ⚠️ awk -v 에는 개행을 넣을 수 없다. 키에 못 쓰는 문자(|)로 이어 붙인다.
+  tags=$(printf '%s' "$merged" | paste -sd'|' -)
+  added=$(printf '%s\n' "$merged" | grep -vxF "$have" 2>/dev/null | tr '\n' ' ')
+
+  step "$(L "프로젝트 붙이기" "Link projects"): $(basename "$file")"
+  dim "   projects: [$list]"
+  if [ "$apply" != 1 ]; then
+    dim "   $(L "(dry-run — 실제로 붙이려면 --apply)" "(dry run — pass --apply)")"
+    return 0
+  fi
+
+  # ⚠️ frontmatter 만 채우면 본문에 쓸 자리가 없다. 아직 소제목이 없는
+  #    프로젝트만 블록을 만든다 — 이미 있는 섹션을 다시 넣으면 사용자가
+  #    적어 둔 내용이 둘로 갈린다.
+  local pblock new_secs
+  new_secs=$(printf '%s\n' "$merged" | while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    sec=$(dt_project_sections | jq -r --arg k "$k" '.[$k] // $k')
+    grep -qxF "#### $sec" "$file" || printf '%s\n' "$k"
+  done)
+  pblock=""
+  if [ -n "$new_secs" ]; then
+    pblock=$(printf '%s' "$new_secs" | jq -Rsc 'split("\n") | map(select(length > 0))' \
+      | jq -r --argjson sections "$(dt_project_sections)" '
+          map({ k: ., s: ($sections[.] // .) })
+          | group_by(.s)
+          | map("#### " + .[0].s + "\n- \n")
+          | join("")')
+  fi
+
+  # ⚠️ awk -v 에는 개행을 못 넣고, 블록에는 위키링크의 | 가 들어 있어 구분자
+  #    트릭도 못 쓴다. 파일로 넘긴다.
+  local tmp pfile
+  tmp=$(mktemp "${TMPDIR:-/tmp}/devtrail-link.XXXXXX") || die "$(L "임시 파일 실패" "Temp file failed")"
+  pfile=$(mktemp "${TMPDIR:-/tmp}/devtrail-pblock.XXXXXX") || { rm -f "$tmp"; die "$(L "임시 파일 실패" "Temp file failed")"; }
+  printf '%s' "$pblock" > "$pfile"
+  awk -v list="$list" -v keys="$tags" -v pfile="$pfile" -v hasblock="$([ -n "$pblock" ] && echo 1 || echo 0)" \
+      -v hasph="$(grep -qx '####' "$file" && echo 1 || echo 0)" \
+      -v morning="$(cfg '.headings.morning' '### Morning')" '
+    function emit_block(   line) {
+      while ((getline line < pfile) > 0) print line
+      close(pfile)
+    }
+    function emit_tags(   i, n, A) {
+      n = split(keys, A, "|")
+      for (i = 1; i <= n; i++) if (A[i] != "") printf "  - project/%s\n", A[i]
+    }
+    NR == 1 && $0 == "---" { fm = 1; print; next }
+    fm && $0 == "---" {
+      if (!wrote_tags && in_tags) { emit_tags(); wrote_tags = 1 }
+      if (!wrote_projects) { printf "projects: [%s]\n", list; wrote_projects = 1 }
+      fm = 0; print; next
+    }
+    fm && $0 ~ /^tags:/ { in_tags = 1; print; next }
+    # 기존 project/ 태그는 버리고 합집합으로 다시 쓴다. 다른 태그는 그대로 둔다.
+    fm && in_tags && $0 ~ /^  - project\// { next }
+    fm && in_tags && $0 !~ /^  - / {
+      if (!wrote_tags) { emit_tags(); wrote_tags = 1 }
+      in_tags = 0
+    }
+    fm && $0 ~ /^projects:/ { printf "projects: [%s]\n", list; wrote_projects = 1; next }
+    # 빈 #### 자리가 있으면 거기에 넣는다. 사용자가 쓸 자리로 둔 곳이다.
+    !fm && hasblock == "1" && !wrote_block && $0 == "####" { holding = 1; next }
+    holding && $0 == "-" { emit_block(); wrote_block = 1; holding = 0; next }
+    holding { print "####"; print "-"; holding = 0 }
+    # ⚠️ 빈 #### 자리가 있으면 그쪽이 우선이다. 오전 헤딩이 파일에서 먼저
+    #    나오므로, 이 조건이 없으면 아래 규칙이 먼저 걸려 빈 자리가 남는다.
+    !fm && hasblock == "1" && hasph == "0" && !wrote_block && $0 == morning {
+      print; print ""; emit_block(); wrote_block = 1; next
+    }
+    { print }
+  ' "$file" > "$tmp" || { rm -f "$tmp" "$pfile"; die "$(L "일지를 고치지 못했습니다" "Could not update the devlog")"; }
+  rm -f "$pfile"
+  grep -q '^type: devlog' "$tmp" || { rm -f "$tmp"; die "$(L "결과가 개발일지가 아닙니다 — 그대로 둡니다" "Result is not a devlog — leaving it alone")"; }
+
+  jr_begin project-link
+  jr_backup "$file" >/dev/null || { rm -f "$tmp"; jr_end; die "$(L "백업에 실패했습니다" "Backup failed")"; }
+  cp "$tmp" "$file" || { rm -f "$tmp"; jr_end; die "$(L "저장하지 못했습니다" "Could not save")"; }
+  rm -f "$tmp"
+  ok "$(L "붙였습니다" "Linked")${added:+: $added}"
+  jr_end
+}
+
 _pj_list() {
+  # ⚠️ 앱·템플릿·화면이 같은 목록을 봐야 한다. 각자 스캔하면 언젠가 한쪽만
+  #    늘어난다 — 실제로 경로 맵 1개 · 플러그인 7개였다.
+  if [ "${1:-}" = "--json" ]; then
+    # ⚠️ 이미 붙은 것을 함께 알려 준다. 표시하지 않으면 사용자는 붙어 있는
+    #    프로젝트를 다시 골라 "아무 일도 안 일어났다" 를 만난다 — 명령은
+    #    멱등이라 정상인데도 고장으로 보인다.
+    local dlog linked
+    dlog="$(vault_root)/$(dt_dir devlog)/$(dt_devlog_name "$(date +%F)")"
+    if [ -f "$dlog" ]; then
+      linked=$(sed -n '/^---$/,/^---$/p' "$dlog" | sed -n 's/^  - project\///p' \
+               | jq -Rsc 'split("\n") | map(select(length > 0))')
+    fi
+    jq -cn --argjson keys "$(dt_project_keys)" \
+           --argjson sections "$(dt_project_sections)" \
+           --argjson linked "${linked:-[]}" \
+      '$keys | map(. as $k | { key: $k, section: ($sections[$k] // $k),
+                               linked: (($linked | index($k)) != null) })'
+    return 0
+  fi
+
   step "$(L "프로젝트" "Projects")"
   local groups; groups=$(cfg '.github.project_groups' '{}')
-  local n; n=$(printf '%s' "$groups" | jq 'length')
+  local n; n=$(dt_project_keys | jq 'length')
   if [ "${n:-0}" = 0 ]; then
     dim "   $(L "등록된 프로젝트가 없습니다" "No projects registered")"
     dim "   devtrail project add <key>"
@@ -47,7 +192,13 @@ _pj_list() {
   fi
 
   local root; root="$(vault_root)/$(dt_dir projects)"
-  printf '%s' "$groups" | jq -r 'to_entries[] | "\(.key)\t\(.value)"' \
+  # 설정에만 있는 wildcard 도 함께 보여 준다 — PR 요약 규칙이라고 밝히기 위해서다.
+  jq -rn --argjson keys "$(dt_project_keys)" \
+         --argjson sections "$(dt_project_sections)" \
+         --argjson groups "$groups" \
+    '($keys | map({ key: ., value: ($sections[.] // .) }))
+     + ($groups | to_entries | map(select(.key as $k | ($keys | index($k)) == null)))
+     | .[] | "\(.key)\t\(.value)"' \
   | while IFS=$'\t' read -r key section; do
       local mark folder
       if ! _pj_valid_key "$key"; then

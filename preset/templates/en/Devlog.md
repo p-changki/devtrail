@@ -115,13 +115,7 @@ while (true) {
 // ⚠️ picked holds canonical keys only, and frontmatter keeps them as keys —
 //    that is what ties #project/<key> to the project folder.  ADR 0001 D5a.
 const projectBlock = picked.length
-  ? dtSections(picked).map(sec => {
-      const keys = dtKeysOf(picked, sec);
-      const links = keys
-        .map(k => `[[${dtPath("projects")}/${k}/README|${k}]]`)
-        .join(" · ");
-      return `#### ${sec}\n> ${links}\n- \n`;
-    }).join("")
+  ? dtSections(picked).map(sec => `#### ${sec}\n- \n`).join("")
   : "#### \n- \n";
 
 // frontmatter and tags. Both use *keys*.
