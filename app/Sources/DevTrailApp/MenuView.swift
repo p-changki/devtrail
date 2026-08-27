@@ -10,6 +10,7 @@ import AppKit
 ///   - 실행 액션은 아이콘 툴바로 묶어 4줄을 1줄로 줄인다.
 struct MenuView: View {
     private enum CaptureMode { case youtube, web }
+    private enum DevlogComposerMode { case create, link }
 
     @ObservedObject var status: Status
     @State private var showSettings = false
@@ -21,6 +22,9 @@ struct MenuView: View {
     @State private var capturePurpose = ""
     @State private var captureMode: CaptureMode = .youtube
     @State private var showCaptureComposer = false
+    @State private var showDevlogComposer = false
+    @State private var devlogComposerMode: DevlogComposerMode = .create
+    @State private var pickedProjects: Set<String> = []
     @State private var showBackfillComposer = false
     @StateObject private var onboard = Onboarding()
 
@@ -120,6 +124,10 @@ struct MenuView: View {
             Divider().padding(.vertical, 8)
             aiActions
             Divider().padding(.vertical, 8)
+            if showDevlogComposer {
+                devlogComposer
+                Divider().padding(.vertical, 8)
+            }
             if showCaptureComposer {
                 captureRow
                 Divider().padding(.vertical, 8)
@@ -138,7 +146,7 @@ struct MenuView: View {
             Text(status.detail).font(.system(size: 12.5)).foregroundStyle(.secondary)
             Button(hasToday ? "오늘 개발일지 열기" : "오늘 개발일지 만들기") {
                 if hasToday { status.openInObsidian(path: status.devlogFile) }
-                else { status.createTodayDevlog() }
+                else { openDevlogComposer() }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
@@ -204,7 +212,12 @@ struct MenuView: View {
                              hasToday ? "일지 열기" : "일지 만들기",
                              nil) {
                     if hasToday { status.openInObsidian(path: status.devlogFile) }
-                    else { status.createTodayDevlog() }
+                    else { openDevlogComposer() }
+                }
+                if hasToday {
+                    shortcutTool("folder.badge.plus", "프로젝트 붙이기", nil) {
+                        openDevlogComposer(.link)
+                    }
                 }
                 shortcutTool("arrow.down.circle", "오늘 이슈/PR", status.hotkey(for: activityCommand)) {
                     status.fetchTodayActivity()
@@ -403,6 +416,100 @@ struct MenuView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label): \(value). \(detail)")
+    }
+
+    // MARK: - 오늘 작업할 프로젝트
+    //
+    // ⚠️ 고르지 않고도 만들 수 있어야 한다. 프로젝트를 강제하면 급할 때 일지를
+    //    아예 안 쓰게 되고, 그러면 기록 자체가 사라진다.
+    private func openDevlogComposer(_ mode: DevlogComposerMode = .create) {
+        devlogComposerMode = mode
+        pickedProjects = []
+        status.loadProjects()
+        showDevlogComposer = true
+    }
+
+    private var devlogComposer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "folder.badge.plus").font(.system(size: 11.5))
+                Text("오늘 작업할 프로젝트")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(pickedProjects.count)개 선택")
+                    .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+            }
+            if status.projectsLoading {
+                Text("불러오는 중…").font(.system(size: 11)).foregroundStyle(.secondary)
+            } else if let e = status.projectsError {
+                // ⚠️ 빈 목록으로 얼버무리지 않는다. 무엇이 깨졌는지 말한다.
+                Text(e).font(.system(size: 11)).foregroundStyle(Color.dtDanger)
+                    .textSelection(.enabled)
+            } else if status.projects.isEmpty {
+                Text("프로젝트가 없습니다. 폴더를 만들거나 devtrail project add 로 등록하세요.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(status.projects) { p in
+                            Toggle(isOn: Binding(
+                                get: { pickedProjects.contains(p.key) },
+                                set: { on in
+                                    if on { pickedProjects.insert(p.key) }
+                                    else { pickedProjects.remove(p.key) }
+                                }
+                            )) {
+                                HStack(spacing: 4) {
+                                    Text(p.key).font(.system(size: 12))
+                                    if devlogComposerMode == .link && p.linked {
+                                        Text("붙음")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                            }
+                            .toggleStyle(.checkbox)
+                            // 이미 붙은 것은 고를 필요가 없다 — 골라도 결과가
+                            // 같아서 "안 먹었다" 로 읽힌다.
+                            .disabled(devlogComposerMode == .link && p.linked)
+                        }
+                    }
+                }
+                // ⚠️ maxHeight 만 주면 안 된다. ScrollView 는 고유 높이가 없어서
+                //    내용에 맞춰 크기를 정하는 팝오버 안에서 **0 으로 접힌다** —
+                //    목록이 통째로 안 보이고, 사용자는 아무것도 못 고른 채
+                //    "0개 선택" 으로 일지를 만들게 된다. 실제로 그랬다.
+                .frame(height: min(CGFloat(status.projects.count) * 22 + 6, 150))
+            }
+            HStack(spacing: 6) {
+                Button(devlogComposerMode == .create ? "만들기" : "붙이기") {
+                    if devlogComposerMode == .create {
+                        status.createTodayDevlog(projects: pickedProjects.sorted())
+                    } else {
+                        status.linkProjects(pickedProjects.sorted())
+                    }
+                    showDevlogComposer = false
+                }
+                .font(.system(size: 12.5, weight: .medium))
+                .buttonStyle(.borderedProminent)
+                .disabled(status.busy != nil
+                          || (devlogComposerMode == .link && pickedProjects.isEmpty))
+                // ⚠️ 만들 때는 고르지 않고도 나갈 수 있어야 한다. 강제하면 급할 때
+                //    일지를 아예 안 쓰고, 그러면 기록 자체가 사라진다.
+                Button(devlogComposerMode == .create ? "건너뛰기" : "닫기") {
+                    if devlogComposerMode == .create { status.createTodayDevlog() }
+                    showDevlogComposer = false
+                }
+                .font(.system(size: 12.5))
+                .disabled(status.busy != nil)
+                Spacer()
+            }
+            Text(devlogComposerMode == .create
+                 ? "고른 프로젝트는 일지의 projects 와 project/<키> 태그로 남습니다."
+                 : "이미 붙은 프로젝트는 그대로 두고 고른 것만 더합니다.")
+                .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+        }
     }
 
     // MARK: - 유튜브 정리 / 웹 링크 저장

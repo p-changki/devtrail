@@ -325,9 +325,21 @@ HUB_EN="$ROOT/preset/hub/project-readme.en.md"
 t_file "허브 원본 (ko)" "$HUB_KO"
 t_file "허브 원본 (en)" "$HUB_EN"
 
-# 템플릿이 거는 링크와 같은 파일명이어야 한다.
-t_contains "개발일지가 README 로 링크" "/README|" \
-  "$(cat "$ROOT/preset/templates/ko/개발일지양식.md")"
+# ⚠️ 개발일지는 프로젝트 README 로 링크하지 **않는다** (2026-08-28 결정).
+#
+#    예전에는 `#### <섹션>` 아래에 `> [[.../README|키]]` 를 넣었다. 실물에서
+#    프로젝트마다 두 줄이 되어 읽기 나빴고, DevTrail 이 만들지 않은 폴더에는
+#    README 가 없어 깨진 링크가 됐다. 일지와 프로젝트는 `project/<키>` 태그가
+#    잇는다 — 링크가 없어도 연결은 남는다.
+#
+#    ⚠️ CLI(생성·붙이기)와 템플릿이 같은 형식이어야 한다. 한쪽만 바꾸면
+#       만든 경로에 따라 본문이 달라진다.
+for f in "$ROOT/preset/templates/ko/개발일지양식.md" \
+         "$ROOT/preset/templates/en/Devlog.md"; do
+  t_not_contains "$(basename "$f") — README 링크 없음" "/README|" "$(cat "$f")"
+done
+t_not_contains "capture devlog 도 README 링크 없음" "/README|" "$(cat "$ROOT/lib/capturecmd.sh")"
+t_not_contains "project link 도 README 링크 없음" "/README|" "$(cat "$ROOT/lib/projectcmd.sh")"
 
 # ⚠️ 본문이 두 곳에 있으면 언젠가 어긋난다. 템플릿은 '읽어야' 한다.
 for f in "$ROOT/preset/templates/ko/프로젝트 생성 템플릿.md" \
