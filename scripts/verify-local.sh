@@ -43,6 +43,14 @@ USAGE
 esac
 
 FAIL=0
+FAILED=""
+# ⚠️ 실패했다는 것만 말하면 2800줄을 뒤져야 한다 — 실제로 그랬다.
+#    어느 단계가 실패했는지 이름으로 남긴다.
+fail() {
+  FAIL=1
+  FAILED="$FAILED
+   - $1"
+}
 
 echo "━━ 작업 트리 공백 검사"
 # ⚠️ 여기서는 **작업 트리**를 본다. 아직 커밋하지 않은 것을 잡는 게 목적이다.
@@ -51,7 +59,7 @@ if git diff --check && git diff --cached --check; then
   echo "  ✓ 공백 오류 없음"
 else
   echo "  ✗ 공백 오류가 있습니다 (위 목록)"
-  FAIL=1
+  fail "작업 트리 공백"
 fi
 echo
 
@@ -59,7 +67,7 @@ echo
 if /bin/bash ./tests/run.sh "$MODE"; then
   :
 else
-  FAIL=1
+  fail "검사 스위트 (tests/run.sh)"
 fi
 
 # ── --release 는 매니페스트·QA 볼트까지 ─────────────────────────────────
@@ -72,7 +80,7 @@ if [ "$MODE" = all ]; then
     :
   else
     echo "  ✗ 매니페스트를 만들지 못했습니다"
-    FAIL=1
+    fail "릴리즈 매니페스트"
   fi
 
   echo
@@ -82,7 +90,7 @@ if [ "$MODE" = all ]; then
   if ./scripts/qa-vault.sh; then
     :
   else
-    FAIL=1
+    fail "QA 볼트 (격리)"
   fi
 
   echo
@@ -96,7 +104,7 @@ if [ "$MODE" = all ]; then
   if ./scripts/qa-vault.sh --bundle; then
     :
   else
-    FAIL=1
+    fail "QA 볼트 (배포되는 .app)"
   fi
 fi
 
@@ -108,5 +116,6 @@ if [ "$FAIL" = 0 ]; then
   echo "      Obsidian ⌘Q → 재시작 → ⌘⇧Y"
   exit 0
 fi
-echo "❌ 로컬 게이트 실패 — 고치고 다시 실행하세요"
+echo "❌ 로컬 게이트 실패 — 아래 단계를 고치고 다시 실행하세요"
+printf '%s\n' "$FAILED"
 exit 1

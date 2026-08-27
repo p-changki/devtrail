@@ -136,4 +136,36 @@ t_contains "작업 트리 검사로는 안 잡힌다" "WORKTREE=0" "$E2EOUT"
 t_contains "그런데 push 는 막힌다" "DIRTY_BLOCKED" "$E2EOUT"
 t_contains "--no-verify 로 우회된다" "BYPASS_OK" "$E2EOUT"
 
+# ── verify-local.sh 는 **어느 단계가** 실패했는지 말한다 ──────────────────────
+#
+# ⚠️ "실패했다" 만 말하면 사람이 2800줄 출력을 뒤진다 — 실제로 그랬고, 그러다
+#    엉뚱한 원인을 짚었다. 단계 이름을 남기는 것이 이 검사의 요점이다.
+t_start "실패한 단계를 이름으로 말한다"
+VL="$(cat "$ROOT/scripts/verify-local.sh")"
+t_contains "실패 목록을 모은다" 'FAILED="$FAILED' "$VL"
+t_contains "실패 요약을 출력한다" 'printf '"'"'%s\n'"'"' "$FAILED"' "$VL"
+for stage in "작업 트리 공백" "검사 스위트 (tests/run.sh)" "릴리즈 매니페스트" \
+             "QA 볼트 (격리)" "QA 볼트 (배포되는 .app)"; do
+  t_contains "단계 이름: $stage" "fail \"$stage\"" "$VL"
+done
+# ⚠️ fail() 을 우회해 FAIL=1 을 직접 쓰면 그 단계는 이름 없이 사라진다.
+t_eq "fail() 밖에서 FAIL=1 을 쓰지 않는다" "1" \
+  "$(printf '%s\n' "$VL" | grep -c '^  FAIL=1$')"
+
+# 문자열 검사만으로는 **출력이 실제로 나오는지** 알 수 없다. 돌려 본다.
+#
+# ⚠️ 진짜 저장소에서 돌리면 전체 스위트가 돈다. 복제본에 tests/run.sh 를 두지
+#    않아 두 단계가 함께 실패하게 하고, 요약이 둘 다 이름으로 부르는지 본다.
+t_start "⚠️ 정말로 단계 이름을 출력한다"
+cp "$ROOT/scripts/verify-local.sh" "$REPO/scripts/"
+chmod +x "$REPO/scripts/verify-local.sh"
+printf 'clean\n' > "$REPO/tracked.txt"
+(cd "$REPO" && git add tracked.txt && git -c user.email=t@t -c user.name=t commit -qm init) >/dev/null 2>&1
+printf 'trailing space \n' >> "$REPO/tracked.txt"
+GATEOUT=$( (cd "$REPO" && ./scripts/verify-local.sh 2>&1); echo "RC=$?" )
+t_contains "공백 단계를 이름으로 부른다" "- 작업 트리 공백" "$GATEOUT"
+t_contains "스위트 단계도 이름으로 부른다" "- 검사 스위트" "$GATEOUT"
+t_contains "실패로 끝난다" "RC=1" "$GATEOUT"
+
+
 t_end

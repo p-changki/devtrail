@@ -259,7 +259,14 @@ DevTrail 은 **사용자가 정한 루트 아래에만** 쓴다. 루트 이름�
 
 ## 검사
 
-로컬과 CI 가 **같은 스크립트**를 부른다.
+로컬과 CI 가 **같은 스크립트**를 부른다 — 다만 **CI 는 지금 돌지 않는다.**
+예산 때문에 저장소 수준에서 Actions 를 꺼 두었고(2026-08-27 확인), 태그
+푸시조차 실행을 만들지 않는다. `.github/workflows/ci.yml` 의 트리거가
+어떻게 적혀 있든, 실제로 무언가를 지키는 것은 `verify-local.sh` 뿐이다.
+
+```bash
+gh api repos/p-changki/devtrail/actions/permissions   # {"enabled":false}
+```
 
 ```bash
 ./tests/run.sh          전부 (swift 빌드 포함)
