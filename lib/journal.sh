@@ -21,6 +21,29 @@
 DT_JOURNAL_DIR="${DEVTRAIL_JOURNAL:-$DEVTRAIL_HOME/journal}"
 
 # ── 작업 시작 ────────────────────────────────────────────────────────────────
+# 잡 이름의 꼬리표. **이름이 곧 정렬 순서다.**
+#
+# ⚠️ 예전에는 PID($$) 를 붙였다. PID 는 자릿수가 달라서 같은 초에 만든 둘이
+#    문자순으로 뒤집힌다 — `20260828-030603-9999` 가 `-21089` 보다 뒤에 온다
+#    ('9' > '2'). 그래서 `ls | tail -1` 로 "방금 만든 잡" 을 고르는 테스트가
+#    간헐적으로 깨졌고(2026-08-28 에 두 건 관측), `devtrail undo` 목록의
+#    순서도 가끔 틀렸다 — 맨 위를 고르면 엉뚱한 것을 되돌린다.
+#
+# ⚠️ PID 를 0 으로 채워도 안 된다. PID 는 시간순이 아니다(재사용·되돌아감).
+#    단조 증가 카운터라야 이름 정렬이 만든 순서와 같아진다.
+_jr_next_seq() {
+  local f="$DT_JOURNAL_DIR/.seq" n
+  mkdir -p "$DT_JOURNAL_DIR" 2>/dev/null || true
+  n=$(cat "$f" 2>/dev/null || echo 0)
+  # 파일이 깨졌으면 0 으로 본다 — 여기서 죽으면 되돌림 기록 자체가 막힌다.
+  case "$n" in ''|*[!0-9]*) n=0 ;; esac
+  n=$((n + 1))
+  printf '%s' "$n" > "$f" 2>/dev/null || true
+  # 6자리면 100만 개까지 자릿수가 같다. 넘으면 자릿수가 늘어 정렬이 깨지므로
+  # 그때는 저널을 정리하거나 폭을 늘린다.
+  printf '%06d' "$n"
+}
+
 # jr_begin <명령이름>  → 전역 DT_JOB 설정
 jr_begin() {
   local cmd="$1"
@@ -37,7 +60,7 @@ jr_begin() {
     return 0
   fi
 
-  DT_JOB="$(date +%Y%m%d-%H%M%S)-$$"
+  DT_JOB="$(date +%Y%m%d-%H%M%S)-$(_jr_next_seq)"
   DT_JOB_DIR="$DT_JOURNAL_DIR/$DT_JOB"
 
   mkdir -p "$DT_JOB_DIR/files" || {
