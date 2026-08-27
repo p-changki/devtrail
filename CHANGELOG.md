@@ -14,10 +14,14 @@ DevTrail 은 **사용자의 볼트를 건드리는 도구**라서, 버전 규칙
 
 ## 릴리스 절차
 
-`main` 은 보호돼 있다 — 직접 밀 수 없고 PR 로만 들어간다(관리자도 예외 없음).
-그래서 릴리스도 브랜치와 PR 을 거친다.
+`main` 과 `dev` **둘 다** 보호돼 있다 — 직접 밀 수 없고 PR 로만 들어간다
+(관리자도 예외 없음). 그래서 릴리스도 브랜치와 PR 을 거친다.
 
 ```bash
+# 0. dev 가 main 과 같은 지점인지 먼저 본다 — 여기서 시작하기 때문이다
+git fetch origin
+git log --oneline origin/dev..origin/main | wc -l   # 0 이 아니면 아래 「dev 가 뒤처졌을 때」
+
 # 1. dev 에서 릴리스 브랜치를 딴다
 git checkout -b release/v0.4.0 dev
 
@@ -27,7 +31,7 @@ echo "0.4.0" > VERSION
 # 3. CHANGELOG 의 [Unreleased] 아래에 새 버전과 날짜를 넣는다
 
 # 4. 검사를 통과시킨다 — 버전 · CHANGELOG 정합성도 여기서 본다
-./tests/run.sh
+./scripts/verify-local.sh --release
 
 # 5. 커밋하고 PR 을 두 번 연다
 git commit -am "release: v0.4.0"
@@ -39,13 +43,52 @@ gh pr create --base dev  --title "release: v0.4.0"   # dev 도 같은 지점으�
 git checkout main && git pull
 git tag -a v0.4.0 -m "v0.4.0"
 git push origin v0.4.0
+
+# 7. 두 브랜치가 같은 내용인지 확인하고 끝낸다
+git fetch origin
+[ "$(git rev-parse origin/main^{tree})" = "$(git rev-parse origin/dev^{tree})" ] && echo 동기
 ```
 
 ⚠️ 태그는 **main 에 머지된 뒤에** 붙인다. 릴리스 브랜치에 붙이면 배포된
-커밋과 태그가 가리키는 커밋이 달라진다.
+커밋과 태그가 가리키는 커밋이 달라진다. 태그는 `v` 접두사를 붙인다 — `v0.3.0`.
 
-태그는 `v` 접두사를 붙인다 — `v0.3.0`. CI 의 Swift 빌드가 이 형식에만 걸린다.
-평소 PR 에서는 macOS 러너를 쓰지 않는다(무료 한도를 10배 소모한다).
+⚠️ **`dev` 에 직접 푸시하지 않는다.** 관리자 권한으로는 밀려 버리는데, GitHub
+은 조용히 받지 않고 이렇게 남긴다:
+
+```
+remote: Bypassed rule violations for refs/heads/dev:
+remote: - Changes must be made through a pull request.
+```
+
+2026-08-28 에 실제로 이렇게 밀었고, 그 뒤로는 동기화도 PR 로 한다.
+
+### dev 가 뒤처졌을 때
+
+**절차가 `dev` 에서 시작하므로, `dev` 가 뒤처진 채로 릴리스하면 그 사이의
+작업이 통째로 빠진다.** 2026-08-27 에 `dev` 는 PR #14 이후 **93 커밋** 뒤처져
+있었고, 아무도 몰랐다 — `dev` 를 갱신하게 만드는 게이트가 없기 때문이다.
+그래서 0 단계에서 매번 확인한다.
+
+뒤처졌으면 `main` 을 `dev` 로 넣는 PR 을 열어 머지한다. `--ff-only` 는 릴리스
+PR 이 `dev` 에만 남기는 머지 커밋 때문에 대개 실패한다 — 일반 머지로 맞춘다.
+
+```bash
+gh pr create --base dev --head main --title "chore: dev 를 main 과 동기화한다"
+```
+
+### CI 는 지금 돌지 않는다
+
+`.github/workflows/ci.yml` 의 트리거는 태그와 수동 실행뿐이지만, **예산 때문에
+저장소 수준에서 Actions 를 꺼 두었다**(2026-08-27 확인). `v0.7.0` · `v0.8.0`
+태그 모두 실행이 만들어지지 않았고, 두 릴리스는 로컬 게이트만으로 나갔다.
+
+```bash
+gh api repos/p-changki/devtrail/actions/permissions   # {"enabled":false}
+```
+
+그러므로 릴리스를 실제로 지키는 것은 `./scripts/verify-local.sh --release` 와
+**사람이 화면을 보는 것** 뿐이다. 자세한 내용은
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 의 「검사」를 본다.
 
 ---
 
