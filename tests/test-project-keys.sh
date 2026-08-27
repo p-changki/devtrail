@@ -132,6 +132,32 @@ t_eq "키 집합이 동일" "true" \
 t_eq "섹션 값" "acme" "$(printf '%s' "$json" | jq -r '.project_sections["acme-fe"]')"
 t_eq "항등 매핑도 담긴다" "myapp" "$(printf '%s' "$json" | jq -r '.project_sections.myapp')"
 
+# ── 폴더만 있는 프로젝트도 고를 수 있다 ─────────────────────────────────────
+#
+# ⚠️ project_groups 는 GitHub 레포 그룹핑이지 프로젝트 목록이 아니다. 그것만
+#    읽으면 GitHub 을 연결하지 않은 프로젝트는 개발일지 선택창에 영원히
+#    나오지 않는다. 실제로 폴더 10개 · 선택창 1개인 볼트가 있었다.
+t_start "등록하지 않은 프로젝트 폴더도 목록에 든다"
+projdir="$T_VAULT/MyVault/$(printf '%s' "$json" | jq -r '.paths.projects' | sed 's#^MyVault/##')"
+mkdir -p "$projdir/folder-only" "$projdir/.hidden-not-a-project"
+"$DT" augment --apply >/dev/null 2>&1
+json2=$(sed -n '/```json/,/```/p' "$pm" | sed '1d;$d')
+
+t_eq "폴더만 있어도 projects 에 든다" "true" \
+  "$(printf '%s' "$json2" | jq -c '.projects | index("folder-only") != null')"
+t_eq "항등 섹션이 함께 생긴다" "folder-only" \
+  "$(printf '%s' "$json2" | jq -r '.project_sections["folder-only"]')"
+t_eq "키 집합이 여전히 동일" "true" \
+  "$(printf '%s' "$json2" | jq -c '(.projects | sort) == (.project_sections | keys | sort)')"
+t_eq "숨김 폴더는 프로젝트가 아니다" "false" \
+  "$(printf '%s' "$json2" | jq -c '.projects | index(".hidden-not-a-project") != null')"
+# ⚠️ 등록된 키는 설정이 이긴다 — 폴더가 항등 매핑으로 덮어쓰면 그룹핑이 깨진다.
+mkdir -p "$projdir/acme-fe"
+"$DT" augment --apply >/dev/null 2>&1
+json3=$(sed -n '/```json/,/```/p' "$pm" | sed '1d;$d')
+t_eq "폴더가 있어도 설정의 섹션이 이긴다" "acme" \
+  "$(printf '%s' "$json3" | jq -r '.project_sections["acme-fe"]')"
+
 # ── 옛 템플릿이 새 경로 맵을 봐도 깨지지 않는다 ─────────────────────────────
 #
 # 이게 D7 의 핵심이다. 옛 dtProjects 는 DT.projects 만 읽는다.
