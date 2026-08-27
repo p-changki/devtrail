@@ -278,7 +278,7 @@ $(L 'URL만 저장하면 분야와 용도별로 정리됩니다. 아래 표와 �
 <!-- devtrail:link-library:areas:start -->
 
 \`\`\`dataview
-TABLE WITHOUT ID link(file.path, split(file.folder, "/")[-1]) AS "$(L '분야' 'Area')"
+TABLE WITHOUT ID link(file.path, regexreplace(file.folder, ".*/", "")) AS "$(L '분야' 'Area')"
 FROM "$from"
 WHERE scope = "library-links" AND library_level = "area"
 SORT file.folder ASC
@@ -349,11 +349,14 @@ _cap_web_ensure_root_navigation() {
   if grep -qF '<!-- devtrail:link-library:areas:start -->' "$file"; then
     # 기존 인덱스도 같은 마커 안의 Dataview 블록만 교체한다. 사용자가 쓴
     # 나머지 본문은 건드리지 않는다. `_index` 대신 실제 분야명이 보이게 한다.
-    awk -v from="$from" '
+    # ⚠️ 폴더의 마지막 조각을 `split(...)[-1]` 로 뽑지 않는다 — Dataview 는
+    #    음수 인덱스를 지원하지 않아 null 을 돌려주고, 링크가 파일명(`_index`)
+    #    으로 표시된다. 에러가 나지 않아 조용히 틀린다. 실제로 그랬다.
+    awk -v from="$from" -v label="$(L '분야' 'Area')" '
       /<!-- devtrail:link-library:areas:start -->/ {
         print
         print "```dataview"
-        print "TABLE WITHOUT ID link(file.path, split(file.folder, \"/\")[-1]) AS \"분야\""
+        print "TABLE WITHOUT ID link(file.path, regexreplace(file.folder, \".*/\", \"\")) AS \"" label "\""
         print "FROM \"" from "\""
         print "WHERE scope = \"library-links\" AND library_level = \"area\""
         print "SORT file.folder ASC"
@@ -372,7 +375,7 @@ _cap_web_ensure_root_navigation() {
 
 <!-- devtrail:link-library:areas:start -->
 \`\`\`dataview
-TABLE WITHOUT ID link(file.path, split(file.folder, "/")[-1]) AS "$(L '분야' 'Area')"
+TABLE WITHOUT ID link(file.path, regexreplace(file.folder, ".*/", "")) AS "$(L '분야' 'Area')"
 FROM "$from"
 WHERE scope = "library-links" AND library_level = "area"
 SORT file.folder ASC

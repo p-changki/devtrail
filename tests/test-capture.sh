@@ -95,7 +95,10 @@ t_contains "세부 주제도 쓴다" 'topic: documentation' "$WEBBODY"
 t_eq "웹 토큰이 남지 않는다" "0" "$(grep -c '{{WEB_' "$WEBNOTE")"
 t_file "링크 자료실 허브가 생긴다" "$(webdir)/_index.md"
 t_contains "링크 자료실은 분야별 허브도 보여준다" "devtrail:link-library:areas:start" "$(cat "$(webdir)/_index.md")"
-t_contains "분야 허브는 _index 대신 분야명으로 보인다" "split(file.folder, \"/\")[-1]" "$(cat "$(webdir)/_index.md")"
+# ⚠️ Dataview 는 음수 인덱스를 지원하지 않는다. split(...)[-1] 은 에러 없이
+#    null 이 되어 링크가 `_index` 로 표시됐다 — 실물 화면에서만 드러났다.
+t_contains "분야 허브는 _index 대신 분야명으로 보인다" 'regexreplace(file.folder, ".*/", "")' "$(cat "$(webdir)/_index.md")"
+t_not_contains "음수 인덱스를 쓰지 않는다" '[-1]' "$(cat "$(webdir)/_index.md")"
 t_file "분야 허브가 생긴다" "$(webdir)/공통/_index.md"
 t_file "세부 분류 허브가 생긴다" "$(webdir)/공통/문서-레퍼런스/_index.md"
 
