@@ -204,45 +204,7 @@ _aug_paths_note() {
 #   "my-app": "myapp"    실제 프로젝트   → 태그·폴더·라우팅·선택창
 #   "acme-*": "acme"     PR 섹션 매칭 규칙 → summary.sh 만
 #
-# 태그와 폴더 이름이 되므로 파일명에 못 쓰는 문자가 있으면 프로젝트가 아니다.
-# ⚠️ 두 곳에서 같은 규칙을 써야 projects 와 project_sections 의 짝이 맞는다.
-DT_PROJECT_KEY_FILTER='select(test("[*?\\[\\]/\\\\:<>|\"]") | not)
-                       | select(length > 0 and length <= 64)'
-
-# ⚠️ 설정(.github.project_groups)만 읽으면 GitHub 을 연결하지 않은 프로젝트는
-#    개발일지 선택창에 **영원히 나오지 않는다.** project_groups 는 이름 그대로
-#    레포 그룹핑이지 프로젝트 목록이 아니다. 플러그인 화면은 이미 폴더를 정본
-#    으로 쓰므로, 설정만 읽으면 두 화면이 서로 다른 목록을 보여 준다.
-#    실제로 폴더 10개 · 선택창 1개인 볼트가 있었다.
-_aug_project_folder_keys() {
-  local dir k
-  dir="$(vault_root)/$(dt_dir projects)" || { echo '[]'; return 0; }
-  [ -d "$dir" ] || { echo '[]'; return 0; }
-  {
-    for k in "$dir"/*/; do
-      k=${k%/}; k=${k##*/}
-      # 글로브가 안 맞으면 리터럴 * 가 온다. 숨김 폴더는 프로젝트가 아니다.
-      case "$k" in '*'|.*) continue ;; esac
-      printf '%s\n' "$k"
-    done
-  } | jq -Rsc 'split("\n") | map(select(length > 0))'
-}
-
-_aug_project_keys() {
-  jq -c --argjson folders "$(_aug_project_folder_keys)" \
-    "[ (((.github.project_groups // {}) | keys) + \$folders)[] | $DT_PROJECT_KEY_FILTER ] | unique" \
-    "$CONFIG_FILE" 2>/dev/null || echo '[]'
-}
-
-# ⚠️ projects 와 키 집합이 같아야 한다 — 한쪽에만 있으면 소비자가 못 잇는다.
-#    폴더만 있는 프로젝트는 항등 매핑을 준다. 설정에 있으면 설정 값이 이긴다.
-_aug_project_sections() {
-  jq -c --argjson folders "$(_aug_project_folder_keys)" \
-    "(([ \$folders[] | { key: ., value: . } ] | from_entries)
-      + (.github.project_groups // {}))
-     | with_entries(select(.key | $DT_PROJECT_KEY_FILTER))" \
-    "$CONFIG_FILE" 2>/dev/null || echo '{}'
-}
+. "$DEVTRAIL_ROOT/lib/projectkeys.sh"
 
 _aug_paths_json() {
   local keys k
@@ -270,14 +232,14 @@ EOF
     #    'acme-*' 가 항목으로 떠서, 고르면 그런 이름의 폴더를 만들려 든다.
     #    ADR 0001 D1a 참조. 설정은 그대로 두고 읽는 쪽에서만 거른다 —
     #    사용자의 acme-* 는 PR 요약에서 계속 동작해야 한다.
-    printf '  "projects": %s,\n' "$(_aug_project_keys)"
+    printf '  "projects": %s,\n' "$(dt_project_keys)"
     # 키 → 섹션 매핑.
     #
     # ⚠️ projects 의 타입은 절대 바꾸지 않는다(문자열 배열). 헬퍼는 템플릿
     #    안에 복사돼 있어서, 이미 설치된 볼트의 옛 템플릿에는 새 포맷을
     #    흡수할 코드가 없다. 객체 배열로 바꾸면 태그와 파일명이
     #    "[object Object]" 로 오염된다. 그래서 키를 '더한다'.  ADR 0001 D7.
-    printf '  "project_sections": %s,\n' "$(_aug_project_sections)"
+    printf '  "project_sections": %s,\n' "$(dt_project_sections)"
     printf '  "categories": %s,\n' \
       "$(jq -c --argjson en "$([ "$(dt_lang)" = en ] && echo true || echo false)" \
          '[.folders[] | select(.key=="devnote") | (.children // [])[]

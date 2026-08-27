@@ -89,7 +89,27 @@ t_start "홈은 오늘의 행동을 먼저 보여준다"
 t_contains "오늘 카드가 있다" "private var todayCard" "$ALL"
 t_contains "오늘 개발일지 생성 행동이 있다" "오늘 개발일지 만들기" "$ALL"
 t_contains "개발일지는 CLI로 표준 본문을 만든다" "func createTodayDevlog" "$ALL"
-t_contains "없는 일지에서 활동 삽입을 부르지 않는다" "else { status.createTodayDevlog() }" "$ALL"
+# ⚠️ 문자열 프록시가 아니라 의도를 본다. 일지가 없으면 **일지를 만드는**
+#    흐름으로 가야 하고, 활동 삽입(이미 있는 일지에 넣는 명령)을 불러서는
+#    안 된다 — 없는 파일에 넣으려다 조용히 실패한다.
+TODAY_CARD="$(sed -n '/private var todayCard/,/^    }$/p' "$SRC/MenuView.swift")"
+t_contains "없는 일지에서는 일지 생성 흐름으로 간다" "openDevlogComposer()" "$TODAY_CARD"
+t_not_contains "없는 일지에서 활동 삽입을 부르지 않는다" "fetchTodayActivity" "$TODAY_CARD"
+t_contains "선택 화면이 실제로 일지를 만든다" "status.createTodayDevlog(" "$ALL"
+# ⚠️ 일지를 아침에 먼저 만드는 사람은 생성 시점에 프로젝트를 모른다.
+#    이미 있는 일지에도 붙일 수 있어야 한다.
+t_contains "이미 있는 일지에도 붙인다" '["project", "link"]' "$ALL"
+t_contains "붙이기 진입점이 있다" "프로젝트 붙이기" "$ALL"
+t_contains "만들기와 붙이기를 구분한다" "DevlogComposerMode" "$ALL"
+# ⚠️ ScrollView 에 maxHeight 만 주면 팝오버 안에서 높이 0 으로 접힌다 —
+#    목록이 안 보이고 사용자는 0개 선택으로 일지를 만들게 된다. 실제로 그랬다.
+COMPOSER="$(sed -n '/private var devlogComposer/,/^    }$/p' "$SRC/MenuView.swift")"
+t_contains "목록 높이를 실제로 정한다" "frame(height:" "$COMPOSER"
+t_not_contains "maxHeight 로 접히지 않게 한다" "frame(maxHeight:" "$COMPOSER"
+t_contains "로딩과 없음을 구분한다" "projectsLoading" "$ALL"
+t_contains "실패를 화면으로 말한다" "projectsError" "$ALL"
+t_contains "이미 붙은 것을 표시한다" '"붙음"' "$ALL"
+t_contains "이미 붙은 것은 고를 수 없다" "p.linked" "$ALL"
 t_contains "일지 생성은 CLI에 맡긴다" "[\"capture\", \"devlog\", \"--apply\", \"--repair-empty\"]" "$ALL"
 t_contains "부가 기능은 더보기에 둔다" "DisclosureGroup(\"더보기\")" "$ALL"
 
@@ -153,6 +173,18 @@ t_contains "AI 요약이 켜진 경우에만 자동 정리를 요청한다" 'arg
   "$(sed -n '/func captureYouTube/,/^    }/p' "$SRC/Status.swift")"
 t_contains "학습 목적을 유튜브 캡처 인자로 전달한다" 'args += ["--purpose", trimmedPurpose]' \
   "$(sed -n '/func captureYouTube/,/^    }/p' "$SRC/Status.swift")"
+
+# ── 개발일지에 프로젝트를 붙인다 ────────────────────────────────────────────
+#
+# ⚠️ CLI 가 만드는 일지는 projects: [] 로 비어 있었고, 메뉴바 앱이 그 경로를
+#    쓴다. 선택 UI 가 없으면 사용자는 프로젝트를 고를 방법이 없다.
+t_start "개발일지를 만들 때 프로젝트를 고른다"
+t_contains "목록은 CLI 에서 읽는다" '["project", "list", "--json"]' "$ALL"
+t_not_contains "앱이 폴더를 직접 스캔하지 않는다" "contentsOfDirectory" "$ALL"
+t_contains "고른 프로젝트를 인자로 넘긴다" '["--project", k]' "$ALL"
+t_contains "선택 화면이 있다" "showDevlogComposer" "$ALL"
+t_contains "고르지 않고도 만들 수 있다" "건너뛰기" "$ALL"
+t_contains "오늘 작업할 프로젝트를 묻는다" "오늘 작업할 프로젝트" "$ALL"
 
 t_start "일반 웹 링크도 메뉴바에서 저장한다"
 t_contains "URL 종류를 자동 구분한다" "func captureLink" "$ALL"

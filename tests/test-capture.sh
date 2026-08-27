@@ -228,6 +228,44 @@ job=$(ls -1 "$H/journal" | tail -1)
 run undo "$job" --apply >/dev/null 2>&1
 t_no_file "되돌리면 개발일지도 사라진다" "$DEVLOG"
 
+# ── 개발일지에 프로젝트를 붙인다 ────────────────────────────────────────────
+#
+# ⚠️ CLI 가 만드는 일지는 projects: [] 로 비어 있었다. 메뉴바 앱이 이 경로를
+#    쓰므로 사용자는 프로젝트를 고를 방법이 아예 없었다 — Templater 경로에만
+#    선택창이 있었다.
+t_start "개발일지에 프로젝트를 붙인다"
+rm -f "$DEVLOG"
+mkdir -p "$V/notes/개발/프로젝트/alpha" "$V/notes/개발/프로젝트/beta"
+run capture devlog --project alpha --project beta --apply >/dev/null 2>&1
+t_contains "고른 프로젝트가 frontmatter 에 든다" "projects: [alpha, beta]" "$(cat "$DEVLOG")"
+t_contains "alpha 태그가 붙는다" "  - project/alpha" "$(cat "$DEVLOG")"
+t_contains "beta 태그가 붙는다" "  - project/beta" "$(cat "$DEVLOG")"
+# ⚠️ frontmatter 만 채우면 본문에 쓸 자리가 없다. Templater 템플릿은 오전
+#    아래에 프로젝트별 #### 소제목과 README 링크를 넣는다 — devtrail summary
+#    가 PR 요약을 넣는 자리도 이 섹션이다. 없으면 요약이 조용히 건너뛴다.
+t_contains "본문에 alpha 소제목이 생긴다" "#### alpha" "$(cat "$DEVLOG")"
+t_contains "본문에 beta 소제목이 생긴다" "#### beta" "$(cat "$DEVLOG")"
+# ⚠️ README 링크 줄은 넣지 않는다. 프로젝트마다 두 줄이 되어 읽기 나쁘고,
+#    README 가 없는 폴더에서는 깨진 링크가 된다.
+t_not_contains "README 링크는 넣지 않는다" "/README|" "$(cat "$DEVLOG")"
+t_eq "빈 소제목은 남지 않는다" "0" "$(grep -c '^####$' "$DEVLOG" | tr -d ' ')"
+
+t_start "모르는 프로젝트는 거절한다"
+rm -f "$DEVLOG"
+before=$(count)
+out=$(run capture devlog --project nope --apply 2>&1)
+t_ne "실패로 끝난다" "0" "$?"
+t_no_file "일지를 만들지 않는다" "$DEVLOG"
+t_contains "무엇이 문제인지 말한다" "nope" "$out"
+
+t_start "프로젝트를 안 고르면 예전처럼 비운다"
+rm -f "$DEVLOG"
+run capture devlog --apply >/dev/null 2>&1
+t_contains "빈 목록을 쓴다" "projects: []" "$(cat "$DEVLOG")"
+t_not_contains "프로젝트 태그가 없다" "project/" "$(cat "$DEVLOG")"
+# ⚠️ 안 골랐을 때는 예전처럼 빈 #### 를 남긴다. 사용자가 직접 적을 자리다.
+t_eq "빈 소제목 자리는 그대로" "1" "$(grep -c '^####$' "$DEVLOG" | tr -d ' ')"
+
 t_start "기존 개발일지도 작업 로그를 먼저 보이게 정리한다"
 mkdir -p "$(dirname "$DEVLOG")"
 cat > "$DEVLOG" <<'EOF'
