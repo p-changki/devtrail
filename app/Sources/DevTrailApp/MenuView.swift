@@ -9,6 +9,8 @@ import AppKit
 ///   - 홈은 "지금 어떤 상태인가 + 지금 뭘 할 것인가"만 답한다.
 ///   - 실행 액션은 아이콘 툴바로 묶어 4줄을 1줄로 줄인다.
 struct MenuView: View {
+    private enum CaptureMode { case youtube, web }
+
     @ObservedObject var status: Status
     @State private var showSettings = false
 
@@ -16,6 +18,8 @@ struct MenuView: View {
     private let panelWidth: CGFloat = 342
 
     @State private var captureURL = ""
+    @State private var capturePurpose = ""
+    @State private var captureMode: CaptureMode = .youtube
     @State private var showCaptureComposer = false
     @State private var showBackfillComposer = false
     @StateObject private var onboard = Onboarding()
@@ -72,9 +76,13 @@ struct MenuView: View {
         .padding(14)
         .frame(width: panelWidth)
         // 성공(중복 포함)만 다음 입력을 위해 비운다. 실패한 URL은 그대로 남겨
-        // 사용자가 오타를 고치거나 다시 시도할 수 있게 한다.
+        // 사용자가 오타를 고치거나 다시 시도할 수 있게 한다. 자막이 없어 AI가
+        // 건너뛴 경우에도 학습 목적을 지우면 "전달되지 않았다"고 보이므로 보존한다.
         .onChange(of: status.captureCompletedID) { _, _ in
-            captureURL = ""
+            if status.captureWarning == nil {
+                captureURL = ""
+                capturePurpose = ""
+            }
         }
     }
 
@@ -159,10 +167,17 @@ struct MenuView: View {
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 6) {
-                tool("play.rectangle", "유튜브 정리") { showCaptureComposer.toggle() }
-                tool("link.badge.plus", "링크 저장") { showCaptureComposer.toggle() }
+                tool("play.rectangle", "유튜브 정리") { openCapture(.youtube) }
+                tool("link.badge.plus", "웹 링크 저장") { openCapture(.web) }
             }
         }
+    }
+
+    private func openCapture(_ mode: CaptureMode) {
+        captureMode = mode
+        captureURL = ""
+        capturePurpose = ""
+        showCaptureComposer = true
     }
 
     /// 메뉴바에서도 실제 DevTrail 명령을 바로 실행한다. 키를 외우지 못해도
@@ -390,15 +405,17 @@ struct MenuView: View {
         .accessibilityLabel("\(label): \(value). \(detail)")
     }
 
-    // MARK: - 링크 저장
+    // MARK: - 유튜브 정리 / 웹 링크 저장
     //
     // ⚠️ Obsidian 이 꺼져 있어도 된다. 노트를 만드는 것은 CLI 이고,
     //    저널에 남아 undo 로 사라진다 (ADR 0003).
     private var captureRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "link").font(.system(size: 11.5))
-                Text("링크 저장").font(.system(size: 11.5, weight: .medium))
+                Image(systemName: captureMode == .youtube ? "play.rectangle" : "link.badge.plus")
+                    .font(.system(size: 11.5))
+                Text(captureMode == .youtube ? "유튜브 정리" : "웹 링크 저장")
+                    .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("클립보드") {
@@ -411,13 +428,17 @@ struct MenuView: View {
                 .help("클립보드의 링크를 붙여넣습니다")
             }
             HStack(spacing: 6) {
-                TextField("YouTube 또는 웹 링크 붙여넣기", text: $captureURL)
+                TextField(captureMode == .youtube ? "YouTube 링크 붙여넣기" : "웹 링크 붙여넣기", text: $captureURL)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12.5))
                     .disabled(status.captureBusy)
                     .accessibilityLabel("저장할 링크")
                 Button(captureButtonTitle) {
-                    status.captureLink(captureURL, apply: true)
+                    if captureMode == .youtube {
+                        status.captureYouTube(captureURL, purpose: capturePurpose, apply: true)
+                    } else {
+                        status.captureWeb(captureURL, apply: true)
+                    }
                 }
                 .font(.system(size: 12.5, weight: .medium))
                 .controlSize(.regular)
@@ -425,26 +446,33 @@ struct MenuView: View {
                 .disabled(status.captureBusy || captureURL.trimmingCharacters(in: .whitespaces).isEmpty)
                 .help(captureHelp)
             }
+            if captureMode == .youtube {
+                TextField("이 영상에서 얻고 싶은 것 (선택)", text: $capturePurpose)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+                    .disabled(status.captureBusy)
+                    .accessibilityLabel("유튜브 영상 학습 목적")
+                    .help("예: 피그마 포트폴리오를 검토할 때 쓸 디자인 판단 기준")
+            }
             Text(captureHint)
                 .font(.system(size: 10.5)).foregroundStyle(.tertiary)
             captureFeedback
         }
     }
 
-    private var captureIsYouTube: Bool { status.isYouTubeURL(captureURL) }
     private var captureButtonTitle: String {
         if status.captureBusy {
             return status.captureKind == .youtube ? "AI 정리 중…" : "저장 중…"
         }
-        return captureIsYouTube ? "저장하고 정리" : "링크 저장"
+        return captureMode == .youtube ? "저장하고 정리" : "링크 저장"
     }
     private var captureHint: String {
-        captureIsYouTube
-            ? "YouTube는 AI 요약 설정이 켜진 경우에만 자막을 정리합니다."
+        captureMode == .youtube
+            ? "목적을 적으면 그 관점으로 판단 기준을 추출합니다. 비워두면 AI가 영상에서 추정합니다."
             : "일반 웹 링크는 AI 없이 자료실에 안전하게 저장합니다."
     }
     private var captureHelp: String {
-        captureIsYouTube
+        captureMode == .youtube
             ? "AI 요약이 켜져 있으면 Claude가 자막을 분석해 노트를 정리합니다"
             : "제목과 기본 정보를 읽어 자료실에 저장합니다. AI는 사용하지 않습니다"
     }

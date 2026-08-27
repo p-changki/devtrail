@@ -95,6 +95,7 @@ t_contains "세부 주제도 쓴다" 'topic: documentation' "$WEBBODY"
 t_eq "웹 토큰이 남지 않는다" "0" "$(grep -c '{{WEB_' "$WEBNOTE")"
 t_file "링크 자료실 허브가 생긴다" "$(webdir)/_index.md"
 t_contains "링크 자료실은 분야별 허브도 보여준다" "devtrail:link-library:areas:start" "$(cat "$(webdir)/_index.md")"
+t_contains "분야 허브는 _index 대신 분야명으로 보인다" "split(file.folder, \"/\")[-1]" "$(cat "$(webdir)/_index.md")"
 t_file "분야 허브가 생긴다" "$(webdir)/공통/_index.md"
 t_file "세부 분류 허브가 생긴다" "$(webdir)/공통/문서-레퍼런스/_index.md"
 
@@ -280,14 +281,18 @@ chmod +x "$FAKE/claude"
 mkdir -p "$T_TMP/home/.claude/skills/devtrail-youtube"
 AIURL="https://youtu.be/DDDDDDDDDDD"
 DT_CAPTURE_TRANSCRIPT="00:00 test transcript" DT_FAKE_CLAUDE_ARGS="$T_TMP/claude.args" HOME="$T_TMP/home" PATH="$FAKE:$PATH" \
-  run capture youtube --url "$AIURL" --apply --ai >/dev/null 2>&1
+  run capture youtube --url "$AIURL" --purpose "디자인 판단 기준" --apply --ai >/dev/null 2>&1
 t_file "Claude가 호출됐다" "$T_TMP/claude.args"
 t_contains "노트 읽기·쓰기를 허용한다" "Read,Edit,Write" "$(cat "$T_TMP/claude.args")"
 t_contains "노트 폴더만 열어 준다" "--add-dir" "$(cat "$T_TMP/claude.args")"
-t_contains "자막 언어를 하나씩만 요청한다" "--sub-langs 'ko,ja,en'" "$(cat "$ROOT/lib/capturecmd.sh")"
-t_contains "VTT 자막도 읽는다" "-name '*.vtt'" "$(cat "$ROOT/lib/capturecmd.sh")"
-t_contains "AI가 분야를 반드시 채운다" "분류는 반드시 채우세요" "$(cat "$ROOT/lib/capturecmd.sh")"
-t_contains "AI 분류값을 검증한다" "DEVTRAIL_CAPTURE_AI=partial" "$(cat "$ROOT/lib/capturecmd.sh")"
+t_contains "자막 언어를 하나씩만 요청한다" "--sub-langs 'ko,ja,en'" "$(cat "$ROOT/lib/captureai.sh")"
+t_contains "VTT 자막도 읽는다" "-name '*.vtt'" "$(cat "$ROOT/lib/captureai.sh")"
+t_contains "AI가 분야를 반드시 채운다" "분류는 반드시 채우세요" "$(cat "$ROOT/lib/captureai.sh")"
+t_contains "사용자 목적을 Claude 프롬프트에 전달한다" "사용자 학습 목적: 디자인 판단 기준" "$(cat "$T_TMP/claude.args")"
+t_contains "자막이 없어도 사용자 목적을 노트에 보존한다" "learning_goal: 디자인 판단 기준" "$(find "$V" -type f -name '*ddddddddddd*.md' -o -name '*DDDDDDDDDDD*.md' | head -1 | xargs cat 2>/dev/null)"
+t_contains "판단 기준 형식으로 정리한다" "바로 쓰는 판단 기준" "$(cat "$ROOT/lib/captureai.sh")"
+t_contains "AI 분류값을 검증한다" "DEVTRAIL_CAPTURE_AI=partial" "$(cat "$ROOT/lib/captureai.sh")"
+t_contains "AI 종료 코드보다 실제 노트 저장을 우선 판정한다" "claude_rc" "$(cat "$ROOT/lib/captureai.sh")"
 t_contains "기존 유튜브 템플릿에도 분야 필드를 보완한다" "DT_Y_ADD_AREA" "$(cat "$ROOT/lib/capturecmd.sh")"
 t_contains "기존 웹 템플릿에도 분야 필드를 보완한다" "DT_W_ADD_AREA" "$(cat "$ROOT/lib/webcapture.sh")"
 
@@ -318,6 +323,15 @@ grep -oE '^## .*' "$TPL" | head -3 | while IFS= read -r h; do
 done
 # 템플릿 문법이 그대로 새어 나가지 않는다.
 t_eq "Templater 문법이 남지 않았다" "0" "$(grep -c '<%' "$NOTE")"
+
+# ⚠️ AI 프롬프트가 요구하는 자리가 템플릿에 없으면 채울 곳이 없다.
+#    프롬프트(captureai.sh)와 템플릿이 어긋나면 여기서 걸린다.
+KO_TPL="$(cat "$ROOT/preset/templates/ko/유튜브 노트 템플릿.md")"
+EN_TPL="$(cat "$ROOT/preset/templates/en/YouTube note.md")"
+t_contains "ko 템플릿에 학습 목적 자리가 있다" "learning_goal:" "$KO_TPL"
+t_contains "ko 템플릿에 판단 기준 자리가 있다" "## 바로 쓰는 판단 기준" "$KO_TPL"
+t_contains "en 템플릿에 학습 목적 자리가 있다" "learning_goal:" "$EN_TPL"
+t_contains "en 템플릿에 판단 기준 자리가 있다" "## Reusable decision criteria" "$EN_TPL"
 
 t_start "같은 영상을 두 번 만들지 않는다"
 n=$(count)

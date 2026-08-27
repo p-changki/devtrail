@@ -278,10 +278,10 @@ $(L 'URL만 저장하면 분야와 용도별로 정리됩니다. 아래 표와 �
 <!-- devtrail:link-library:areas:start -->
 
 \`\`\`dataview
-LIST file.link
+TABLE WITHOUT ID link(file.path, split(file.folder, "/")[-1]) AS "$(L '분야' 'Area')"
 FROM "$from"
 WHERE scope = "library-links" AND library_level = "area"
-SORT file.name ASC
+SORT file.folder ASC
 \`\`\`
 
 <!-- devtrail:link-library:areas:end -->
@@ -344,22 +344,43 @@ EOF
 _cap_web_ensure_root_navigation() {
   local file="$1" from="$2" tmp
   [ -f "$file" ] || return 0
-  grep -qF '<!-- devtrail:link-library:areas:start -->' "$file" && return 0
   tmp=$(mktemp "${TMPDIR:-/tmp}/devtrail-web-root.XXXXXX") || return 1
-  cp "$file" "$tmp" || { rm -f "$tmp"; return 1; }
-  cat >> "$tmp" <<EOF
+
+  if grep -qF '<!-- devtrail:link-library:areas:start -->' "$file"; then
+    # 기존 인덱스도 같은 마커 안의 Dataview 블록만 교체한다. 사용자가 쓴
+    # 나머지 본문은 건드리지 않는다. `_index` 대신 실제 분야명이 보이게 한다.
+    awk -v from="$from" '
+      /<!-- devtrail:link-library:areas:start -->/ {
+        print
+        print "```dataview"
+        print "TABLE WITHOUT ID link(file.path, split(file.folder, \"/\")[-1]) AS \"분야\""
+        print "FROM \"" from "\""
+        print "WHERE scope = \"library-links\" AND library_level = \"area\""
+        print "SORT file.folder ASC"
+        print "```"
+        skipping = 1
+        next
+      }
+      skipping && /<!-- devtrail:link-library:areas:end -->/ { print; skipping = 0; next }
+      !skipping { print }
+    ' "$file" > "$tmp" || { rm -f "$tmp"; return 1; }
+  else
+    cp "$file" "$tmp" || { rm -f "$tmp"; return 1; }
+    cat >> "$tmp" <<EOF
 
 ## $(L '분야별 자료실' 'Browse by area')
 
 <!-- devtrail:link-library:areas:start -->
 \`\`\`dataview
-LIST file.link
+TABLE WITHOUT ID link(file.path, split(file.folder, "/")[-1]) AS "$(L '분야' 'Area')"
 FROM "$from"
 WHERE scope = "library-links" AND library_level = "area"
-SORT file.name ASC
+SORT file.folder ASC
 \`\`\`
 <!-- devtrail:link-library:areas:end -->
 EOF
+  fi
+  cmp -s "$file" "$tmp" && { rm -f "$tmp"; return 0; }
   jr_backup "$file" >/dev/null || { rm -f "$tmp"; return 1; }
   mv "$tmp" "$file" || { rm -f "$tmp"; return 1; }
 }

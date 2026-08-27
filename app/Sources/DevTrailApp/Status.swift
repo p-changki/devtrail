@@ -697,8 +697,8 @@ final class Status: ObservableObject {
     // ⚠️ 노트를 앱이 만들지 않는다. CLI 가 만들고, 저널에 남고, undo 로 사라진다.
     /// 사용자는 URL 종류를 구분할 필요가 없다. YouTube만 기존 AI 선택 흐름으로
     /// 보내고, 나머지 http/https URL은 AI 없이 웹 자료실에 저장한다.
-    func captureLink(_ url: String, apply: Bool) {
-        if isYouTubeURL(url) { captureYouTube(url, apply: apply) }
+    func captureLink(_ url: String, purpose: String = "", apply: Bool) {
+        if isYouTubeURL(url) { captureYouTube(url, purpose: purpose, apply: apply) }
         else { captureWeb(url, apply: apply) }
     }
 
@@ -709,7 +709,7 @@ final class Status: ObservableObject {
             host == "youtube.com" || host.hasSuffix(".youtube.com")
     }
 
-    func captureYouTube(_ url: String, apply: Bool) {
+    func captureYouTube(_ url: String, purpose: String = "", apply: Bool) {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         captureKind = .youtube
         guard !trimmed.isEmpty else {
@@ -725,6 +725,8 @@ final class Status: ObservableObject {
         captureResult = nil
 
         var args = ["capture", "youtube", "--url", trimmed]
+        let trimmedPurpose = purpose.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedPurpose.isEmpty { args += ["--purpose", trimmedPurpose] }
         if apply { args.append("--apply") }
         // 사용자가 설정에서 AI 요약을 켠 경우에만 명시적으로 --ai를 넘긴다.
         // 값을 읽지 못한 상태에서는 과금·외부 실행을 추측하지 않고 링크만 저장한다.
@@ -741,7 +743,7 @@ final class Status: ObservableObject {
             let savedNote = Status.capturePath(from: r.text)
             guard r.ok else {
                 if savedNote != nil {
-                    self.captureWarning = "링크 노트는 저장했습니다. 다만 AI가 이 영상의 자막을 읽지 못해 요약은 비어 있습니다. 비공개·삭제·연령 제한 영상은 자동 정리할 수 없습니다."
+                    self.captureWarning = "링크 노트는 저장했습니다. 다만 AI가 이 영상의 자막을 읽지 못해 요약은 비어 있습니다.\(trimmedPurpose.isEmpty ? "" : " 입력한 학습 목적은 노트에 저장했습니다.")"
                     self.captureCompletedID += 1
                     if apply {
                         self.captureUndoJob = Status.undoJob(from: r.text)
@@ -755,7 +757,7 @@ final class Status: ObservableObject {
             if r.text.contains("DEVTRAIL_CAPTURE_DUPLICATE=") {
                 self.captureResult = "이 링크는 이미 저장되어 있습니다. 기존 노트를 열어 확인하세요."
             } else if r.text.contains("DEVTRAIL_CAPTURE_AI=unavailable") {
-                self.captureWarning = "링크 노트는 저장했습니다. 이 영상의 자막을 읽지 못해 AI 요약은 비어 있습니다. 다른 공개 영상은 정상적으로 정리할 수 있습니다."
+                self.captureWarning = "링크 노트는 저장했습니다. 이 영상의 자막을 읽지 못해 AI 요약은 비어 있습니다.\(trimmedPurpose.isEmpty ? "" : " 입력한 학습 목적은 노트에 저장했습니다.")"
             } else if r.text.contains("DEVTRAIL_CAPTURE_AI=skipped") {
                 self.captureResult = "링크 노트를 저장했습니다. AI 요약은 현재 꺼져 있습니다."
             } else if r.text.contains("DEVTRAIL_CAPTURE_AI=partial") {
@@ -778,6 +780,10 @@ final class Status: ObservableObject {
     func captureWeb(_ url: String, apply: Bool) {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         captureKind = .web
+        if isYouTubeURL(trimmed) {
+            captureError = "YouTube 링크는 ‘유튜브 정리’에서 저장하세요"
+            return
+        }
         guard !trimmed.isEmpty else {
             captureError = "링크를 입력하세요"
             return
