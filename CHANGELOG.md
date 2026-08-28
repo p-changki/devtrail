@@ -94,7 +94,7 @@ gh api repos/p-changki/devtrail/actions/permissions   # {"enabled":false}
 
 ## [Unreleased]
 
-## [0.9.0] — 2026-08-28 · Pick your projects
+## [0.9.0] — 2026-08-29 · Pick your projects
 
 ### Highlights
 
