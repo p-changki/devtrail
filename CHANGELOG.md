@@ -94,6 +94,63 @@ gh api repos/p-changki/devtrail/actions/permissions   # {"enabled":false}
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-29 · Pick your projects
+
+### Highlights
+
+- 개발일지를 만들 때 **오늘 작업할 프로젝트를 고른다.** 고른 것은 `projects` ·
+  `project/<키>` 태그 · 본문의 `#### <섹션>` 으로 남는다.
+- 일지를 이미 만들었어도 **나중에 붙일 수 있다** — 아침에 일지를 먼저 쓰는
+  사람은 그때 무엇을 할지 모른다.
+- 프로젝트 목록이 **볼트의 폴더까지 본다.** GitHub 을 연결하지 않은 프로젝트도
+  고를 수 있다.
+
+### 더해진 것
+
+- `devtrail capture devlog --project <키>` (반복 가능). 모르는 키는 노트를
+  만들기 전에 거절한다.
+- `devtrail project link --project <키> --apply` — 오늘 일지에 프로젝트를
+  더한다. 합집합이라 두 번 해도 늘지 않고, 본문은 건드리지 않는다.
+- `devtrail project list --json` — 앱이 읽는 목록. 이미 붙은 것을 `linked` 로
+  함께 알려 준다.
+- 메뉴바에 프로젝트 선택 화면. 이미 붙은 것은 `붙음` 으로 표시한다.
+
+### 고친 것
+
+- **프로젝트 목록이 설정만 보고 있었다.** `.github.project_groups` 는 GitHub
+  레포 그룹핑이지 프로젝트 목록이 아니다. 폴더 10개인 볼트에서 선택창에는
+  하나만 나왔고, 플러그인 화면(폴더 기준)과 목록이 서로 달랐다.
+- **저널 잡 이름이 시간순으로 정렬되지 않았다.** 꼬리표가 PID 라 자릿수가
+  달랐고, 같은 초에 만든 둘이 뒤집혔다. `devtrail undo` 목록에서 "맨 위가
+  최신" 이 아닐 수 있었다.
+- 플러그인 재검토 게이트가 저장소에 없는 문서를 읽어 **조용히 죽어 있었다.**
+- `devtrail app uninstall` 을 README(ko · en)에 문서화했다.
+
+### 바뀐 것
+
+- 개발일지가 프로젝트 README 로 **링크하지 않는다.** 프로젝트마다 두 줄이
+  되어 읽기 나빴고, DevTrail 이 만들지 않은 폴더에는 README 가 없어 깨졌다.
+  연결은 `project/<키>` 태그로 남는다. CLI 와 Templater 템플릿을 함께 고쳤다.
+- 릴리스 절차가 `dev` 동기 확인을 포함한다. `dev` 가 93커밋 뒤처진 채로
+  절차를 따랐다면 그 사이 작업이 통째로 빠진 릴리스가 나갔다.
+- `ci.yml` 과 문서가 **CI 가 꺼져 있다는 사실**을 말한다. 예산 때문에 저장소
+  수준에서 Actions 를 껐고, 실제로 지키는 것은 `verify-local.sh` 뿐이다.
+
+### 안쪽
+
+- 프로젝트 목록의 단일 출처를 `lib/projectkeys.sh` 로 뽑았다. `augment` ·
+  `capture` · `project` 가 같은 목록을 본다.
+- 로컬 게이트가 **어느 단계에서 실패했는지** 말한다.
+- `docs/ARCHITECTURE.md` 에 플러그인 재검토 1·2 를 기록했다 — `view.js` 는
+  쪼개지 않기로 하고 다음 재검토 조건을 남겼다.
+
+### Compatibility
+
+- 기존 볼트 · 노트 · 설정을 보존한다. 이미 쓴 일지의 README 링크 줄은 그대로
+  둔다 — 사용자가 쓴 본문은 건드리지 않는다.
+- 저널 잡 이름 형식이 바뀐다(`<시각>-<카운터>`). 옛 이름도 그대로 읽고
+  되돌릴 수 있다.
+
 ## [0.8.0] — 2026-08-27 · Decision criteria from video
 
 ### Highlights
