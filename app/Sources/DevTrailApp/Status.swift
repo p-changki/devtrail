@@ -851,7 +851,7 @@ final class Status: ObservableObject {
 
     /// 일반 웹 링크는 `capture web`만 호출한다. 메타데이터를 읽지 못해도 CLI가
     /// URL 노트를 보존하며, 이 경로에서는 AI·외부 키·유료 호출을 하지 않는다.
-    func captureWeb(_ url: String, apply: Bool) {
+    func captureWeb(_ url: String, why: String = "", projects: [String] = [], apply: Bool) {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         captureKind = .web
         if isYouTubeURL(trimmed) {
@@ -869,6 +869,9 @@ final class Status: ObservableObject {
         captureResult = nil
 
         var args = ["capture", "web", "--url", trimmed]
+        let reason = why.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !reason.isEmpty { args += ["--why", reason] }
+        for k in projects { args += ["--project", k] }
         if apply { args.append("--apply") }
         CLI.runAsync(args) { [weak self] r in
             guard let self = self else { return }

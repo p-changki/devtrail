@@ -18,7 +18,10 @@ user_invocable: true
 - AI·외부 API를 사용하지 않습니다.
 - URL의 title·description·Open Graph 메타만 읽습니다.
 - 명확한 도메인·URL·제목 규칙이 있을 때만 분류합니다.
-- 확신할 수 없는 자료는 `공통/미분류`에 저장합니다. 억지로 추측하지 마세요.
+- 도메인 목록에 없으면 URL·제목·설명의 단어와 TLD로 한 번 더 판정합니다.
+- 그래도 확신할 수 없는 자료는 `공통/미분류`에 저장합니다. 억지로 추측하지
+  마세요 — 틀린 폴더는 미분류보다 나쁩니다. 미분류는 눈에 보이지만 틀린
+  분류는 찾을 때까지 아무도 모릅니다.
 - 같은 URL/canonical URL은 중복 저장하지 않습니다.
 
 ## 실행
@@ -27,6 +30,8 @@ user_invocable: true
 devtrail path inbox --rel                         # 현재 볼트의 자료실 경로 확인
 devtrail capture web --url "https://react.dev/"          # 미리보기
 devtrail capture web --url "https://react.dev/" --apply  # 실제 저장
+devtrail capture web --url "https://react.dev/" \
+  --why "훅 규칙 다시 볼 때" --project devtrail --apply   # 맥락과 함께 저장
 devtrail capture web --organize                   # 기존 미분류 링크 정리 미리보기
 ```
 
@@ -42,9 +47,15 @@ devtrail capture web --organize                   # 기존 미분류 링크 정�
 type: docs | tool | inspiration | asset | article | reference
 area: frontend | backend | infra | data-ai | design | common
 topic: <세부 용도>
+why: "<왜 저장했는가 — 사람만 아는 정보. 비어 있을 수 있음>"
+projects: [<프로젝트 키>]
 source: <도메인>
 url: <원문 URL>
 ```
+
+`why`는 **지어내지 마세요.** 사용자가 말하지 않았으면 비워 둡니다. 저장
+이유를 추측해서 채우면 나중에 그 노트를 믿을 수 없게 됩니다.
+`--project` 값은 `devtrail project list`에 있는 키만 씁니다.
 
 `area`와 `topic`은 폴더·자료실 `_index.md`·DevTrail 자료 탭의 필터가 함께
 사용합니다. 전문을 복사하지 말고 원문 링크와 메타데이터를 보존하세요.

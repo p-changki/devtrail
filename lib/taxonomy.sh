@@ -14,11 +14,17 @@ _cap_tax_set() {
 # 제목 키워드는 자료실의 실제 폴더까지 바로 고른다.
 cap_taxonomy_web() {
   local url="$1" host="$2" title="$3" description="$4" hay
-  hay=$(printf '%s %s %s %s' "$url" "$host" "$title" "$description" | tr '[:upper:]' '[:lower:]')
+  # ⚠️ 쿼리스트링은 버린다. 그것은 화면 상태·트래킹이지 그 페이지가 무엇인지가
+  #    아니다. 실제로 Google Fonts 의 `?icon.size=24&icon.color=…` 때문에 폰트
+  #    사이트가 아이콘 폴더로 갔다. 경로는 남긴다 — `/docs`, `/icons` 처럼
+  #    경로는 그 페이지가 무엇인지 말해 준다.
+  hay=$(printf '%s %s %s %s' "${url%%\?*}" "$host" "$title" "$description" | tr '[:upper:]' '[:lower:]')
   _cap_tax_set reference common uncategorized site
   case "$hay" in
     *lucide.dev*|*heroicons.com*|*iconify.design*|*phosphoricons.com*|*tabler.io/icons*|*fontawesome.com*)
       _cap_tax_set asset design icons site ;;
+    *fonts.google.com*|*fonts.adobe.com*|*fontshare.com*|*fontsquirrel.com*|*noonnu.cc*)
+      _cap_tax_set asset design typography site ;;
     *unsplash.com*|*pexels.com*|*undraw.co*|*freepik.com*|*lottiefiles.com*|*illustration*|*stock-image*)
       _cap_tax_set asset design images-illustrations site ;;
     *land-book.com*|*lapa.ninja*|*awwwards.com*|*godly.website*|*landingfolio.com*|*landing-page*)
@@ -78,7 +84,81 @@ cap_taxonomy_web() {
     *blog*|*news*|*article*|*/read/*)
       _cap_tax_set article common articles site ;;
   esac
+  # 위 목록은 도메인 글자에만 걸린다. 새 서비스는 매달 생기고, 목록에 없는
+  # 것은 전부 공통/미분류로 떨어진다 — 실제 자료실 17개 중 7개가 그랬다.
+  # 그래서 미분류로 남은 것만 한 번 더, 도메인이 아닌 신호로 본다.
+  [ "$CAP_TAX_AREA/$CAP_TAX_TOPIC" = common/uncategorized ] && _cap_tax_signals "$hay" "$host"
   CAP_TAX_TAGS="[\"type/$CAP_TAX_TYPE\", \"area/$CAP_TAX_AREA\", \"topic/$CAP_TAX_TOPIC\", \"source/$host\"]"
+}
+
+# 2차 판정 — URL·제목·설명에 실제로 있는 단어와 TLD만 본다. 여기서도 근거가
+# 없으면 아무것도 바꾸지 않는다. 틀린 폴더에 넣는 것은 미분류보다 나쁘다:
+# 미분류는 눈에 보이지만, 틀린 분류는 찾을 때까지 아무도 모른다.
+#
+# ⚠️ 순서가 규칙이다. 위에서 걸리면 아래는 보지 않는다. 예를 들어
+#    "Showcase of the best animation websites" 는 모션 도구가 아니라
+#    랜딩 갤러리다 — 갤러리 신호가 모션 신호보다 먼저 와야 한다.
+_cap_tax_signals() {
+  local hay="$1" host="$2"
+  case "$hay" in
+    *typeface*|*typography*|*font\ family*|*웹폰트*|*타이포*)
+      _cap_tax_set asset design typography site; return ;;
+  esac
+  case "$hay" in
+    *icon*|*아이콘*)
+      _cap_tax_set asset design icons site; return ;;
+  esac
+  case "$hay" in
+    *color\ palette*|*color-palette*|*컬러\ 팔레트*|*design\ token*|*디자인\ 시스템*)
+      _cap_tax_set reference design color-design-systems site; return ;;
+  esac
+  # 랜딩·갤러리·레퍼런스 모음. 사용자가 "레퍼런스 보러 가는 곳"이다.
+  case "$hay" in
+    *landing\ page*|*landing-page*|*landingpage*|*랜딩*|\
+    *showcase*|*inspiration*|*웹사이트\ 모음*|*web\ design\ gallery*|*best\ websites*)
+      _cap_tax_set inspiration design landing-references site; return ;;
+  esac
+  # saas 단독은 백엔드 글일 수도 있다. 디자인 단어와 함께일 때만 본다.
+  case "$hay" in
+    *saas*)
+      case "$hay" in
+        *landing*|*\ ui*|*ui\ *|*design*|*template*|*page*)
+          _cap_tax_set inspiration design landing-references site; return ;;
+      esac ;;
+  esac
+  case "$hay" in
+    *motion*|*animation*|*webgl*|*shader*|*real-time\ graphics*|*interactive\ graphics*)
+      _cap_tax_set tool design design-tools site; return ;;
+  esac
+  case "$hay" in
+    *ui\ kit*|*ui-kit*|*mockup*|*component\ librar*|*ui\ component*|*컴포넌트*)
+      _cap_tax_set inspiration design ui-components site; return ;;
+  esac
+  case "$hay" in
+    *domain\ search*|*도메인\ 검색*|*도메인\ 등록*|*hosting*|*호스팅*|*\ dns*|*dns\ *)
+      _cap_tax_set tool common developer-tools site; return ;;
+  esac
+  # 마지막 신호는 TLD 다. `.design` 은 이름 자체가 분야를 말한다.
+  case "$host" in
+    *.design) _cap_tax_set inspiration design landing-references site; return ;;
+  esac
+}
+
+# 분야의 정본 목록과 사람이 읽는 이름. 폴더 이름을 여기서 정하므로 자료실
+# 화면의 분야 구획도 같은 곳에서 나와야 한다 — 두 곳에 적으면 갈라진다.
+cap_taxonomy_areas() { printf 'frontend\nbackend\ninfra\ndata-ai\ndesign\ncommon\n'; }
+
+cap_taxonomy_area_label() {
+  case "$1" in
+    frontend) printf '💻 %s' "$(L '프론트엔드' 'Frontend')" ;;
+    backend)  printf '⚙️ %s'  "$(L '백엔드' 'Backend')" ;;
+    infra)    printf '☁️ %s'  "$(L '인프라·DevOps' 'Infra and DevOps')" ;;
+    data-ai)  printf '🤖 %s'  "$(L '데이터·AI' 'Data and AI')" ;;
+    design)   printf '🎨 %s'  "$(L '디자인' 'Design')" ;;
+    common)   printf '📦 %s'  "$(L '공통' 'Common')" ;;
+    # ⚠️ 모르는 분야를 공통으로 뭉뚱그리면 이름이 거짓이 된다. 키를 그대로 쓴다.
+    *)        printf '🔖 %s'  "$1" ;;
+  esac
 }
 
 # 실제 폴더는 사람이 읽기 쉬운 이름을 쓴다. 이 매핑 외의 분류값은 절대
