@@ -199,6 +199,48 @@ EOF
   else
     ok "$(L "헤딩이 최근 일지와 맞습니다" "Headings match the latest devlog")"
   fi
+
+  _d_template_headings "$vr"
+}
+
+# 개발일지 **템플릿**의 헤딩이 설정과 맞는가.
+#
+# ⚠️ 위의 검사는 '이미 만들어진 일지' 를 본다. 그건 늦다 — 어긋난 사실을
+#    하루치 일지가 망가진 뒤에야 안다. 템플릿은 **내일 만들 일지**다.
+#    여기서 보면 아직 아무것도 망가지기 전에 말할 수 있다.
+#
+# ⚠️ 2026-08-29: `template update --apply` 가 배포본 템플릿("## Issues / PRs")
+#    으로 갈아끼우면서 사용자가 한국어로 바꿔둔 headings.* 와 짝이 깨졌다.
+#    최근 일지 검사는 그날까지는 통과했다 — 깨진 템플릿으로 만든 일지가
+#    아직 없었기 때문이다.
+_d_template_headings() {
+  local vr="$1" tpl
+  tpl="$vr/$(dt_dir templates)/$(L "개발일지양식.md" "Devlog.md")"
+  [ -f "$tpl" ] || { dim "   $(L "개발일지 템플릿이 없습니다" "No devlog template"): ${tpl##*/}"; return 0; }
+
+  local k h miss=""
+  for k in issues_pr worklog; do
+    h=$(cfg ".headings.$k" '')
+    [ -n "$h" ] || continue
+    grep -qF "$h" "$tpl" 2>/dev/null || miss="$miss $k"
+  done
+
+  if [ -z "$miss" ]; then
+    ok "$(L "헤딩이 개발일지 템플릿과 맞습니다" "Headings match the devlog template")"
+    return 0
+  fi
+
+  _d_warn "$(L "개발일지 템플릿에 없는 헤딩:" "Headings missing from the devlog template:")$miss"
+  dim "   $(L "본 파일" "Checked"): ${tpl##*/}"
+  dim "   $(L "앞으로 만드는 일지에는 활동 삽입·PR 요약이 들어가지 않습니다." \
+              "Devlogs created from now on will get no activity or PR summaries.")"
+  dim "   $(L "그 템플릿에 실제로 있는 헤딩:" "Headings actually in it:")"
+  grep -E '^#{1,6} ' "$tpl" 2>/dev/null | sed 's/^/     /' | head -6
+  dim "   $(L "고치는 길은 두 가지입니다:" "Two ways to fix it:")"
+  dim "     1. $(L "템플릿의 헤딩 줄을 설정값으로 되돌린다" "put the configured headings back into the template")"
+  for k in $miss; do
+    dim "     2. devtrail config set headings.$k '<$(L "템플릿의 실제 헤딩" "the template's actual heading")>' --apply"
+  done
 }
 
 _d_section() { printf '\n%s%s%s\n' "$C_BOLD" "$1" "$C_RESET"; }

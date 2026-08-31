@@ -207,4 +207,79 @@ t_vault dr4; t_config notes
 mkdir -p "$T_VAULT/notes/개발/개발일지"
 out=$("$DT" doctor 2>&1)
 t_not_contains "빈 폴더에는 규칙 경고 안 함" "안 맞습니다" "$out"
+
+# (e) 최근 일지는 맞는데 **템플릿**이 어긋났다
+#
+# ⚠️ (b)는 이미 만들어진 일지를 본다. 그건 늦다 — 2026-08-29 에 실제로
+#    이랬다. `template update --apply` 가 배포본 템플릿으로 갈아끼웠지만
+#    그날까지의 일지는 멀쩡했으므로 (b)는 통과했다. 깨진 것은 **다음 날
+#    만든 일지**였고, 그때까지 아무도 말해주지 않았다.
+tpl_at() {   # tpl_at <본문>
+  mkdir -p "$T_VAULT/notes/템플릿"
+  printf -- '%s\n' "$1" > "$T_VAULT/notes/템플릿/개발일지양식.md"
+}
+
+d_vault dr5 '2026-08-24 devlog.md' '## Issues / PRs
+
+## Work log'
+tpl_at '# 개발일지
+
+## 🔗 오늘의 이슈 / PR
+
+## 📝 작업 로그'
+out=$("$DT" doctor 2>&1)
+t_contains "템플릿이 어긋났다고 말한다"   "개발일지 템플릿에 없는 헤딩"   "$out"
+t_contains "앞으로 만들 일지가 문제다"    "앞으로 만드는 일지"            "$out"
+t_contains "템플릿의 실제 헤딩을 보여준다" "오늘의 이슈 / PR"             "$out"
+t_contains "고치는 명령을 준다"           "config set headings.issues_pr" "$out"
+
+# (f) 템플릿도 맞으면 조용하다 — "항상 경고하는" 구현을 잡는다
+d_vault dr6 '2026-08-24 devlog.md' '## Issues / PRs
+
+## Work log'
+tpl_at '# 개발일지
+
+## Issues / PRs
+
+## Work log'
+out=$("$DT" doctor 2>&1)
+t_not_contains "맞으면 템플릿 경고 안 함" "템플릿에 없는 헤딩" "$out"
+t_contains "맞다고 말해준다" "헤딩이 개발일지 템플릿과 맞습니다" "$out"
+
+# ═══ ⑤ 템플릿 교체가 헤딩 짝을 깨지 않는가 ═══════════════════════════════════
+#
+# ⚠️ 헤딩은 두 곳에 있다 — 노트를 만드는 볼트 템플릿과, 그 노트에서 넣을
+#    자리를 찾는 headings.*. `template update` 는 그중 한쪽만 바꾼다.
+#    조용히 바꾸면 짝이 깨지고, 깨진 사실은 다음 날에야 드러난다.
+t_start "template update — 헤딩 짝"
+
+TPL="notes/템플릿/개발일지양식.md"
+
+t_vault tu1; t_config notes '.headings.issues_pr = "## 🔗 오늘의 이슈 / PR"'
+tpl_at '# 개발일지
+
+## 🔗 오늘의 이슈 / PR
+
+## Work log'
+out=$("$DT" template update 개발일지양식.md 2>&1)
+t_contains "짝이 깨진다고 말한다"    "설정된 헤딩이 없습니다"        "$out"
+t_contains "어느 키인지 말한다"      "headings.issues_pr"            "$out"
+t_contains "무엇이 안 되는지 말한다"  "devtrail activity"             "$out"
+t_contains "고치는 명령을 준다"      "config set headings.issues_pr" "$out"
+
+# ⚠️ 말만 하고 덮어쓰면 아무 소용이 없다. 대답을 못 받으면 '아니오'다 —
+#    비대화형에서 조용히 덮어쓰는 것이 이 결함의 원형이었다.
+before=$(cat "$T_VAULT/$TPL")
+"$DT" template update 개발일지양식.md --apply </dev/null >/dev/null 2>&1
+t_eq "대답 없이는 덮어쓰지 않는다" "$before" "$(cat "$T_VAULT/$TPL")"
+
+# 짝이 안 깨지는 교체는 조용히 지나간다
+t_vault tu2; t_config notes
+tpl_at '# 개발일지
+
+## Issues / PRs
+
+## Work log'
+out=$("$DT" template update 개발일지양식.md 2>&1)
+t_not_contains "안 깨지면 조용하다" "설정된 헤딩이 없습니다" "$out"
 t_end
