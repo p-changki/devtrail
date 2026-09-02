@@ -159,6 +159,32 @@ t_contains "PR 요약 섹션 누락을 성공으로 보지 않는다" "섹션 �
 t_contains "PR 요약 중복은 전용 마커로 판단한다" "devtrail:pr-summary" "$SUMMARY_TEMPLATE"
 t_contains "PR 요약은 최신 활동 표를 사용한다" "devtrail:activity:end" "$SUMMARY_TEMPLATE"
 
+# ── 활동 삽입도 '실제로 넣었는가' 로 판정한다 ───────────────────────────────
+#
+# ⚠️ activity.sh 는 헤딩이나 개발일지를 못 찾으면 안내를 **stderr 로 찍고
+#    exit 0** 으로 끝난다 — Obsidian 파일생성 이벤트에서 남의 노트마다
+#    에러를 내지 않으려는 의도적 선택이다. 종료코드만 보면 아무것도 넣지
+#    않고도 초록불이 뜬다.
+#
+# ⚠️ 2026-08-31 에 실제로 그랬다. 카드는 "오늘 이슈/PR을 반영했습니다",
+#    같은 화면 헤더는 "아직 삽입 전". 한 화면이 서로 다른 말을 했고,
+#    사용자는 이틀치를 잃고 나서야 알았다.
+t_start "활동 삽입도 결과로 판정한다"
+ACTIVITY_FN="$(sed -n '/func fetchTodayActivity/,/^    }$/p' "$SRC/Status.swift")"
+ACTIVITY_TEMPLATE="$(cat "$ROOT/templates/scripts/activity.sh.tmpl")"
+t_contains "삽입 완료 표식을 확인한다"     "활동 삽입 완료"  "$ACTIVITY_FN"
+t_contains "이미 삽입된 경우도 성공으로 본다" "이미 삽입됨"    "$ACTIVITY_FN"
+t_contains "표식이 없으면 실패로 둔다"     "activityError"   "$ACTIVITY_FN"
+# ⚠️ stderr 를 버리면 '왜 안 됐는지' 가 사라진다. r.text 는 out+err 다.
+t_contains "stderr 안내를 그대로 보여준다" "activityError = r.text" "$ACTIVITY_FN"
+t_eq "종료코드 0 을 성공 문구로 바꾸지 않는다" "0" \
+  "$(printf '%s' "$ACTIVITY_FN" | grep -c 'activityResult = out.isEmpty')"
+# ⚠️ 앱만 고치면 계약의 반쪽이다. 스크립트가 그 표식을 실제로 남기는가.
+t_contains "스크립트가 삽입 완료를 stdout 에 남긴다" \
+  'echo "활동 삽입 완료' "$ACTIVITY_TEMPLATE"
+t_contains "스크립트가 이미 삽입됨을 stdout 에 남긴다" \
+  'echo "이미 삽입됨' "$ACTIVITY_TEMPLATE"
+
 t_start "저장은 한 번만 눌린다"
 # ⚠️ 두 번 누르면 노트가 두 개 생긴다. CLI 의 중복 검사가 잡아 주지만,
 #    그건 마지막 방어선이지 첫 방어선이 아니다.

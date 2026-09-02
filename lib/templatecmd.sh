@@ -89,6 +89,54 @@ _tpl_diff() {
   diff -u "$dest" "$src" || true
 }
 
+# 교체가 설정의 헤딩 짝을 깨는가.
+#
+# ⚠️ 헤딩은 **두 곳**에 있다 — 노트를 만드는 볼트 템플릿과, 그 노트에서
+#    넣을 자리를 찾는 설정의 headings.*(activity.sh · summary.sh 가 읽는다).
+#    둘은 짝이다. 교체가 그 짝을 조용히 깨면 그날 만든 개발일지부터
+#    활동 삽입도 PR 요약도 넣을 자리를 못 찾는다.
+#
+# ⚠️ 2026-08-29 에 실제로 그렇게 깨졌다. 사용자는 헤딩을 한국어로 바꿔
+#    두었는데(config set headings.*), 배포본 템플릿은 "## Issues / PRs" 를
+#    쓴다. `template update --apply` 가 아무 말 없이 바꿔놓았고, 이틀 뒤
+#    개발일지부터 활동이 안 들어갔다. 그동안 메뉴바 앱은 초록불이었다.
+#
+# ⚠️ 지금 템플릿에 **있는** 헤딩만 본다. 처음부터 없던 헤딩은 이 교체가
+#    깨는 것이 아니다 — 없던 것을 교체 탓으로 돌리면 경고가 늑대소년이 된다.
+_tpl_heading_guard() {   # _tpl_heading_guard <src> <dest>  깨지면 1
+  local src="$1" dest="$2" k h miss=""
+  for k in issues_pr worklog morning youtube; do
+    h=$(cfg ".headings.$k" '')
+    [ -n "$h" ] || continue
+    grep -qF "$h" "$dest" 2>/dev/null || continue
+    grep -qF "$h" "$src"  2>/dev/null || miss="$miss $k"
+  done
+  [ -n "$miss" ] || return 0
+
+  echo
+  warn "$(L "새 템플릿에는 설정된 헤딩이 없습니다" \
+           "The new template does not have your configured headings")"
+  for k in $miss; do
+    dim "     headings.$k = $(cfg ".headings.$k" '')"
+  done
+  echo
+  dim "   $(L "이대로 바꾸면 이후에 만든 개발일지에는" \
+              "Replace it as is and, in devlogs created from now on,")"
+  dim "   $(L "활동 삽입(devtrail activity)과 PR 요약(devtrail summary)이" \
+              "activity insertion (devtrail activity) and PR summaries (devtrail summary)")"
+  dim "   $(L "넣을 자리를 찾지 못합니다." "will not find their place.")"
+  echo
+  dim "   $(L "새 템플릿의 헤딩:" "Headings in the new template:")"
+  grep -E '^#{1,6} ' "$src" 2>/dev/null | sed 's/^/     /' | head -6
+  echo
+  dim "   $(L "바꾸려면 설정도 함께 맞추세요:" "To go ahead, move the config with it:")"
+  for k in $miss; do
+    dim "     devtrail config set headings.$k '<$(L "새 헤딩" "new heading")>' --apply"
+  done
+  echo
+  return 1
+}
+
 _tpl_update() {
   local name="" apply=0
   while [ $# -gt 0 ]; do
@@ -116,11 +164,24 @@ _tpl_update() {
   info "  $(L "바뀌는 줄 ${changed}개" "${changed} lines change")"
   dim "   $(L "설치본" "installed") v$(_tpl_version_of "$dest") → $(L "배포본" "shipped") v${DT_TPL_VERSION}"
 
+  # ⚠️ dry-run 에서도 말한다. '적용해 봐야 아는 위험'은 경고가 아니다.
+  local breaks=0
+  _tpl_heading_guard "$src" "$dest" || breaks=1
+
   if [ "$apply" = 0 ]; then
     echo
     dim "   $(L "내용 보기" "See it"): devtrail template diff $name"
     dim "   $(L "적용" "Apply"): devtrail template update $name --apply"
     return 0
+  fi
+
+  # ⚠️ 막지는 않는다 — 무슨 일이 일어나는지 먼저 말하고 사용자가 정한다.
+  #    (lang 을 바꿀 때와 같은 계약이다.) 대답을 못 받으면 '아니오'다:
+  #    비대화형에서 read 는 실패하고, 그때 조용히 덮어쓰는 것이 최악이다.
+  if [ "$breaks" = 1 ]; then
+    confirm "$(L "그래도 바꿀까요?" "Replace anyway?")" \
+      || { info "$(L "취소했습니다 — 템플릿을 건드리지 않았습니다." \
+                     "Cancelled — the template was not touched.")"; return 1; }
   fi
 
   # ⚠️ 백업이 실패하면 원본을 건드리지 않는다. 저널에 남아 undo 로 되돌아간다.
