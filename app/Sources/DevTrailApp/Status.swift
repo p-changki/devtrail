@@ -515,7 +515,26 @@ final class Status: ObservableObject {
                 return
             }
             let out = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
-            self.activityResult = out.isEmpty ? "오늘 GitHub 이슈/PR을 개발일지에 반영했습니다." : out
+            // ⚠️ **종료코드 0 을 '넣었다' 로 읽지 않는다.**
+            //
+            //    activity.sh 는 헤딩이나 개발일지를 못 찾으면 안내를
+            //    **stderr 로 찍고 exit 0** 으로 끝난다 — Obsidian 의
+            //    파일생성 이벤트에서 남의 노트마다 에러를 내지 않으려는
+            //    의도적 선택이다. 예전 코드는 stdout 이 비었다는 이유로
+            //    성공 문구를 채웠고, 그래서 아무것도 넣지 않은 채 초록
+            //    카드를 띄웠다. 같은 화면의 헤더는 "아직 삽입 전" 이라고
+            //    말하고 있었다 — 한 화면이 서로 다른 말을 했다(2026-08-31).
+            //
+            //    넣었다는 근거는 스크립트가 stdout 에 남기는 이 두 줄뿐이다.
+            //    없으면 **모른다** 가 아니라 **실패**다: 사용자가 다시
+            //    누를 수 있게 stderr 안내를 그대로 보여준다.
+            if out.contains("활동 삽입 완료") || out.contains("이미 삽입됨") {
+                self.activityResult = out
+            } else {
+                self.activityError = r.text.isEmpty
+                    ? "개발일지에 아무것도 넣지 못했습니다 — devtrail doctor 로 확인해 주세요."
+                    : r.text
+            }
             self.refresh()
         }
     }
