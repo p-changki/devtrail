@@ -19,7 +19,11 @@ General web material leaves the existing Inbox alone and is saved beside it at
 - No AI or external API is used.
 - Read only title, description, and Open Graph metadata from the URL.
 - Categorize only when domain, URL, or title gives a clear signal.
-- Put uncertain material in `Common/Uncategorized`; do not guess.
+- When no domain rule matches, judge once more from words in the URL, title,
+  and description, plus the TLD.
+- Put still-uncertain material in `Common/Uncategorized`; do not guess. A wrong
+  folder is worse than none — you can see "uncategorized", but a miscategorized
+  link stays invisible until you go looking for it.
 - Do not duplicate an existing URL or canonical URL.
 
 ## Run
@@ -28,6 +32,8 @@ General web material leaves the existing Inbox alone and is saved beside it at
 devtrail path inbox --rel                         # inspect the current Library path
 devtrail capture web --url "https://react.dev/"          # preview
 devtrail capture web --url "https://react.dev/" --apply  # save
+devtrail capture web --url "https://react.dev/" \
+  --why "when revisiting hook rules" --project devtrail --apply  # save with context
 devtrail capture web --organize                   # preview organizing old uncategorized links
 ```
 
@@ -43,9 +49,15 @@ Never guess or hard-code the folder path; query the current vault with
 type: docs | tool | inspiration | asset | article | reference
 area: frontend | backend | infra | data-ai | design | common
 topic: <purpose>
+why: "<why it was saved — only the person knows; may be empty>"
+projects: [<project key>]
 source: <domain>
 url: <original URL>
 ```
+
+**Never invent `why`.** Leave it empty unless the user said it. A guessed
+reason makes the note untrustworthy later. Pass only keys that appear in
+`devtrail project list` to `--project`.
 
 `area` and `topic` power the folders, library `_index.md` hubs, and DevTrail
 Library filters. Preserve the source link and metadata instead of copying an

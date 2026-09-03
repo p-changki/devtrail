@@ -446,4 +446,316 @@ t_ne "실패로 끝난다" "0" "$?"
 t_eq "노트를 만들지 않았다" "0" \
   "$(find "$edir" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
 
+# ── 링크 자료실: 분류 신호 + 맥락 필드 ────────────────────────────────
+#
+# ⚠️ 도메인 리터럴 목록만으로는 롱테일이 전부 `공통/미분류` 로 떨어진다.
+#    실제로 17개 중 7개가 그랬다. 2차 신호 판정이 그 구멍을 메우되,
+#    근거가 없으면 여전히 미분류로 남겨야 한다 — 억지 추측은 더 나쁘다.
+
+t_start "분류 신호가 도메인 목록에 없는 링크도 분야를 고른다"
+tax() {
+  ( . "$ROOT/lib/taxonomy.sh"
+    cap_taxonomy_web "$1" "$2" "$3" "${4:-}"
+    printf '%s/%s/%s' "$CAP_TAX_TYPE" "$CAP_TAX_AREA" "$CAP_TAX_TOPIC" )
+}
+t_eq "landing.love — showcase 신호" "inspiration/design/landing-references" \
+  "$(tax 'https://www.landing.love/' 'www.landing.love' 'Showcase of the best 2141 animation websites' '')"
+t_eq "recent.design — .design TLD 신호" "inspiration/design/landing-references" \
+  "$(tax 'https://recent.design/' 'recent.design' 'Recent design inspiration' '')"
+t_eq "saaslandingpage.com — landing page 신호" "inspiration/design/landing-references" \
+  "$(tax 'https://saaslandingpage.com/' 'saaslandingpage.com' 'SaaS Landing Page' '')"
+t_eq "unicorn.studio — motion/graphics 신호" "tool/design/design-tools" \
+  "$(tax 'https://www.unicorn.studio/' 'www.unicorn.studio' 'Unicorn Studio interactive motion & real-time graphics' '')"
+t_eq "saasframe.io — saas+ui design 신호" "inspiration/design/landing-references" \
+  "$(tax 'https://www.saasframe.io/' 'www.saasframe.io' '1 SaaS checklist UI design examples in 2026' '')"
+
+t_start "근거가 없으면 억지로 분류하지 않는다"
+# ⚠️ 이 검사가 빠지면 신호 규칙이 아무 링크나 design 으로 빨아들이는 것을
+#    아무도 못 잡는다. 미분류로 남는 것이 틀리게 분류되는 것보다 낫다.
+t_eq "google.com 은 미분류로 남는다" "reference/common/uncategorized" \
+  "$(tax 'https://www.google.com/' 'www.google.com' 'Google' '')"
+t_eq "정밀 규칙은 그대로다 (react.dev)" "docs/frontend/official-docs" \
+  "$(tax 'https://react.dev/reference' 'react.dev' 'React reference' '')"
+t_eq "정밀 규칙은 그대로다 (lucide)" "asset/design/icons" \
+  "$(tax 'https://lucide.dev/icons' 'lucide.dev' 'Lucide Icons' '')"
+
+t_start "URL 쿼리스트링이 분류를 결정하지 않는다"
+# ⚠️ 실제로 겪었다: Google Fonts 를 저장했더니 URL 의 미리보기 파라미터
+#    `icon.size=24&icon.color=…` 때문에 폰트 사이트가 아이콘 폴더로 갔다.
+#    쿼리는 화면 상태·트래킹이지 그 페이지가 무엇인지가 아니다.
+t_eq "폰트 사이트는 쿼리에 icon 이 있어도 타이포그래피" "asset/design/typography" \
+  "$(tax 'https://fonts.google.com/?preview.layout=grid&icon.size=24&icon.color=%23e3e3e3' \
+        'fonts.google.com' 'Browse Fonts - Google Fonts' \
+        'Making the web more beautiful, fast, and open through great typography')"
+t_eq "쿼리에만 있는 단어로 분류하지 않는다" "reference/common/uncategorized" \
+  "$(tax 'https://example.test/?ref=design-system-inspiration' 'example.test' 'Example' '')"
+# ⚠️ 경로는 여전히 봐야 한다. 쿼리만 버린다.
+t_eq "경로 기반 정밀 규칙은 살아 있다" "docs/frontend/official-docs" \
+  "$(tax 'https://nextjs.org/docs/app?foo=bar' 'nextjs.org' 'Next.js Docs' '')"
+
+t_start "링크에 저장 이유와 프로젝트를 남긴다"
+# ⚠️ 표에 URL 만 쌓이면 나중에 어떤 사이트였는지 사용자도 모른다. 저장
+#    이유는 사람만 아는 정보다 — 비워둘 수는 있어도 지어낼 수는 없다.
+VW=$(_vault vw); HW="$T_TMP/hw"; _cfg "$VW" "$HW"
+jq '.github.project_groups = {"devtrail":"DevTrail","gyoan":"교안메이커"}' \
+  "$HW/devtrail.config.json" > "$HW/c.tmp" && mv "$HW/c.tmp" "$HW/devtrail.config.json"
+wrun() { DEVTRAIL_HOME="$HW" DEVTRAIL_CONFIG="$HW/devtrail.config.json" "$DT" "$@"; }
+wdir() {
+  local inbox library
+  inbox=$(wrun path inbox --rel 2>/dev/null)
+  library=${inbox%/*}; [ "$library" = "$inbox" ] && library=""
+  printf '%s/%s' "$VW/${library:+$library/}" "링크"
+}
+CTXURL="https://developer.mozilla.org/en-US/docs/Web/CSS"
+DT_WEB_FETCH_FILE="$T_TMP/web-og.html" wrun capture web --url "$CTXURL" \
+  --why "랜딩 CSS 그리드 다시 볼 때" --project devtrail --project gyoan --apply >/dev/null
+CTXNOTE=$(grep -rlF -- "$CTXURL" "$(wdir)" | head -1)
+t_ne "맥락을 붙인 노트가 생긴다" "" "$CTXNOTE"
+CTXBODY=$(cat "$CTXNOTE" 2>/dev/null)
+t_contains "저장 이유가 프론트매터에 남는다" 'why: "랜딩 CSS 그리드 다시 볼 때"' "$CTXBODY"
+t_contains "프로젝트가 배열로 남는다" 'projects: [devtrail, gyoan]' "$CTXBODY"
+t_contains "프로젝트 태그가 붙는다" '"project/devtrail"' "$CTXBODY"
+t_contains "두 번째 프로젝트 태그도 붙는다" '"project/gyoan"' "$CTXBODY"
+t_eq "프론트매터에 why 는 한 줄뿐이다" "1" "$(grep -c '^why:' "$CTXNOTE")"
+t_eq "프론트매터에 projects 는 한 줄뿐이다" "1" "$(grep -c '^projects:' "$CTXNOTE")"
+t_eq "웹 토큰이 남지 않는다" "0" "$(grep -c '{{WEB_' "$CTXNOTE")"
+
+t_start "모르는 프로젝트 키는 노트를 만들기 전에 거절한다"
+before=$(find "$(wdir)" -name '*.md' ! -name '_index.md' | wc -l | tr -d ' ')
+out=$(DT_WEB_FETCH_FILE="$T_TMP/web-og.html" wrun capture web --url "https://react.dev/learn" \
+  --project 없는프로젝트 --apply 2>&1)
+t_ne "모르는 키는 실패한다" "0" "$?"
+t_eq "실패하면 노트가 늘지 않는다" "$before" \
+  "$(find "$(wdir)" -name '*.md' ! -name '_index.md' | wc -l | tr -d ' ')"
+
+t_start "맥락을 안 적어도 저장은 된다"
+DT_WEB_FETCH_FILE="$T_TMP/web-title.html" wrun capture web --url "https://svelte.dev/docs" --apply >/dev/null
+PLAIN=$(grep -rlF -- "https://svelte.dev/docs" "$(wdir)" | head -1)
+t_ne "맥락 없는 노트도 생긴다" "" "$PLAIN"
+t_contains "why 는 빈 값으로 남는다" 'why: ""' "$(cat "$PLAIN")"
+t_contains "projects 는 빈 배열로 남는다" 'projects: []' "$(cat "$PLAIN")"
+
+t_start "자료실 표가 저장 이유와 프로젝트를 보여준다"
+HUB=$(cat "$(wdir)/_index.md")
+t_contains "루트 표에 왜 컬럼이 있다" 'why AS "왜"' "$HUB"
+t_contains "루트 표에 프로젝트 컬럼이 있다" 'projects AS "프로젝트"' "$HUB"
+t_eq "루트에 링크 표는 하나뿐이다" "1" "$(grep -c '^TABLE description' "$(wdir)/_index.md")"
+AREAHUB="$(wdir)/개발/_index.md"
+t_file "분야 허브가 있다" "$AREAHUB"
+t_contains "분야 표에도 왜 컬럼이 있다" 'why AS "왜"' "$(cat "$AREAHUB")"
+
+# ⚠️ description 은 저장할 때 이미 잡아 둔다. 표에 안 보여주면 "어떤 사이트
+#    였는지 모르겠다" 는 불만이 그대로 남는다 — 실제로 그랬다. 사용자가
+#    직접 채워야 하는 why 보다 먼저 보여줄 것은 이미 가진 데이터다.
+t_contains "루트 표가 설명을 보여준다" 'description AS "설명"' "$HUB"
+t_contains "루트 표가 상태를 보여준다" '"상태"' "$HUB"
+t_contains "상태는 읽을 수 있는 말로 보여준다" '미정리' "$HUB"
+t_contains "분야 허브도 설명을 보여준다" 'description AS "설명"' "$(cat "$AREAHUB")"
+
+t_start "자료실이 분야별 집계를 보여준다"
+t_contains "집계 블록이 있다" "devtrail:link-library:rollup:start" "$HUB"
+# ⚠️ 한 표에 전부 넣으면 "분야별"이라는 말이 무색하다. 분야마다 표를 따로
+#    둬야 그 분야만 보고 싶을 때 그 표만 본다 — 유튜브 인덱스가 그렇다.
+t_contains "링크가 있는 분야는 표가 있다" 'area = "frontend"' "$HUB"
+t_contains "표 안은 주제로 묶는다" "GROUP BY topic" "$HUB"
+# ⚠️ 빈 분야까지 그리면 "No results to show" 가 화면 절반을 먹는다. 없는
+#    것을 보여주는 것은 정보가 아니라 소음이다.
+t_not_contains "링크가 없는 분야는 안 그린다 (백엔드)" 'area = "backend"' "$HUB"
+t_not_contains "링크가 없는 분야는 안 그린다 (인프라)" 'area = "infra"' "$HUB"
+# 개수를 못 박지 않는다 — 앞의 테스트가 링크를 더 저장하면 바로 깨진다.
+# 지켜야 하는 것은 "그린 분야 = 실제 있는 분야" 라는 관계다.
+_areas_in_notes() {
+  grep -rh '^area:' "$(wdir)" --include='*.md' 2>/dev/null \
+    | sed 's/^area:[[:space:]]*//' | sort -u | grep -c .
+}
+t_eq "그린 분야 수가 실제 있는 분야 수와 같다" "$(_areas_in_notes)" \
+  "$(grep -c '^### ' "$(wdir)/_index.md")"
+t_not_contains "한 표에 몰아넣지 않는다" 'GROUP BY area + " / " + topic' "$HUB"
+t_contains "링크 수를 센다" 'length(rows.file.link)' "$HUB"
+t_eq "집계 블록은 하나뿐이다" "1" "$(grep -c 'rollup:start' "$(wdir)/_index.md")"
+# ⚠️ 자료실은 유튜브와 다르다. 유튜브는 노트를 읽으러 가지만, 링크는
+#    "그 사이트로 가려고" 저장한다. 노트를 한 번 더 거치면 그만큼 안 간다.
+t_contains "집계에서 원문으로 바로 간다" "link(r.url" "$HUB"
+t_contains "루트 표의 출처가 원문 링크다" "link(url, source)" "$HUB"
+t_contains "분야 허브의 출처도 원문 링크다" "link(url, source)" "$(cat "$AREAHUB")"
+# 노트로 가는 길도 남아 있어야 한다 — 메모와 why 는 노트에 있다.
+t_contains "노트로 가는 File 컬럼은 남는다" "TABLE description" "$HUB"
+# ⚠️ 집계는 자료실을 열자마자 보여야 한다. 표 아래로 밀리면 스크롤해야
+#    보이고, 스크롤해야 보이는 것은 안 보는 것과 같다.
+t_eq "집계가 최근 목록보다 위에 있다" "ok" \
+  "$(awk '/rollup:start/ { r = NR } /^## .*최근/ { t = NR } END { print (r > 0 && t > 0 && r < t) ? "ok" : "no" }' "$(wdir)/_index.md")"
+
+t_start "옛 형식 자료실 표를 새 표로 갈아끼운다"
+# 주의: _index.md 는 이미 있으면 다시 쓰지 않는다. 마이그레이션이 없으면
+#       새 컬럼은 새 볼트에만 생기고, 쓰던 사람의 화면은 그대로다 - 실제로
+#       Dataview 음수 인덱스 버그가 그렇게 조용히 남아 있었다.
+OLDHUB="$(wdir)/_index.md"
+# 주의: 픽스처 web-og.html 은 canonical 이 고정이라 두 번째 저장부터 전부
+#       중복으로 조기 반환된다 - 그러면 마이그레이션이 아예 실행되지 않는다.
+# 주의: `^TABLE ` 전체를 바꾸면 분야 목록·집계 블록의 `TABLE WITHOUT ID`
+#       까지 링크 표로 만들어 버린다. 링크 표 줄만 정확히 바꾼다.
+# 주의: 구분자로 | 를 쓰면 대안 그룹의 | 가 s 명령을 끊는다.
+_hub_table() { sed -i.bak -E "s@^TABLE (description|why|type|topic|source) .*@$1@" "$OLDHUB" && rm -f "$OLDHUB.bak"; }
+_hub_table 'TABLE type AS "형태", area AS "분야", topic AS "주제", source AS "출처", saved AS "저장일"'
+t_contains "옛 표로 되돌렸다(v0.8)" 'TABLE type AS "형태", area AS "분야"' "$(cat "$OLDHUB")"
+t_contains "옛 표로 되돌렸다" 'TABLE type AS "형태", area AS "분야"' "$(cat "$OLDHUB")"
+DT_WEB_FETCH_FILE="$T_TMP/web-title.html" wrun capture web --url "https://vuejs.org/guide" --apply >/dev/null
+t_contains "옛 표가 새 표로 바뀐다" 'why AS "왜"' "$(cat "$OLDHUB")"
+t_eq "표가 두 개로 늘지 않는다" "1" "$(grep -c '^TABLE description' "$OLDHUB")"
+
+t_start "사용자가 고친 표는 건드리지 않는다"
+# 주의: 마이그레이션이 WHERE url 이 있는 블록을 다 갈아엎으면 사용자가 손으로
+#       만든 표가 조용히 사라진다. 우리가 만든 그대로일 때만 바꾼다.
+_hub_table 'TABLE source AS "내가 고친 컬럼"'
+DT_WEB_FETCH_FILE="$T_TMP/web-title.html" wrun capture web --url "https://angular.dev/guide" --apply >/dev/null
+t_contains "손으로 고친 표는 그대로다" '내가 고친 컬럼' "$(cat "$OLDHUB")"
+
+t_start "아래에 있던 집계를 맨 위로 옮긴다"
+# ⚠️ 이전 버전은 집계를 링크 표 **아래**에 끼워 넣었다. 마커만 보고 건너뛰면
+#    그 사용자는 영원히 아래에 있는 집계를 본다 — 위치도 갱신 대상이다.
+_hub_table 'TABLE description AS "설명", why AS "왜", projects AS "프로젝트", topic AS "주제", source AS "출처"'
+awk '/rollup:start/ { skip = 1 } skip { buf = buf $0 "\n" } /rollup:end/ { skip = 0; next } !skip { print } END { printf "%s", buf }' \
+  "$OLDHUB" > "$OLDHUB.moved" && mv "$OLDHUB.moved" "$OLDHUB"
+t_eq "집계를 맨 아래로 밀어 놨다" "no" \
+  "$(awk '/rollup:start/ { r = NR } /^## .*최근/ { t = NR } END { print (r > 0 && t > 0 && r < t) ? "ok" : "no" }' "$OLDHUB")"
+DT_WEB_FETCH_FILE="$T_TMP/web-title.html" wrun capture web --url "https://qwik.dev/docs" --apply >/dev/null
+t_eq "집계가 맨 위로 올라온다" "ok" \
+  "$(awk '/rollup:start/ { r = NR } /^## .*최근/ { t = NR } END { print (r > 0 && t > 0 && r < t) ? "ok" : "no" }' "$OLDHUB")"
+t_eq "집계가 두 개로 늘지 않는다" "1" "$(grep -c 'rollup:start' "$OLDHUB")"
+
+t_start "분야가 새로 생기면 그 표도 생긴다"
+# ⚠️ 빈 분야를 숨기는 대가로, 링크가 생겼을 때 섹션이 따라 생겨야 한다.
+#    안 그러면 저장은 됐는데 집계에 안 보이는 링크가 남는다.
+t_not_contains "아직 백엔드 표는 없다" 'area = "backend"' "$(cat "$OLDHUB")"
+DT_WEB_FETCH_FILE="$T_TMP/web-title.html" wrun capture web --url "https://www.postgresql.org/docs/" --apply >/dev/null
+t_contains "백엔드 표가 생긴다" 'area = "backend"' "$(cat "$OLDHUB")"
+t_eq "그린 분야 수가 실제 있는 분야 수와 같다" "$(_areas_in_notes)" \
+  "$(grep -c '^### ' "$OLDHUB")"
+
+t_start "DevTrail 이 만들었던 표는 버전마다 전부 알아본다"
+# ⚠️ 버전을 하나씩 검사로 적으면 다음 표 변경 때 빠뜨린다 — 실제로 변이가
+#    살아남아서 알았다. 정본 목록을 그대로 돌려서 전부 확인한다.
+kn() { ( L() { printf '%s' "$1"; }; . "$ROOT/lib/webindex.sh"; _cap_web_table_known "$1" ); }
+# ⚠️ 이 숫자는 **줄어들면 안 된다**. 표를 바꿀 때마다 이전 것을 목록에 남기고
+#    여기를 1 올린다. 목록에서 지우면 그 버전을 쓰던 사용자는 영원히 옛 표를
+#    본다 — 개수를 안 박아 두면 "지워도 테스트는 통과"가 된다. 실제로 그랬다.
+t_eq "구버전 root 표를 지우지 않았다" "3" "$(kn root | wc -l | tr -d ' ')"
+t_eq "구버전 area 표를 지우지 않았다" "3" "$(kn area | wc -l | tr -d ' ')"
+t_eq "구버전 topic 표를 지우지 않았다" "3" "$(kn topic | wc -l | tr -d ' ')"
+n=0
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  n=$((n + 1))
+  _hub_table "$line"
+  wrun capture web --organize --apply >/dev/null 2>&1
+  t_contains "구버전 표 #$n 이 새 표가 된다" 'link(url, source)' "$(cat "$OLDHUB")"
+  t_eq "구버전 표 #$n — 표가 늘지 않는다" "1" "$(grep -c '^TABLE description' "$OLDHUB")"
+done < <(kn root)
+
+t_start "직전 버전 표도 알아보고 갈아끼운다"
+# ⚠️ 표는 앞으로도 바뀐다. "직전 것만" 알아보면 한 버전 건너뛴 사용자는
+#    영원히 옛 표를 본다. 우리가 만든 표는 전부 알아봐야 한다.
+_hub_table 'TABLE why AS "왜", projects AS "프로젝트", type AS "형태", area AS "분야", topic AS "주제", source AS "출처"'
+t_contains "v0.9 표로 되돌렸다" 'topic AS "주제", source AS "출처"' "$(cat "$OLDHUB")"
+DT_WEB_FETCH_FILE="$T_TMP/web-title.html" wrun capture web --url "https://solidjs.com/docs" --apply >/dev/null
+t_contains "v0.9 표도 새 표가 된다" 'description AS "설명"' "$(cat "$OLDHUB")"
+t_eq "표가 두 개로 늘지 않는다" "1" "$(grep -c '^TABLE description' "$OLDHUB")"
+
+t_start "재분류해도 사용자가 붙인 프로젝트는 지킨다"
+# ⚠️ --organize 는 tags 를 통째로 다시 쓴다. 분류는 기계가 다시 계산해도
+#    되지만 프로젝트는 사람이 붙인 것이라 다시 계산할 수 없다. 여기서
+#    안 지키면 재분류 한 번에 조용히 사라진다.
+UNSORTED="$(wdir)/공통/미분류"
+mkdir -p "$UNSORTED"
+cat > "$UNSORTED/2026-08-29-saas-landing-page.md" <<'ORGEOF'
+---
+tags: ["type/reference", "area/common", "topic/uncategorized", "source/saaslandingpage.com", "project/devtrail"]
+type: reference
+area: common
+topic: uncategorized
+source_kind: site
+why: "랜딩 히어로 카피 볼 때"
+projects: [devtrail]
+status: inbox
+source: "saaslandingpage.com"
+url: "https://saaslandingpage.com/"
+title: "SaaS Landing Page"
+description: ""
+saved: 2026-08-29
+---
+
+# SaaS Landing Page
+ORGEOF
+wrun capture web --organize --apply >/dev/null 2>&1
+MOVED=$(grep -rlF 'https://saaslandingpage.com/' "$(wdir)" | head -1)
+t_ne "재분류된 노트를 찾는다" "" "$MOVED"
+t_contains "미분류에서 벗어난다" "랜딩페이지-레퍼런스" "$MOVED"
+t_contains "프로젝트 태그가 살아남는다" '"project/devtrail"' "$(cat "$MOVED")"
+t_contains "why 프론트매터가 살아남는다" 'why: "랜딩 히어로 카피 볼 때"' "$(cat "$MOVED")"
+t_contains "projects 프론트매터가 살아남는다" 'projects: [devtrail]' "$(cat "$MOVED")"
+
+t_start "정리 한 번으로 자료실 표 전체를 같은 형식으로 맞춘다"
+# ⚠️ 링크가 지나간 폴더만 고치면 폴더마다 표가 달라진다. 자료실을 열어 본
+#    사람에게 그것은 "덜 바뀐 것"이 아니라 "고장난 것"으로 보인다.
+STALE="$(wdir)/개발/데이터-AI/데이터소스"
+mkdir -p "$STALE"
+cat > "$STALE/_index.md" <<'STALEEOF'
+---
+type: moc
+scope: library-links
+library_level: topic
+library_area: data-ai
+library_topic: data-sources
+---
+
+# 🔗 데이터소스
+
+```dataview
+TABLE type AS "형태", source AS "출처", saved AS "저장일"
+FROM "x"
+WHERE url
+SORT saved DESC
+```
+STALEEOF
+_hub_table 'TABLE type AS "형태", area AS "분야", topic AS "주제", source AS "출처", saved AS "저장일"'
+wrun capture web --organize --apply >/dev/null 2>&1
+t_contains "루트 표가 맞춰진다" 'why AS "왜"' "$(cat "$OLDHUB")"
+t_contains "링크가 지나가지 않은 허브도 맞춰진다" 'why AS "왜"' "$(cat "$STALE/_index.md")"
+t_eq "허브마다 링크 표는 하나뿐이다" "1" "$(grep -c '^TABLE description' "$STALE/_index.md")"
+
+t_start "기존 링크에 맥락 칸을 만들되 값은 지어내지 않는다"
+# ⚠️ 칸이 없으면 Obsidian 속성 패널에 줄이 안 보인다. "표에서 비어 보이니
+#    채우세요" 는 채울 자리가 있을 때만 성립하는 안내다.
+OLDNOTE="$(wdir)/공통/미분류/2026-08-25-google.md"
+mkdir -p "$(dirname "$OLDNOTE")"
+cat > "$OLDNOTE" <<'CTXEOF'
+---
+tags: ["type/reference", "area/common", "topic/uncategorized", "source/www.google.com"]
+type: reference
+area: common
+topic: uncategorized
+source_kind: site
+status: inbox
+source: "www.google.com"
+url: "https://www.google.com/"
+title: "Google"
+saved: 2026-08-25
+---
+
+# Google
+CTXEOF
+wrun capture web --organize --apply >/dev/null 2>&1
+CTXBODY=$(cat "$OLDNOTE")
+t_contains "why 칸이 생긴다" 'why: ""' "$CTXBODY"
+t_contains "projects 칸이 생긴다" 'projects: []' "$CTXBODY"
+# ⚠️ 값을 지어내면 그 노트를 믿을 수 없게 된다. 비어 있어야 한다.
+t_eq "why 값은 비어 있다" "1" "$(grep -cx 'why: ""' "$OLDNOTE")"
+t_eq "projects 값은 비어 있다" "1" "$(grep -cx 'projects: \[\]' "$OLDNOTE")"
+t_contains "기존 필드는 그대로다" 'source_kind: site' "$CTXBODY"
+t_contains "본문은 그대로다" '# Google' "$CTXBODY"
+# 두 번 돌려도 칸이 두 개가 되지 않는다.
+wrun capture web --organize --apply >/dev/null 2>&1
+t_eq "다시 돌려도 why 는 한 줄뿐이다" "1" "$(grep -c '^why:' "$OLDNOTE")"
+t_eq "다시 돌려도 projects 는 한 줄뿐이다" "1" "$(grep -c '^projects:' "$OLDNOTE")"
+
 t_end

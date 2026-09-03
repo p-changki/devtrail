@@ -53,3 +53,19 @@ dt_project_known() {
   [ -n "${1:-}" ] || return 1
   dt_project_keys | jq -e --arg k "$1" 'index($k) != null' >/dev/null 2>&1
 }
+
+# 줄바꿈으로 구분된 원문 키 목록을 검증해 유니크 JSON 배열로 돌려준다.
+# ⚠️ 모르는 키를 그대로 쓰면 태그와 폴더가 어긋난 노트가 남는다. 무언가를
+#    만들기 **전에** 거절한다 — 만든 뒤 고치라고 하면 아무도 안 고친다.
+dt_project_validate() {
+  local raw="$1" k
+  [ -n "$raw" ] || { printf '[]'; return 0; }
+  while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    dt_project_known "$k" || die "$(L "모르는 프로젝트" "Unknown project"): $k
+   $(L "쓸 수 있는 값" "Available"): $(dt_project_keys | jq -r 'join(", ")')"
+  done <<DTPJEOF
+$raw
+DTPJEOF
+  printf '%s' "$raw" | jq -Rsc 'split("\n") | map(select(length > 0)) | unique'
+}

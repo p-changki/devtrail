@@ -113,6 +113,25 @@ t_contains "이미 붙은 것은 고를 수 없다" "p.linked" "$ALL"
 t_contains "일지 생성은 CLI에 맡긴다" "[\"capture\", \"devlog\", \"--apply\", \"--repair-empty\"]" "$ALL"
 t_contains "부가 기능은 더보기에 둔다" "DisclosureGroup(\"더보기\")" "$ALL"
 
+t_start "링크를 저장할 때 맥락을 함께 받는다"
+# ⚠️ URL 만 쌓이면 몇 주 뒤 표를 봐도 본인이 어떤 사이트였는지 모른다.
+#    저장 이유는 규칙도 AI 도 대신 못 채우는, 사람만 아는 정보다.
+t_contains "저장 이유를 받는다" "왜 저장하나요" "$ALL"
+t_contains "저장 이유를 CLI 로 넘긴다" '"--why"' "$ALL"
+t_contains "프로젝트를 CLI 로 넘긴다" '"--project"' "$ALL"
+t_contains "링크에도 프로젝트를 고른다" "captureProjects" "$ALL"
+# ⚠️ 선택창을 열 때 목록을 읽지 않으면 항상 비어 보인다 — 개발일지에서
+#    이미 한 번 그렇게 아무것도 못 고르는 화면을 만들었다.
+OPENCAP="$(sed -n '/private func openCapture/,/^    }$/p' "$SRC/MenuView.swift")"
+t_contains "열 때 프로젝트를 읽는다" "status.loadProjects()" "$OPENCAP"
+t_contains "이전 입력을 남기지 않는다" "captureWhy = \"\"" "$OPENCAP"
+# ⚠️ ScrollView 는 팝오버 안에서 maxHeight 만으로 0 으로 접힌다. 개발일지
+#    선택창에서 겪은 것과 같은 함정이다.
+CTXROW="$(sed -n '/private var captureContextRow/,/^    }$/p' "$SRC/MenuView.swift")"
+t_contains "목록 높이를 실제로 정한다" "frame(height:" "$CTXROW"
+t_not_contains "maxHeight 로 접히지 않게 한다" "frame(maxHeight:" "$CTXROW"
+t_contains "실패를 화면으로 말한다" "projectsError" "$CTXROW"
+
 t_start "개발일지 핵심 단축키를 메뉴바에도 보여준다"
 t_contains "개발일지 도구 구역이 있다" "private var devlogToolbar" "$ALL"
 t_contains "실제 Obsidian 단축키를 읽는다" "func hotkey(for command" "$ALL"
@@ -216,7 +235,9 @@ t_start "일반 웹 링크도 메뉴바에서 저장한다"
 t_contains "URL 종류를 자동 구분한다" "func captureLink" "$ALL"
 t_contains "YouTube가 아닌 링크는 웹 캡처로 보낸다" "captureWeb(url, apply: apply)" "$ALL"
 t_contains "일반 웹 링크는 CLI 인자로 안전하게 보낸다" '["capture", "web", "--url", trimmed]' "$ALL"
-t_contains "웹 링크는 AI 없이 저장한다고 안내한다" "일반 웹 링크는 AI 없이 자료실에 안전하게 저장합니다" "$ALL"
+# 문구는 바뀔 수 있다. 지켜야 하는 것은 "AI 를 쓰지 않는다"는 약속을
+# 사용자가 이 화면에서 읽는다는 사실이다.
+t_contains "웹 링크는 AI 없이 저장한다고 안내한다" "AI 없이 저장합니다" "$ALL"
 t_contains "유튜브와 웹 링크 저장 버튼을 구분한다" "tool(\"link.badge.plus\", \"웹 링크 저장\")" "$ALL"
 t_contains "유튜브 정리는 전용 입력창을 연다" "openCapture(.youtube)" "$ALL"
 t_contains "웹 링크 저장은 전용 입력창을 연다" "openCapture(.web)" "$ALL"

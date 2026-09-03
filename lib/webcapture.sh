@@ -203,6 +203,15 @@ _cap_web_classify() {
   CAP_WEB_TAGS="$CAP_TAX_TAGS"
 }
 
+# 분류 태그에 프로젝트 태그를 덧붙인다. 분류는 기계가 정하고 프로젝트는
+# 사람이 정한다 — 둘을 한 배열에 두되 만드는 곳은 나눠 둔다.
+_cap_web_merge_project_tags() {
+  local tags="$1" keys="$2"
+  [ "$keys" = "[]" ] && { printf '%s' "$tags"; return 0; }
+  printf '%s' "$tags" | jq -c --argjson keys "$keys" '. + ($keys | map("project/" + .))' 2>/dev/null \
+    || printf '%s' "$tags"
+}
+
 _cap_web_existing() {
   local dir="$1" url="$2" canonical="$3" hit=""
   [ -d "$dir" ] || return 1
@@ -213,19 +222,23 @@ _cap_web_existing() {
 }
 
 _cap_render_web() {
-  local tpl="$1" title="$2" type="$3" tags="$4" area="$5" topic="$6" source_kind="$7" source="$8" url="$9" canonical="${10}" description="${11}" image="${12}" saved="${13}" now="${14}"
+  local tpl="$1" title="$2" type="$3" tags="$4" area="$5" topic="$6" source_kind="$7" source="$8" url="$9" canonical="${10}" description="${11}" image="${12}" saved="${13}" now="${14}" why="${15}" projects="${16}"
   # 템플릿은 사용자 볼트의 소유물이다. 다만 이전 버전의 템플릿에 새 검색
   # 필드가 없더라도 링크가 자료실에서 사라지지 않도록, 없는 키만 type 뒤에
   # 추가한다. 이미 있는 값·사용자 템플릿의 본문은 건드리지 않는다.
-  local add_area=0 add_topic=0 add_source_kind=0
+  local add_area=0 add_topic=0 add_source_kind=0 add_why=0 add_projects=0
   grep -qE '^area:' "$tpl" || add_area=1
   grep -qE '^topic:' "$tpl" || add_topic=1
   grep -qE '^source_kind:' "$tpl" || add_source_kind=1
+  grep -qE '^why:' "$tpl" || add_why=1
+  grep -qE '^projects:' "$tpl" || add_projects=1
   DT_W_TITLE=$(_cap_web_yaml "$title") DT_W_TYPE=$(_cap_web_yaml "$type") DT_W_TAGS="$tags" \
   DT_W_AREA=$(_cap_web_yaml "$area") DT_W_TOPIC=$(_cap_web_yaml "$topic") DT_W_SOURCE_KIND=$(_cap_web_yaml "$source_kind") \
   DT_W_SOURCE=$(_cap_web_yaml "$source") DT_W_URL=$(_cap_web_yaml "$url") DT_W_CANON=$(_cap_web_yaml "$canonical") \
   DT_W_DESC=$(_cap_web_yaml "$description") DT_W_IMAGE=$(_cap_web_yaml "$image") DT_W_SAVED="$saved" DT_W_CREATED="$now" \
+  DT_W_WHY=$(_cap_web_yaml "$why") DT_W_PROJECTS="$projects" \
   DT_W_ADD_AREA="$add_area" DT_W_ADD_TOPIC="$add_topic" DT_W_ADD_SOURCE_KIND="$add_source_kind" \
+  DT_W_ADD_WHY="$add_why" DT_W_ADD_PROJECTS="$add_projects" \
   awk '
     function replace(line, needle, value, p) { p=index(line, needle); return p ? substr(line,1,p-1) value substr(line,p+length(needle)) : line }
     {
@@ -241,6 +254,8 @@ _cap_render_web() {
       line=replace(line,"{{WEB_CANONICAL}}",ENVIRON["DT_W_CANON"])
       line=replace(line,"{{WEB_DESCRIPTION}}",ENVIRON["DT_W_DESC"])
       line=replace(line,"{{WEB_IMAGE}}",ENVIRON["DT_W_IMAGE"])
+      line=replace(line,"{{WEB_WHY}}",ENVIRON["DT_W_WHY"])
+      line=replace(line,"{{WEB_PROJECTS}}",ENVIRON["DT_W_PROJECTS"])
       line=replace(line,"{{WEB_SAVED}}",ENVIRON["DT_W_SAVED"])
       line=replace(line,"{{WEB_CREATED}}",ENVIRON["DT_W_CREATED"])
       print line
@@ -248,162 +263,24 @@ _cap_render_web() {
         if (ENVIRON["DT_W_ADD_AREA"] == "1") print "area: " ENVIRON["DT_W_AREA"]
         if (ENVIRON["DT_W_ADD_TOPIC"] == "1") print "topic: " ENVIRON["DT_W_TOPIC"]
         if (ENVIRON["DT_W_ADD_SOURCE_KIND"] == "1") print "source_kind: " ENVIRON["DT_W_SOURCE_KIND"]
+        if (ENVIRON["DT_W_ADD_WHY"] == "1") print "why: \"" ENVIRON["DT_W_WHY"] "\""
+        if (ENVIRON["DT_W_ADD_PROJECTS"] == "1") print "projects: " ENVIRON["DT_W_PROJECTS"]
         classification_added = 1
       }
     }
   ' "$tpl"
 }
 
-# 링크 자료실의 허브는 새 링크를 저장할 때만, 없는 파일에만 만든다. 기존
-# 사용자가 직접 정리한 _index는 절대 덮어쓰지 않는다.
-_cap_web_index_body() {
-  local kind="$1" title="$2" from="$3" area="${4:-}" topic="${5:-}"
-  case "$kind" in
-    root)
-      cat <<EOF
----
-type: moc
-scope: library-links
-library_level: root
----
-
-# 🔗 $(L '링크 자료실' 'Link library')
-
-$(L 'URL만 저장하면 분야와 용도별로 정리됩니다. 아래 표와 폴더에서 바로 찾으세요.' 'Saved URLs are organized by area and purpose. Browse the folders or use the table below.')
-
-## $(L '최근 저장한 링크' 'Recently saved links')
-
-## $(L '분야별 자료실' 'Browse by area')
-
-<!-- devtrail:link-library:areas:start -->
-
-\`\`\`dataview
-TABLE WITHOUT ID link(file.path, regexreplace(file.folder, ".*/", "")) AS "$(L '분야' 'Area')"
-FROM "$from"
-WHERE scope = "library-links" AND library_level = "area"
-SORT file.folder ASC
-\`\`\`
-
-<!-- devtrail:link-library:areas:end -->
-
-\`\`\`dataview
-TABLE type AS "$(L '형태' 'Type')", area AS "$(L '분야' 'Area')", topic AS "$(L '주제' 'Topic')", source AS "$(L '출처' 'Source')", saved AS "$(L '저장일' 'Saved')"
-FROM "$from"
-WHERE url
-SORT saved DESC
-\`\`\`
-EOF
-      ;;
-    area)
-      cat <<EOF
----
-type: moc
-scope: library-links
-library_level: area
-library_area: $area
----
-
-# 🔗 $title
-
-$(L '세부 용도 폴더를 열거나, 아래 표에서 자료를 바로 찾으세요.' 'Open a purpose folder or find a link directly in the table below.')
-
-\`\`\`dataview
-TABLE topic AS "$(L '주제' 'Topic')", type AS "$(L '형태' 'Type')", source AS "$(L '출처' 'Source')", saved AS "$(L '저장일' 'Saved')"
-FROM "$from"
-WHERE url
-SORT saved DESC
-\`\`\`
-EOF
-      ;;
-    *)
-      cat <<EOF
----
-type: moc
-scope: library-links
-library_level: topic
-library_area: $area
-library_topic: $topic
----
-
-# 🔗 $title
-
-\`\`\`dataview
-TABLE type AS "$(L '형태' 'Type')", source AS "$(L '출처' 'Source')", saved AS "$(L '저장일' 'Saved')"
-FROM "$from"
-WHERE url
-SORT saved DESC
-\`\`\`
-EOF
-      ;;
-  esac
-}
-
-# 이전 버전에서 만들어진 루트 자료실에는 분야별 허브 목록이 없다. 사용자가
-# 직접 쓴 본문은 건드리지 않고, 전용 마커가 없을 때에만 목록 블록을 끝에
-# 한 번 덧붙인다. 호출 시점은 항상 jr_begin 뒤라 undo로 원래 파일로 돌아간다.
-_cap_web_ensure_root_navigation() {
-  local file="$1" from="$2" tmp
-  [ -f "$file" ] || return 0
-  tmp=$(mktemp "${TMPDIR:-/tmp}/devtrail-web-root.XXXXXX") || return 1
-
-  if grep -qF '<!-- devtrail:link-library:areas:start -->' "$file"; then
-    # 기존 인덱스도 같은 마커 안의 Dataview 블록만 교체한다. 사용자가 쓴
-    # 나머지 본문은 건드리지 않는다. `_index` 대신 실제 분야명이 보이게 한다.
-    # ⚠️ 폴더의 마지막 조각을 `split(...)[-1]` 로 뽑지 않는다 — Dataview 는
-    #    음수 인덱스를 지원하지 않아 null 을 돌려주고, 링크가 파일명(`_index`)
-    #    으로 표시된다. 에러가 나지 않아 조용히 틀린다. 실제로 그랬다.
-    awk -v from="$from" -v label="$(L '분야' 'Area')" '
-      /<!-- devtrail:link-library:areas:start -->/ {
-        print
-        print "```dataview"
-        print "TABLE WITHOUT ID link(file.path, regexreplace(file.folder, \".*/\", \"\")) AS \"" label "\""
-        print "FROM \"" from "\""
-        print "WHERE scope = \"library-links\" AND library_level = \"area\""
-        print "SORT file.folder ASC"
-        print "```"
-        skipping = 1
-        next
-      }
-      skipping && /<!-- devtrail:link-library:areas:end -->/ { print; skipping = 0; next }
-      !skipping { print }
-    ' "$file" > "$tmp" || { rm -f "$tmp"; return 1; }
-  else
-    cp "$file" "$tmp" || { rm -f "$tmp"; return 1; }
-    cat >> "$tmp" <<EOF
-
-## $(L '분야별 자료실' 'Browse by area')
-
-<!-- devtrail:link-library:areas:start -->
-\`\`\`dataview
-TABLE WITHOUT ID link(file.path, regexreplace(file.folder, ".*/", "")) AS "$(L '분야' 'Area')"
-FROM "$from"
-WHERE scope = "library-links" AND library_level = "area"
-SORT file.folder ASC
-\`\`\`
-<!-- devtrail:link-library:areas:end -->
-EOF
-  fi
-  cmp -s "$file" "$tmp" && { rm -f "$tmp"; return 0; }
-  jr_backup "$file" >/dev/null || { rm -f "$tmp"; return 1; }
-  mv "$tmp" "$file" || { rm -f "$tmp"; return 1; }
-}
-
-_cap_web_write_index() {
-  local abs="$1" rel="$2" kind="$3" title="$4" area="${5:-}" topic="${6:-}" file stage tmp
-  file="$abs/_index.md"
-  [ -f "$file" ] && return 0
-  stage=$(mktemp "${TMPDIR:-/tmp}/devtrail-web-index.XXXXXX") || return 1
-  _cap_web_index_body "$kind" "$title" "$(vault_rel "$rel")" "$area" "$topic" > "$stage" || { rm -f "$stage"; return 1; }
-  tmp="$abs/.devtrail-index-$$.tmp"
-  cp "$stage" "$tmp" && mv "$tmp" "$file" || { rm -f "$stage" "$tmp"; return 1; }
-  rm -f "$stage"; jr_created "$file"
-}
+. "$DEVTRAIL_ROOT/lib/webindex.sh"
 
 _cap_web() {
-  local url="" apply=0 organize=0
+  local url="" apply=0 organize=0 why="" proj_raw=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --url) shift; url="${1:-}" ;;
+      --why) shift; why="${1:-}" ;;
+      --project) shift; proj_raw="$proj_raw${1:-}
+" ;;
       --organize) organize=1 ;;
       --apply) apply=1 ;;
       --dry-run) apply=0 ;;
@@ -413,11 +290,16 @@ _cap_web() {
   done
   if [ "$organize" = 1 ]; then
     [ -z "$url" ] || die "$(L "링크 저장과 기존 링크 정리는 함께 실행할 수 없습니다" "Capture and organize cannot be used together")"
+    [ -z "$why$proj_raw" ] || die "$(L "기존 링크 정리에는 저장 이유·프로젝트를 붙일 수 없습니다" "Organize does not take a reason or projects")"
     _cap_web_organize "$apply"
     return
   fi
   require_config; require_bins jq
   [ -n "$url" ] || die "$(L "URL 이 필요합니다" "A URL is required"): --url \"https://…\""
+  # ⚠️ 모르는 프로젝트 키는 네트워크를 타기도 전에 거절한다.
+  local pkeys plist
+  pkeys=$(dt_project_validate "$proj_raw") || exit 1
+  plist=$(printf '%s' "$pkeys" | jq -r '"[" + join(", ") + "]"')
   url=${url%%#*}
   _cap_web_safe_url "$url"; case $? in
     0) ;;
@@ -461,6 +343,7 @@ _cap_web() {
   _cap_web_safe_url "$canonical" >/dev/null 2>&1 || canonical=""
   title=$(_cap_web_clean "$title"); [ -n "$title" ] || title="$source_host"
   _cap_web_classify "$final_url" "$source_host" "$title" "$description"
+  CAP_WEB_TAGS=$(_cap_web_merge_project_tags "$CAP_WEB_TAGS" "$pkeys")
   folder=$(cap_taxonomy_folder "$CAP_WEB_AREA" "$CAP_WEB_TOPIC")
   rel="$links_rel/$folder"; dir="$root/$rel"
   root_dir="$root/$links_rel"; area_dir="$root/$links_rel/${folder%%/*}"
@@ -474,6 +357,8 @@ _cap_web() {
   info "  type: $CAP_WEB_TYPE"
   info "  $(L "분류" "Category"): $CAP_WEB_AREA / $CAP_WEB_TOPIC"
   info "  tags: $CAP_WEB_TAGS"
+  [ -n "$why" ] && info "  $(L "저장 이유" "Why"): $why"
+  [ "$plist" = "[]" ] || info "  $(L "프로젝트" "Projects"): $plist"
   [ -n "$site" ] && dim "   $(L "사이트" "Site"): $site"
   [ -n "$og_type" ] && dim "   OG type: $og_type"
   dup=$(_cap_web_existing "$root/${library_rel:-.}" "$url" "$canonical")
@@ -495,7 +380,7 @@ _cap_web() {
   fi
 
   stage=$(mktemp "${TMPDIR:-/tmp}/devtrail-web-note.XXXXXX") || die "$(L "임시 파일을 만들지 못했습니다" "Could not create a temporary file")"
-  _cap_render_web "$tpl" "$title" "$CAP_WEB_TYPE" "$CAP_WEB_TAGS" "$CAP_WEB_AREA" "$CAP_WEB_TOPIC" "$CAP_WEB_SOURCE_KIND" "$source_host" "$url" "$canonical" "$description" "$image" "$today" "$now" > "$stage" || { rm -f "$stage"; die "$(L "웹 링크 노트를 만들지 못했습니다" "Could not build the web link note")"; }
+  _cap_render_web "$tpl" "$title" "$CAP_WEB_TYPE" "$CAP_WEB_TAGS" "$CAP_WEB_AREA" "$CAP_WEB_TOPIC" "$CAP_WEB_SOURCE_KIND" "$source_host" "$url" "$canonical" "$description" "$image" "$today" "$now" "$why" "$plist" > "$stage" || { rm -f "$stage"; die "$(L "웹 링크 노트를 만들지 못했습니다" "Could not build the web link note")"; }
   [ -s "$stage" ] || { rm -f "$stage"; die "$(L "빈 노트가 나왔습니다" "The note came out empty")"; }
   grep -q '{{WEB_' "$stage" && { rm -f "$stage"; die "$(L "템플릿 값이 남았습니다" "A template value was left unresolved")"; }
 
@@ -503,13 +388,21 @@ _cap_web() {
   jr_mkdir "$dir" || { rm -f "$stage"; jr_end; die "$(L "자료실 링크 폴더를 만들지 못했습니다" "Could not create the Library link folder")"; }
   _cap_web_write_index "$root_dir" "$links_rel" root "$(L '링크 자료실' 'Link library')" || { rm -f "$stage"; jr_end; die "$(L "링크 자료실 허브를 만들지 못했습니다" "Could not create the link library index")"; }
   _cap_web_ensure_root_navigation "$root_dir/_index.md" "$(vault_rel "$links_rel")" || { rm -f "$stage"; jr_end; die "$(L "링크 자료실 허브를 보완하지 못했습니다" "Could not update the link library index")"; }
+  _cap_web_ensure_link_table "$root_dir/_index.md" root || { rm -f "$stage"; jr_end; die "$(L "자료실 표를 갱신하지 못했습니다" "Could not update the library table")"; }
   _cap_web_write_index "$area_dir" "$links_rel/${folder%%/*}" area "${folder%%/*}" "$CAP_WEB_AREA" || { rm -f "$stage"; jr_end; die "$(L "분야 허브를 만들지 못했습니다" "Could not create the area index")"; }
+  _cap_web_ensure_link_table "$area_dir/_index.md" area || { rm -f "$stage"; jr_end; die "$(L "분야 표를 갱신하지 못했습니다" "Could not update the area table")"; }
   _cap_web_write_index "$dir" "$rel" topic "${folder##*/}" "$CAP_WEB_AREA" "$CAP_WEB_TOPIC" || { rm -f "$stage"; jr_end; die "$(L "세부 분류 허브를 만들지 못했습니다" "Could not create the topic index")"; }
+  _cap_web_ensure_link_table "$dir/_index.md" topic || { rm -f "$stage"; jr_end; die "$(L "세부 분류 표를 갱신하지 못했습니다" "Could not update the topic table")"; }
   # 같은 디렉터리의 임시 파일을 mv해 원자적으로 완성본만 보이게 한다.
   local target_tmp="$dir/.devtrail-web-$$.tmp"
   cp "$stage" "$target_tmp" && mv "$target_tmp" "$file" || { rm -f "$stage" "$target_tmp"; jr_end; die "$(L "저장하지 못했습니다" "Could not save")"; }
   rm -f "$stage"
   jr_created "$file"
+  # ⚠️ 집계는 노트가 자리를 잡은 **뒤에** 계산한다. 먼저 계산하면 그 분야의
+  #    첫 링크는 다음 저장 때까지 집계에 안 나온다 — 저장은 됐는데 어디에도
+  #    안 보이는 링크가 되고, 사용자는 저장이 실패한 줄 안다.
+  _cap_web_ensure_rollup "$root_dir/_index.md" "$(vault_rel "$links_rel")" \
+    || { jr_end; die "$(L "분야별 집계를 넣지 못했습니다" "Could not add the by-area rollup")"; }
   printf 'DEVTRAIL_CAPTURE_PATH=%s\n' "$file"
   ok "$(basename "$file")"
   dim "   $(L "되돌리기" "Undo"): devtrail undo"

@@ -20,6 +20,8 @@ struct MenuView: View {
 
     @State private var captureURL = ""
     @State private var capturePurpose = ""
+    @State private var captureWhy = ""
+    @State private var captureProjects: Set<String> = []
     @State private var captureMode: CaptureMode = .youtube
     @State private var showCaptureComposer = false
     @State private var showDevlogComposer = false
@@ -185,6 +187,11 @@ struct MenuView: View {
         captureMode = mode
         captureURL = ""
         capturePurpose = ""
+        captureWhy = ""
+        captureProjects = []
+        // ⚠️ 링크에도 프로젝트를 붙일 수 있어야 "지금 하는 일에 필요한 링크"를
+        //    나중에 꺼낼 수 있다. 목록은 열 때 한 번 읽는다.
+        if mode == .web { status.loadProjects() }
         showCaptureComposer = true
     }
 
@@ -544,7 +551,8 @@ struct MenuView: View {
                     if captureMode == .youtube {
                         status.captureYouTube(captureURL, purpose: capturePurpose, apply: true)
                     } else {
-                        status.captureWeb(captureURL, apply: true)
+                        status.captureWeb(captureURL, why: captureWhy,
+                                          projects: captureProjects.sorted(), apply: true)
                     }
                 }
                 .font(.system(size: 12.5, weight: .medium))
@@ -560,10 +568,59 @@ struct MenuView: View {
                     .disabled(status.captureBusy)
                     .accessibilityLabel("유튜브 영상 학습 목적")
                     .help("예: 피그마 포트폴리오를 검토할 때 쓸 디자인 판단 기준")
+            } else {
+                captureContextRow
             }
             Text(captureHint)
                 .font(.system(size: 10.5)).foregroundStyle(.tertiary)
             captureFeedback
+        }
+    }
+
+    /// 링크의 맥락 — 왜 저장했는지와 어떤 프로젝트에 쓸 것인지.
+    ///
+    /// ⚠️ 저장 이유는 사람만 아는 정보다. 분류는 규칙이 대신 해줄 수 있지만
+    ///    "왜 담았나" 는 대신할 수 없고, 없으면 몇 주 뒤 표를 봐도 어떤
+    ///    사이트였는지 본인도 모른다. 그래서 저장 순간에 한 줄만 받는다.
+    @ViewBuilder
+    private var captureContextRow: some View {
+        TextField("왜 저장하나요 (선택)", text: $captureWhy)
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 12))
+            .disabled(status.captureBusy)
+            .accessibilityLabel("링크를 저장하는 이유")
+            .help("예: 랜딩 히어로 카피 다시 볼 때")
+        if status.projectsLoading {
+            Text("프로젝트 불러오는 중…").font(.system(size: 11)).foregroundStyle(.secondary)
+        } else if let e = status.projectsError {
+            // ⚠️ 빈 목록으로 얼버무리지 않는다. 무엇이 깨졌는지 말한다.
+            Text(e).font(.system(size: 11)).foregroundStyle(Color.dtDanger)
+                .textSelection(.enabled)
+        } else if !status.projects.isEmpty {
+            HStack(spacing: 6) {
+                Text("프로젝트").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("\(captureProjects.count)개 선택")
+                    .font(.system(size: 10.5)).foregroundStyle(.tertiary)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(status.projects) { p in
+                        Toggle(isOn: Binding(
+                            get: { captureProjects.contains(p.key) },
+                            set: { on in
+                                if on { captureProjects.insert(p.key) }
+                                else { captureProjects.remove(p.key) }
+                            }
+                        )) {
+                            Text(p.key).font(.system(size: 12))
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+            }
+            // ⚠️ maxHeight 만 주면 ScrollView 가 팝오버 안에서 0 으로 접힌다.
+            //    개발일지 선택창에서 이미 한 번 겪었다.
+            .frame(height: min(CGFloat(status.projects.count) * 22 + 6, 120))
         }
     }
 
@@ -576,7 +633,7 @@ struct MenuView: View {
     private var captureHint: String {
         captureMode == .youtube
             ? "목적을 적으면 그 관점으로 판단 기준을 추출합니다. 비워두면 AI가 영상에서 추정합니다."
-            : "일반 웹 링크는 AI 없이 자료실에 안전하게 저장합니다."
+            : "저장 이유와 프로젝트는 나중에 링크를 찾을 때 쓰는 단서입니다. AI 없이 저장합니다."
     }
     private var captureHelp: String {
         captureMode == .youtube
